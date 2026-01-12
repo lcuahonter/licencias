@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import bcrypt from 'bcryptjs'; 
+import MD5 from 'crypto-js/md5'; // <--- CAMBIO: Importamos MD5
 import { UserData } from '../types';
 import { fetchCurpData } from '../src/utils/curpHelpers';
 
@@ -27,11 +27,11 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [lastFetchedCurp, setLastFetchedCurp] = useState('');
 
-  // --- ESTADOS PARA EL MODAL DE ERROR (POP UP) ---
+  // --- ESTADOS PARA EL MODAL DE ERROR ---
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Referencias para scroll automático a errores
+  // Referencias para Auto-Focus
   const inputRefs = {
     email: useRef<HTMLInputElement>(null),
     password: useRef<HTMLInputElement>(null),
@@ -44,6 +44,24 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
 
   const CURP_REGEX = /^[A-Z]{4}\d{6}[HMX][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[A-Z0-9]\d$/;
   const NAME_REGEX = /^[A-ZÑ\s]*$/;
+
+  // --- FUNCIÓN HELPER: HACER FOCUS AL PRIMER ERROR ---
+  const focusOnError = (errorList: { [key: string]: string }) => {
+      const errorKeys = Object.keys(errorList);
+      if (errorKeys.length === 0) return;
+
+      const fieldOrder = ['email', 'password', 'idNumber', 'firstName', 'paternalName', 'maternalName', 'birthDate'];
+      const firstErrorField = fieldOrder.find(field => errorKeys.includes(field));
+
+      if (firstErrorField) {
+          // @ts-ignore
+          const ref = inputRefs[firstErrorField];
+          if (ref && ref.current) {
+              ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              ref.current.focus();
+          }
+      }
+  };
 
   // --- HANDLERS DE INPUTS ---
   const handleNameInput = (field: 'firstName' | 'paternalName' | 'maternalName', value: string) => {
@@ -89,20 +107,13 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
 
     if (!form.firstName.trim()) newErrors.firstName = 'Nombre requerido';
     if (!form.paternalName.trim()) newErrors.paternalName = 'Apellido P. requerido';
-    if (!form.maternalName.trim()) newErrors.maternalName = 'Apellido M. requerido';
+    
     if (!form.birthDate) newErrors.birthDate = 'Fecha requerida';
 
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) {
-        const fieldOrder = ['email', 'password', 'idNumber', 'firstName', 'paternalName', 'maternalName', 'birthDate'];
-        const firstErrorField = fieldOrder.find(field => Object.keys(newErrors).includes(field));
-        if (firstErrorField) {
-            // @ts-ignore
-            const ref = inputRefs[firstErrorField];
-            ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            ref?.current?.focus();
-        }
+        focusOnError(newErrors);
         return false;
     }
     return true;
@@ -129,18 +140,19 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
   };
 
   // =========================================================
-  //  LOGICA PRINCIPAL
+  //  LOGICA PRINCIPAL (MODIFICADA PARA MD5)
   // =========================================================
   const handleContinue = async () => {
+    // 1. Validación local (Frontend)
     if (!validate()) return;
 
     setIsSubmitting(true);
     setErrors({});
 
     try {
-        const salt = await bcrypt.genSalt(10);
-        const fullHash = await bcrypt.hash(form.password, salt);
-        const cutPassword = fullHash.substring(7);
+        // --- CAMBIO: ENCRIPTADO MD5 ---
+        // Generamos el hash MD5 de la contraseña
+        const md5Password = MD5(form.password).toString();
 
         const payload = {
             tipoUsuario: 3,                 
@@ -149,7 +161,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
             apellidomaterno: form.maternalName,
             curp: form.idNumber,
             email: form.email,
-            password: cutPassword,
+            password: md5Password, // Enviamos el hash MD5
             fechanacimiento: form.birthDate 
         };
 
@@ -166,57 +178,44 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
         // --- MANEJO DE RESPUESTA ---
         if (!response.ok || (data.code && data.code !== "200")) {
             
-            // ERROR 550 (Validación)
+            // ERROR 550 (Validación Backend)
             if (data.code === "550" && data.data && data.data.errores) {
                 const backendErrors = data.data.errores;
 
-                // 1. PRIORIDAD: ¿Existe el mensaje "necesarios" (ej. Usuario ya existe)?
+                // A. Modal de Error Crítico
                 if (backendErrors.necesarios) {
-                    setErrorMessage(backendErrors.necesarios); // "El usuario ya ha sido dado de alta."
-                    setShowErrorModal(true); // Abrir Modal
-                    setIsSubmitting(false); // Detener loading
-                    return; // Detener flujo aquí, no marcar inputs rojos
+                    setErrorMessage(backendErrors.necesarios); 
+                    setShowErrorModal(true); 
+                    setIsSubmitting(false); 
+                    return; 
                 }
 
-                // 2. Si no es un error general, mapeamos a los inputs rojos
+                // B. Mapeo de errores de campos
                 const mappedErrors: { [key: string]: string } = {};
                 if (backendErrors.email) mappedErrors.email = backendErrors.email;
                 if (backendErrors.password) mappedErrors.password = backendErrors.password;
                 if (backendErrors.curp) mappedErrors.idNumber = backendErrors.curp;
                 if (backendErrors.nombres) mappedErrors.firstName = backendErrors.nombres;
                 if (backendErrors.apellidopaterno) mappedErrors.paternalName = backendErrors.apellidopaterno;
-                if (backendErrors.apellidomaterno) mappedErrors.maternalName = backendErrors.apellidopaterno;
+                if (backendErrors.apellidomaterno) mappedErrors.maternalName = backendErrors.apellidomaterno;
                 if (backendErrors.fechanacimiento) mappedErrors.birthDate = backendErrors.fechanacimiento;
 
                 setErrors(mappedErrors);
+                focusOnError(mappedErrors);
 
-                // Scroll al error
-                const errorKeys = Object.keys(mappedErrors);
-                if (errorKeys.length > 0) {
-                     // @ts-ignore
-                     const firstRef = inputRefs[Object.keys(inputRefs).find(k => mappedErrors[k])];
-                     firstRef?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-
-                // No lanzamos throw Error aquí para que no salga el alert del catch, 
-                // ya que los inputs rojos son suficiente feedback visual.
                 return; 
             }
 
             throw new Error(data.message || 'Error desconocido.');
         }
 
-        // ÉXITO
+        // --- ÉXITO ---
         console.log("✅ Registrado:", data.id_usuario);
-        onContinue({ 
-            ...form, 
-            password: cutPassword, 
-            lastName: `${form.paternalName} ${form.maternalName}` 
-        });
+        alert("¡Cuenta creada con éxito! Ahora puedes iniciar sesión.");
+        onBack(); 
 
     } catch (error: any) {
         console.error("❌ Error:", error);
-        // Si no es el modal ni errores de inputs, mostramos un fallback
         alert(`Ocurrió un error inesperado: ${error.message}`);
     } finally {
         setIsSubmitting(false);
@@ -245,7 +244,6 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
         </div>
 
         <div className="space-y-6">
-            {/* INPUTS (Se mantienen igual que tu código original...) */}
             <section className="space-y-4">
                 <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Credenciales</h3>
                 
@@ -285,8 +283,9 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
                         <input ref={inputRefs.paternalName} value={form.paternalName} onChange={e => handleNameInput('paternalName', e.target.value)} placeholder="Ej. Pérez" className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all ${errors.paternalName ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
                         {errors.paternalName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.paternalName}</p>}
                     </div>
+                    
                     <div className="space-y-1.5">
-                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Materno</label>
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Materno <span className="text-[9px] text-gray-300 normal-case">(Opcional)</span></label>
                         <input ref={inputRefs.maternalName} value={form.maternalName} onChange={e => handleNameInput('maternalName', e.target.value)} placeholder="Ej. García" className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all ${errors.maternalName ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
                         {errors.maternalName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.maternalName}</p>}
                     </div>
@@ -311,27 +310,16 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
         </button>
       </div>
 
-      {/* --- MODAL ELEGANTE (POP UP) --- */}
+      {/* --- MODAL DE ERROR --- */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-2xl w-full max-w-sm text-center transform transition-all animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-gray-700">
-              
               <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
                   <span className="material-symbols-outlined text-3xl">priority_high</span>
               </div>
-              
               <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">Atención</h3>
-              
-              <p className="text-gray-500 dark:text-gray-300 text-sm font-medium mb-6 leading-relaxed">
-                  {errorMessage}
-              </p>
-              
-              <button 
-                onClick={() => setShowErrorModal(false)}
-                className="w-full h-12 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-95 transition-transform"
-              >
-                Entendido
-              </button>
+              <p className="text-gray-500 dark:text-gray-300 text-sm font-medium mb-6 leading-relaxed">{errorMessage}</p>
+              <button onClick={() => setShowErrorModal(false)} className="w-full h-12 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-95 transition-transform">Entendido</button>
            </div>
         </div>
       )}

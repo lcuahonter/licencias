@@ -1,8 +1,21 @@
 import React, { useState } from 'react';
+import MD5 from 'crypto-js/md5'; 
+import { jwtDecode } from "jwt-decode"; // <--- 1. IMPORTANTE: Para leer el token
 import { UserData } from '../types';
 
+// Definimos qué tiene el token por dentro
+interface DecodedToken {
+  username: string;
+  rol: string;
+  aData: number;       // <--- Este es tu ID de Usuario (el 7, 9, etc)
+  perfil: string;      // <--- "Incompleto" o "Completo"
+  iat: number;
+  exp: number;
+}
+
 interface WelcomeScreenProps {
-  onStart: (data?: Partial<UserData>) => void;
+  // Actualizamos onStart para enviar datos, la siguiente pantalla y el ID real
+  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'Documents') => void;
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
@@ -12,45 +25,83 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Credenciales Demo
-  const DEMO_PASS = 'demo';
-  const ADMIN_PASS = 'admin'; // Contraseña exclusiva para admin
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      // 1. LÓGICA DE ADMINISTRADOR
-      if (email === 'admin@gmail.com' && password === ADMIN_PASS) {
-          onStart({ email: 'admin@gmail.com' }); // App.tsx redirigirá
-          return;
+    try {
+      // 1. Encriptar password a MD5
+      const md5Password = MD5(password).toString();
+
+      const payload = {
+        username: email,
+        password: md5Password 
+      };
+
+      console.log("Enviando credenciales (MD5)...", payload);
+
+      const response = await fetch('http://localhost:3001/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      console.log("Respuesta Backend:", data);
+
+      // --- VALIDACIÓN DE ERRORES ---
+      
+      // Caso A: Error específico de lógica (330)
+      if (data.code === "330") {
+         const mensajeDetalle = data.data?.status || data.message; 
+         throw new Error(mensajeDetalle);
       }
 
-      // 2. LÓGICA DE USUARIOS NORMALES / OPERADOR
-      const VALID_USERS = ['existente@gmail.com', 'operador@gmail.com'];
-      
-      if (VALID_USERS.includes(email.toLowerCase()) && password === DEMO_PASS) {
-        onStart({ 
-            email: email,
-            firstName: email.includes('existente') ? 'Juan' : '',
-            lastName: email.includes('existente') ? 'Pérez' : ''
-        }); 
-      } else {
-        setError('Usuario no encontrado o contraseña incorrecta.');
-        setIsLoading(false);
+      // Caso B: Cualquier otro error HTTP o del API
+      if (data.code && data.code !== "200") {
+         throw new Error(data.message || 'Error desconocido del servidor');
       }
-    }, 1000);
+
+      // --- LOGIN EXITOSO: PROCESAR TOKEN ---
+
+      // 2. Buscamos el token en la respuesta
+      const tokenString = data.token || data.data?.token; 
+
+      if (!tokenString) {
+          throw new Error("Login exitoso pero no se recibió token.");
+      }
+
+      // 3. Decodificamos el token para sacar el ID y el Perfil
+      try {
+          const decoded = jwtDecode<DecodedToken>(tokenString);
+          console.log("🔓 Token decodificado:", decoded);
+
+          // 4. Decidimos a dónde ir basado en el perfil del token
+          const destino = decoded.perfil === "Incompleto" ? 'Documents' : 'Dashboard';
+          
+          console.log(`✅ Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData})`);
+
+          // 5. Enviamos todo al padre (App.tsx)
+          onStart({ 
+            email: email,
+            idUsuario: decoded.aData, // <--- ¡AQUÍ VA EL ID REAL!
+            // token: tokenString 
+          }, destino);
+
+      } catch (decodeError) {
+          console.error("Error al leer el token", decodeError);
+          throw new Error("Error al procesar la sesión del usuario.");
+      }
+
+    } catch (err: any) {
+      console.error("❌ Error Login:", err);
+      setError(err.message || 'Error al conectar con el servidor.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ... (El resto del handleSocialLogin y el return UI se mantienen IGUAL que tu versión anterior)
-  // ... Solo asegúrate de copiar el return completo que ya tenías.
-
-  // --- COPIA AQUÍ TU RETURN DEL WELCOME SCREEN QUE YA TIENES (CON LOS LOGOS SOCIALES) ---
-  // (No lo repito para no hacer spam, solo cambia la función handleLogin de arriba)
-  
-  // AQUI ABAJO TE DEJO EL RETURN COMPLETO PARA QUE SOLO COPIES Y PEGUES EL ARCHIVO SI PREFIERES:
   return (
     <div className="flex flex-col h-full bg-white dark:bg-surface-dark relative">
       <div className="h-[35%] bg-primary relative overflow-hidden rounded-b-[3rem] shadow-xl">
@@ -100,23 +151,20 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
             </div>
           </div>
           {error && (
-            <div className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl flex items-center gap-2">
+            <div className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-1">
                <span className="material-symbols-outlined text-sm">error</span>
                {error}
             </div>
           )}
-          <button type="submit" disabled={isLoading} className="w-full h-14 bg-primary text-white rounded-2xl font-black text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+          <button type="submit" disabled={isLoading} className={`w-full h-14 bg-primary text-white rounded-2xl font-black text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 ${isLoading ? 'opacity-70 cursor-wait' : ''}`}>
             {isLoading ? 'Entrando...' : 'Iniciar Sesión'}
             {!isLoading && <span className="material-symbols-outlined">login</span>}
           </button>
         </form>
 
-      
-
-        
-
         <div className="mt-4 text-center pb-8">
            <p className="text-sm text-gray-500 mb-4">¿Es tu primera vez?</p>
+           {/* Si es registro nuevo, mandamos sin destino específico para que vaya al flujo normal de registro */}
            <button onClick={() => onStart()} className="w-full h-14 border-2 border-primary text-primary rounded-2xl font-black text-lg hover:bg-primary/5 active:scale-95 transition-all">Crear Cuenta Nueva</button>
         </div>
       </main>

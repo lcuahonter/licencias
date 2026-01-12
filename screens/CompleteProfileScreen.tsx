@@ -3,12 +3,12 @@ import { UserData } from '../types';
 
 interface CompleteProfileScreenProps {
   userData: UserData;
+  idUsuario: number;
   onBack: () => void;
   onSave: (data: Partial<UserData>) => void;
 }
 
 // --- COMPONENTES UI (Helpers) ---
-// (Los inputs se mantienen igual, solo pondré el código principal actualizado)
 
 const InputField = ({ label, value, onChange, placeholder, width = 'full', numeric = false, max = 50, readOnly = false, error, innerRef }: any) => (
     <div className={`space-y-1 ${width === 'half' ? 'col-span-1' : 'col-span-2'}`}>
@@ -17,7 +17,7 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
         </label>
         <div className="relative">
             <input 
-                ref={innerRef} 
+                ref={innerRef} // <--- REFERENCIA AQUÍ
                 value={value || ''} 
                 onChange={(e) => {
                     if (readOnly) return;
@@ -58,7 +58,7 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                 <span className="absolute right-2 top-4 text-[8px] text-gray-400">▼</span>
             </div>
             <input 
-                ref={innerRef} 
+                ref={innerRef} // <--- REFERENCIA AQUÍ
                 value={phoneValue}
                 onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, ''); 
@@ -75,20 +75,20 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
 
 // --- MAIN COMPONENT ---
 
-const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData, onBack, onSave }) => {
+const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData, idUsuario, onBack, onSave }) => {
   
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
-  // Estados para las listas de localidades
   const [localitiesList, setLocalitiesList] = useState<{id: number, localidad: string, municipio: string}[]>([]);
   const [emergLocalitiesList, setEmergLocalitiesList] = useState<{id: number, localidad: string, municipio: string}[]>([]);
 
   const [form, setForm] = useState({
     // Datos Personales
     firstName: userData.firstName || '',
-    paternalName: userData.paternalName || userData.lastName?.split(' ')[0] || '',
-    maternalName: userData.maternalName || userData.lastName?.split(' ').slice(1).join(' ') || '',
+    paternalName: userData.paternalName || '',
+    maternalName: userData.maternalName || '',
     rfc: '',
     curp: userData.idNumber || '',
     email: userData.email || '',
@@ -100,13 +100,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     restrictions: '',
     medicalNotes: userData.medicalConditions || '',
 
-    // Domicilio y Contacto
+    // Domicilio
     address: userData.address || '',
     zipCode: userData.zipCode || '',
     colony: userData.colony || '',
     municipality: userData.municipality || '',
-    locality: '',     // AHORA GUARDARÁ EL TEXTO: "COLONIA PRADO"
-    localityId: 0,    // NUEVO: GUARDARÁ EL ID: 3
+    locality: '',     
+    localityId: 0,    
     state: 'DURANGO',
     phoneLada: '+52',
     phone: userData.phone || '',
@@ -119,29 +119,70 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     emergZipCode: '',
     emergColony: '',
     emergMunicipality: '',
-    emergLocality: '',   // AHORA GUARDARÁ EL TEXTO
-    emergLocalityId: 0,  // NUEVO: GUARDARÁ EL ID
+    emergLocality: '',   
+    emergLocalityId: 0,  
     emergPhoneLada: '+52',
     emergPhone: userData.emergencyPhone || ''
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
+  // --- 1. DEFINICIÓN DE REFERENCIAS ---
+  // Agregué refs para localidad y localityEmergencia para que el scroll funcione ahí también
   const inputRefs = {
       rfc: useRef<HTMLInputElement>(null),
       workplace: useRef<HTMLInputElement>(null),
+      
       address: useRef<HTMLInputElement>(null),
       zipCode: useRef<HTMLInputElement>(null), 
       colony: useRef<HTMLInputElement>(null),
       municipality: useRef<HTMLSelectElement>(null),
+      locality: useRef<HTMLSelectElement | HTMLInputElement>(null), // Nuevo
       phone: useRef<HTMLInputElement>(null),
       
       emergFirstName: useRef<HTMLInputElement>(null),
       emergPaternal: useRef<HTMLInputElement>(null),
       emergAddress: useRef<HTMLInputElement>(null),
       emergZipCode: useRef<HTMLInputElement>(null),
+      emergLocality: useRef<HTMLSelectElement | HTMLInputElement>(null), // Nuevo
       emergPhone: useRef<HTMLInputElement>(null),
   };
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!idUsuario) return;
+      setIsLoadingData(true);
+      try {
+        console.log("📥 Obteniendo datos para ID:", idUsuario);
+        const payload = { id: idUsuario };
+        const response = await fetch('http://localhost:3001/api/usuarios/getUsuarioById', {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await response.json();
+        if (json.code === "200" && json.data && json.data.usuario) {
+          const userAPI = json.data.usuario;
+          setForm(prev => ({
+            ...prev,
+            firstName: userAPI.nombres || prev.firstName,
+            paternalName: userAPI.apellidopaterno || prev.paternalName,
+            maternalName: userAPI.apellidomaterno || prev.maternalName,
+            rfc: userAPI.rfc || prev.rfc,
+            curp: userAPI.curp || prev.curp,
+            email: userAPI.email || prev.email,
+            gender: userAPI.sexo === 'Femenino' ? 'F' : 'M',
+            phone: userAPI.telefono || prev.phone,
+          }));
+        }
+      } catch (error) {
+        console.error("Error al obtener usuario:", error);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+    fetchUserData();
+  }, [idUsuario]);
 
   const handleSafeInput = (field: string, rawValue: string, type: 'text' | 'alphanumeric' | 'numeric' | 'address' = 'alphanumeric') => {
       let value = rawValue.toUpperCase();
@@ -159,34 +200,23 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
-  // --- MANEJO DE SELECCIÓN DE LOCALIDAD (CORREGIDO) ---
   const handleLocalitySelect = (id: string, isEmergency: boolean) => {
       const selectedId = Number(id);
-      
       if (isEmergency) {
           const item = emergLocalitiesList.find(i => i.id === selectedId);
           if (item) {
-              setForm(prev => ({
-                  ...prev,
-                  emergLocality: item.localidad, // Guardamos Texto "EJIDO..."
-                  emergLocalityId: item.id       // Guardamos ID 854
-              }));
+              setForm(prev => ({ ...prev, emergLocality: item.localidad, emergLocalityId: item.id }));
               setErrors(prev => { const n = {...prev}; delete n.emergLocality; return n; });
           }
       } else {
           const item = localitiesList.find(i => i.id === selectedId);
           if (item) {
-              setForm(prev => ({
-                  ...prev,
-                  locality: item.localidad,      // Guardamos Texto "EJIDO..."
-                  localityId: item.id            // Guardamos ID 854
-              }));
+              setForm(prev => ({ ...prev, locality: item.localidad, localityId: item.id }));
               setErrors(prev => { const n = {...prev}; delete n.locality; return n; });
           }
       }
   };
 
-  // --- FETCH CP ---
   const fetchZipData = async (cp: string, isEmergency: boolean) => {
       try {
           const response = await fetch('http://localhost:3001/api/catalogo/localidadByCP', {
@@ -194,7 +224,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ cp })
           });
-
           if (response.status === 204) {
              if (isEmergency) {
                 setErrors(prev => ({ ...prev, emergZipCode: "CP Inválido (204)" }));
@@ -205,9 +234,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
              }
              return;
           }
-
           const data = await response.json();
-
           if (data.code === "204") {
               if (isEmergency) {
                   setErrors(prev => ({ ...prev, emergZipCode: "No es un código postal válido" }));
@@ -220,57 +247,34 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               }
               return;
           }
-
           if (data.code === "200" && data.data && data.data.catCPs.length > 0) {
               const list = data.data.catCPs;
               const firstRecord = list[0]; 
-
               if (isEmergency) {
                   setEmergLocalitiesList(list);
-                  setForm(prev => ({ 
-                      ...prev, 
-                      emergMunicipality: firstRecord.municipio.toUpperCase(),
-                      emergLocality: '', 
-                      emergLocalityId: 0,
-                      emergState: 'DURANGO'
-                  }));
+                  setForm(prev => ({ ...prev, emergMunicipality: firstRecord.municipio.toUpperCase(), emergLocality: '', emergLocalityId: 0, emergState: 'DURANGO' }));
                   setErrors(prev => { const n = {...prev}; delete n.emergZipCode; return n; });
               } else {
                   setLocalitiesList(list);
-                  setForm(prev => ({ 
-                      ...prev, 
-                      municipality: firstRecord.municipio.toUpperCase(),
-                      locality: '', 
-                      localityId: 0,
-                      state: 'DURANGO'
-                  }));
+                  setForm(prev => ({ ...prev, municipality: firstRecord.municipio.toUpperCase(), locality: '', localityId: 0, state: 'DURANGO' }));
                   setErrors(prev => { const n = {...prev}; delete n.zipCode; return n; });
               }
           }
-
       } catch (error) {
           console.error("Error fetching CP:", error);
       }
   };
 
   useEffect(() => {
-      if (form.zipCode.length === 5) {
-          fetchZipData(form.zipCode, false);
-      } else {
-          setLocalitiesList([]);
-      }
+      if (form.zipCode.length === 5) fetchZipData(form.zipCode, false);
+      else setLocalitiesList([]);
   }, [form.zipCode]);
 
   useEffect(() => {
-      if (form.emergZipCode.length === 5) {
-          fetchZipData(form.emergZipCode, true);
-      } else {
-          setEmergLocalitiesList([]);
-      }
+      if (form.emergZipCode.length === 5) fetchZipData(form.emergZipCode, true);
+      else setEmergLocalitiesList([]);
   }, [form.emergZipCode]);
 
-
-  // --- VALIDACIONES ---
   const validateRFC = (rfc: string) => {
       const rfcRegex = /^([A-ZÑ&]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/;
       if (!rfc) return "Requerido";
@@ -279,14 +283,36 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       return null;
   };
 
-  const scrollToFirstError = (errorList: any) => {
-      const errorKey = Object.keys(errorList)[0]; 
-      if (errorKey) {
+  // --- 2. FUNCIÓN DE AUTO-FOCUS OPTIMIZADA PARA MÓVIL ---
+  const focusOnError = (errorList: any) => {
+      const errorKeys = Object.keys(errorList);
+      if (errorKeys.length === 0) return;
+
+      // Definimos el orden visual exacto de los campos en pantalla
+      const fieldOrder = [
+          // Paso 1
+          'rfc', 'workplace', 
+          // Paso 2
+          'address', 'zipCode', 'colony', 'locality', 'phone',
+          // Paso 3
+          'emergFirstName', 'emergPaternal', 'emergAddress', 'emergZipCode', 'emergLocality', 'emergPhone'
+      ];
+
+      // Encontramos el primer campo con error basado en el orden visual
+      const firstErrorField = fieldOrder.find(field => errorKeys.includes(field));
+
+      if (firstErrorField) {
           // @ts-ignore
-          const ref = inputRefs[errorKey];
+          const ref = inputRefs[firstErrorField];
           if (ref && ref.current) {
+              // 1. Scroll suave al centro
               ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              ref.current.focus();
+              
+              // 2. IMPORTANTE: Timeout para asegurar que el teclado abra en Android/iOS
+              // Si hacemos focus inmediatamente durante el scroll, a veces falla.
+              setTimeout(() => {
+                  ref.current.focus();
+              }, 100);
           }
       }
   };
@@ -323,7 +349,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       
       if (Object.keys(newErrors).length > 0) {
           isValid = false;
-          scrollToFirstError(newErrors);
+          // Llamamos a la nueva función optimizada
+          focusOnError(newErrors);
       }
       return isValid;
   };
@@ -335,30 +362,22 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
-  // --- GUARDAR DATOS (PAYLOAD CORREGIDO) ---
   const handleSave = async () => {
       if (!validateStep(3)) return;
 
       setIsSubmitting(true);
 
       try {
-          // AQUI ESTA LA CORRECCIÓN DE TU PAYLOAD
           const payload = {
-              idUsuario: 9,
-              // Datos Personales
-              
+              idUsuario: idUsuario, 
               rfc: form.rfc,
-              
-              // Dirección
               domicilio: form.address,
               colonia: form.colony,
-              cp: form.zipCode,          // "34000" (String visual)
-              id_cp: form.localityId,    // 854 (El ID que pide el backend) <--- AQUÍ VA EL ID
+              cp: form.localityId,             
+              id_cp: form.localityId,    
               municipio: form.municipality,
-              localidad: form.locality,  // "COLONIA PRADO" (Texto) <--- AQUÍ VA EL TEXTO
+              localidad: form.locality,  
               entidad: "DURANGO", 
-              
-              // Otros Datos
               nacionalidad: form.nationality,
               sexo: form.gender === 'M' ? 'Masculino' : 'Femenino', 
               tipoSangre: form.bloodType,
@@ -366,21 +385,19 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               lugarTrabajo: form.workplace,
               restricciones: form.restrictions || "Ninguna",
               observaciones: form.medicalNotes || "Ninguna",
-              
-              // Contacto Emergencia
               conocidoNombre: form.emergFirstName,
               conocidoApellidoPaterno: form.emergPaternal,
               conocidoApellidoMaterno: form.emergMaternal,
               conocidoDomicilio: form.emergAddress,
-              conocidoCp: form.emergZipCode,
-              conocidoIdCp: form.emergLocalityId, // ID para emergencia también
+              conocidoCp: form.emergLocalityId,
+              conocidoIdCp: form.emergLocalityId, 
               conocidoColonia: form.emergColony,
               conocidoMunicipio: form.emergMunicipality,
-              conocidoLocalidad: form.emergLocality, // TEXTO para emergencia
+              conocidoLocalidad: form.emergLocality, 
               conocidoTelefono: `${form.emergPhoneLada} ${form.emergPhone}`
           };
 
-          console.log("Enviando Update Correcto:", payload);
+          console.log("Enviando Update:", payload);
 
           const response = await fetch('http://localhost:3001/api/usuarios/updateUsuario', {
               method: 'POST', 
@@ -415,16 +432,24 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
+  if (isLoadingData) {
+    return (
+      <div className="flex flex-col h-full bg-gray-50 dark:bg-background-dark items-center justify-center space-y-4">
+         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+         <p className="text-sm font-bold text-gray-500 animate-pulse">Obteniendo información del usuario...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-background-dark">
       
-      {/* HEADER */}
       <header className="px-6 pt-8 pb-4 bg-white dark:bg-surface-dark shadow-sm sticky top-0 z-10 safe-top">
         <div className="flex items-center gap-3 mb-4">
-             <button onClick={currentStep > 1 ? () => setCurrentStep(prev => prev - 1) : onBack} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 hover:bg-gray-200">
-                <span className="material-symbols-outlined text-sm">arrow_back</span>
-             </button>
-             <h1 className="text-lg font-black text-gray-900 dark:text-white">Completar Perfil</h1>
+              <button onClick={currentStep > 1 ? () => setCurrentStep(prev => prev - 1) : onBack} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 hover:bg-gray-200">
+                 <span className="material-symbols-outlined text-sm">arrow_back</span>
+              </button>
+              <h1 className="text-lg font-black text-gray-900 dark:text-white">Completar Perfil</h1>
         </div>
         <div className="flex items-center justify-between px-2">
             {[1, 2, 3].map(step => (
@@ -440,10 +465,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         </div>
       </header>
 
-      {/* BODY */}
       <main className="flex-1 overflow-y-auto px-6 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))]">
         
-        {/* --- PASO 1 (Igual que antes) --- */}
         {currentStep === 1 && (
             <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-right">
                 <InputField label="Nombre(s)" value={form.firstName} readOnly={true} />
@@ -484,7 +507,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             </div>
         )}
 
-        {/* --- PASO 2: DOMICILIO --- */}
         {currentStep === 2 && (
             <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-right">
                 <InputField innerRef={inputRefs.address} label="Calle y Número" value={form.address} onChange={(val: string) => handleSafeInput('address', val, 'address')} placeholder="AV. 20 DE NOVIEMBRE #123" error={errors.address} />
@@ -492,12 +514,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 <InputField innerRef={inputRefs.colony} label="Colonia" value={form.colony} onChange={(val: string) => handleSafeInput('colony', val, 'address')} placeholder="ESCRIBE MANUALMENTE" width="half" error={errors.colony} />
                 <InputField label="Municipio" value={form.municipality} readOnly={true} width="half" />
                 
-                {/* --- LOCALIDAD (CORREGIDO) --- */}
                 <div className="col-span-1 space-y-1">
                     <label className={`text-[10px] font-bold uppercase ml-1 ${errors.locality ? 'text-red-500' : 'text-gray-500'}`}>Localidad</label>
                     {localitiesList.length > 0 ? (
                         <select 
-                            /* Usamos el ID interno para controlar el select, pero handleLocalitySelect guarda ID y Texto separados */
+                            /* REFERENCIA AQUÍ */
+                            // @ts-ignore
+                            ref={inputRefs.locality}
                             value={form.localityId || ""} 
                             onChange={(e) => handleLocalitySelect(e.target.value, false)} 
                             className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold uppercase ${errors.locality ? 'border-red-500' : 'border-gray-100 dark:border-gray-700'}`}
@@ -518,7 +541,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             </div>
         )}
 
-        {/* --- PASO 3: EMERGENCIA --- */}
         {currentStep === 3 && (
             <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-right">
                 <div className="col-span-2 p-3 bg-red-50 rounded-xl mb-2 flex items-center gap-2 text-red-700"><span className="material-symbols-outlined">warning</span><p className="text-xs font-bold">En caso de accidente contactar a:</p></div>
@@ -531,11 +553,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 <InputField label="Colonia" value={form.emergColony} onChange={(val: string) => handleSafeInput('emergColony', val, 'address')} width="half" placeholder="ESCRIBE MANUALMENTE" />
                 <InputField label="Municipio" value={form.emergMunicipality} readOnly={true} width="half" />
                 
-                {/* --- LOCALIDAD EMERGENCIA (CORREGIDO) --- */}
                 <div className="col-span-1 space-y-1">
                     <label className={`text-[10px] font-bold uppercase ml-1 ${errors.emergLocality ? 'text-red-500' : 'text-gray-500'}`}>Localidad</label>
                     {emergLocalitiesList.length > 0 ? (
                         <select 
+                            /* REFERENCIA AQUÍ */
+                            // @ts-ignore
+                            ref={inputRefs.emergLocality}
                             value={form.emergLocalityId || ""} 
                             onChange={(e) => handleLocalitySelect(e.target.value, true)} 
                             className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold uppercase ${errors.emergLocality ? 'border-red-500' : 'border-gray-100 dark:border-gray-700'}`}
