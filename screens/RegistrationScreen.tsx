@@ -155,7 +155,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
         const md5Password = MD5(form.password).toString();
 
         const payload = {
-            tipoUsuario: 3,                 
+            tipoUsuario: 2,                 
             nombres: form.firstName,
             apellidopaterno: form.paternalName,
             apellidomaterno: form.maternalName,
