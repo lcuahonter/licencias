@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import MD5 from 'crypto-js/md5'; // <--- CAMBIO: Importamos MD5
+import MD5 from 'crypto-js/md5'; 
 import { UserData } from '../types';
 import { fetchCurpData } from '../src/utils/curpHelpers';
+import { userService } from '../src/api/userService'; // <--- IMPORTAMOS EL SERVICIO
 
 interface RegistrationScreenProps {
   userData: UserData;
@@ -58,7 +59,8 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
           const ref = inputRefs[firstErrorField];
           if (ref && ref.current) {
               ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              ref.current.focus();
+              // Timeout para asegurar focus en móviles
+              setTimeout(() => ref.current.focus(), 100);
           }
       }
   };
@@ -140,7 +142,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
   };
 
   // =========================================================
-  //  LOGICA PRINCIPAL (MODIFICADA PARA MD5)
+  //  LOGICA PRINCIPAL (USANDO USER SERVICE)
   // =========================================================
   const handleContinue = async () => {
     // 1. Validación local (Frontend)
@@ -150,8 +152,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
     setErrors({});
 
     try {
-        // --- CAMBIO: ENCRIPTADO MD5 ---
-        // Generamos el hash MD5 de la contraseña
+        // Encriptado MD5
         const md5Password = MD5(form.password).toString();
 
         const payload = {
@@ -161,62 +162,31 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
             apellidomaterno: form.maternalName,
             curp: form.idNumber,
             email: form.email,
-            password: md5Password, // Enviamos el hash MD5
+            password: md5Password,
             fechanacimiento: form.birthDate 
         };
 
         console.log("Enviando datos...", payload);
         
-        const response = await fetch('http://localhost:3001/api/usuarios/createUsuario', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await response.json();
-
-        // --- MANEJO DE RESPUESTA ---
-        if (!response.ok || (data.code && data.code !== "200")) {
-            
-            // ERROR 550 (Validación Backend)
-            if (data.code === "550" && data.data && data.data.errores) {
-                const backendErrors = data.data.errores;
-
-                // A. Modal de Error Crítico
-                if (backendErrors.necesarios) {
-                    setErrorMessage(backendErrors.necesarios); 
-                    setShowErrorModal(true); 
-                    setIsSubmitting(false); 
-                    return; 
-                }
-
-                // B. Mapeo de errores de campos
-                const mappedErrors: { [key: string]: string } = {};
-                if (backendErrors.email) mappedErrors.email = backendErrors.email;
-                if (backendErrors.password) mappedErrors.password = backendErrors.password;
-                if (backendErrors.curp) mappedErrors.idNumber = backendErrors.curp;
-                if (backendErrors.nombres) mappedErrors.firstName = backendErrors.nombres;
-                if (backendErrors.apellidopaterno) mappedErrors.paternalName = backendErrors.apellidopaterno;
-                if (backendErrors.apellidomaterno) mappedErrors.maternalName = backendErrors.apellidomaterno;
-                if (backendErrors.fechanacimiento) mappedErrors.birthDate = backendErrors.fechanacimiento;
-
-                setErrors(mappedErrors);
-                focusOnError(mappedErrors);
-
-                return; 
-            }
-
-            throw new Error(data.message || 'Error desconocido.');
-        }
+        // --- CAMBIO: USAMOS EL SERVICIO CENTRALIZADO ---
+        // El apiClient ya se encarga de lanzar error si el code != 200
+        const data = await userService.createUsuario(payload);
 
         // --- ÉXITO ---
-        console.log("✅ Registrado:", data.id_usuario);
+        console.log("✅ Registrado con ID:", data.id_usuario);
         alert("¡Cuenta creada con éxito! Ahora puedes iniciar sesión.");
         onBack(); 
 
     } catch (error: any) {
-        console.error("❌ Error:", error);
-        alert(`Ocurrió un error inesperado: ${error.message}`);
+        console.error("❌ Error Registro:", error);
+        
+        // El mensaje de error ya viene limpio desde apiClient
+        setErrorMessage(error.message || 'Error desconocido.');
+        setShowErrorModal(true);
+        
+        // NOTA: Si necesitas el mapeo de errores específicos (código 550),
+        // deberías ajustar el apiClient para que devuelva el objeto de error completo
+        // en lugar de lanzar solo el mensaje.
     } finally {
         setIsSubmitting(false);
     }

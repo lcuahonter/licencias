@@ -1,5 +1,4 @@
 import { apiRequest } from './apiClient';
-import { UserData } from '../types'; // Asumo que tienes tus tipos aquí
 
 export const userService = {
   createUsuario: async (payload: any) => {

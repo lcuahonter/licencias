@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserData } from '../types';
+import { userService } from '../src/api/userService';     // <--- Servicio Usuario
+import { catalogService } from '../src/api/catalogService'; // <--- Servicio Catálogo
 
 interface CompleteProfileScreenProps {
   userData: UserData;
@@ -17,7 +19,7 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
         </label>
         <div className="relative">
             <input 
-                ref={innerRef} // <--- REFERENCIA AQUÍ
+                ref={innerRef}
                 value={value || ''} 
                 onChange={(e) => {
                     if (readOnly) return;
@@ -58,7 +60,7 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                 <span className="absolute right-2 top-4 text-[8px] text-gray-400">▼</span>
             </div>
             <input 
-                ref={innerRef} // <--- REFERENCIA AQUÍ
+                ref={innerRef}
                 value={phoneValue}
                 onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, ''); 
@@ -127,8 +129,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
-  // --- 1. DEFINICIÓN DE REFERENCIAS ---
-  // Agregué refs para localidad y localityEmergencia para que el scroll funcione ahí también
+  // --- REFERENCIAS PARA AUTO-FOCUS ---
   const inputRefs = {
       rfc: useRef<HTMLInputElement>(null),
       workplace: useRef<HTMLInputElement>(null),
@@ -137,31 +138,30 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       zipCode: useRef<HTMLInputElement>(null), 
       colony: useRef<HTMLInputElement>(null),
       municipality: useRef<HTMLSelectElement>(null),
-      locality: useRef<HTMLSelectElement | HTMLInputElement>(null), // Nuevo
+      locality: useRef<HTMLSelectElement | HTMLInputElement>(null),
       phone: useRef<HTMLInputElement>(null),
       
       emergFirstName: useRef<HTMLInputElement>(null),
       emergPaternal: useRef<HTMLInputElement>(null),
       emergAddress: useRef<HTMLInputElement>(null),
       emergZipCode: useRef<HTMLInputElement>(null),
-      emergLocality: useRef<HTMLSelectElement | HTMLInputElement>(null), // Nuevo
+      emergLocality: useRef<HTMLSelectElement | HTMLInputElement>(null),
       emergPhone: useRef<HTMLInputElement>(null),
   };
 
+  // --- 1. CARGA INICIAL (USANDO USER SERVICE) ---
   useEffect(() => {
     const fetchUserData = async () => {
       if (!idUsuario) return;
+      
       setIsLoadingData(true);
       try {
-        console.log("📥 Obteniendo datos para ID:", idUsuario);
-        const payload = { id: idUsuario };
-        const response = await fetch('http://localhost:3001/api/usuarios/getUsuarioById', {
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const json = await response.json();
-        if (json.code === "200" && json.data && json.data.usuario) {
+        console.log("Obteniendo datos para ID:", idUsuario);
+        
+        // Llamada limpia al servicio
+        const json = await userService.getUsuarioById(idUsuario);
+
+        if (json.data && json.data.usuario) {
           const userAPI = json.data.usuario;
           setForm(prev => ({
             ...prev,
@@ -181,9 +181,11 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         setIsLoadingData(false);
       }
     };
+    
     fetchUserData();
   }, [idUsuario]);
 
+  // --- HANDLERS ---
   const handleSafeInput = (field: string, rawValue: string, type: 'text' | 'alphanumeric' | 'numeric' | 'address' = 'alphanumeric') => {
       let value = rawValue.toUpperCase();
       value = value.replace(/['";\\]/g, "").replace(/--/g, "");
@@ -217,36 +219,27 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
+  // --- 2. BUSQUEDA CP (USANDO CATALOG SERVICE) ---
   const fetchZipData = async (cp: string, isEmergency: boolean) => {
       try {
-          const response = await fetch('http://localhost:3001/api/catalogo/localidadByCP', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ cp })
-          });
-          if (response.status === 204) {
-             if (isEmergency) {
-                setErrors(prev => ({ ...prev, emergZipCode: "CP Inválido (204)" }));
-                setEmergLocalitiesList([]);
-             } else {
-                setErrors(prev => ({ ...prev, zipCode: "CP Inválido (204)" }));
-                setLocalitiesList([]);
-             }
-             return;
-          }
-          const data = await response.json();
-          if (data.code === "204") {
+          // Llamada limpia al servicio
+          const data = await catalogService.getLocalidadByCP(cp);
+
+          // Si viene vacío o code 204
+          if (!data || data.code === "204" || (Object.keys(data).length === 0)) {
               if (isEmergency) {
-                  setErrors(prev => ({ ...prev, emergZipCode: "No es un código postal válido" }));
+                  setErrors(prev => ({ ...prev, emergZipCode: "CP no encontrado" }));
                   setEmergLocalitiesList([]);
                   setForm(prev => ({ ...prev, emergMunicipality: '', emergLocality: '', emergLocalityId: 0 }));
               } else {
-                  setErrors(prev => ({ ...prev, zipCode: "No es un código postal válido" }));
+                  setErrors(prev => ({ ...prev, zipCode: "CP no encontrado" }));
                   setLocalitiesList([]);
                   setForm(prev => ({ ...prev, municipality: '', locality: '', localityId: 0 }));
               }
               return;
           }
+
+          // Si éxito
           if (data.code === "200" && data.data && data.data.catCPs.length > 0) {
               const list = data.data.catCPs;
               const firstRecord = list[0]; 
@@ -262,6 +255,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           }
       } catch (error) {
           console.error("Error fetching CP:", error);
+          // Opcional: mostrar error en UI
       }
   };
 
@@ -283,33 +277,25 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       return null;
   };
 
-  // --- 2. FUNCIÓN DE AUTO-FOCUS OPTIMIZADA PARA MÓVIL ---
+  // --- 3. AUTO-FOCUS LOGIC (WEB + MOBILE) ---
   const focusOnError = (errorList: any) => {
       const errorKeys = Object.keys(errorList);
       if (errorKeys.length === 0) return;
 
-      // Definimos el orden visual exacto de los campos en pantalla
       const fieldOrder = [
-          // Paso 1
           'rfc', 'workplace', 
-          // Paso 2
           'address', 'zipCode', 'colony', 'locality', 'phone',
-          // Paso 3
           'emergFirstName', 'emergPaternal', 'emergAddress', 'emergZipCode', 'emergLocality', 'emergPhone'
       ];
 
-      // Encontramos el primer campo con error basado en el orden visual
       const firstErrorField = fieldOrder.find(field => errorKeys.includes(field));
 
       if (firstErrorField) {
           // @ts-ignore
           const ref = inputRefs[firstErrorField];
           if (ref && ref.current) {
-              // 1. Scroll suave al centro
               ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              
-              // 2. IMPORTANTE: Timeout para asegurar que el teclado abra en Android/iOS
-              // Si hacemos focus inmediatamente durante el scroll, a veces falla.
+              // Timeout para asegurar que el teclado abra en Android/iOS
               setTimeout(() => {
                   ref.current.focus();
               }, 100);
@@ -349,7 +335,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       
       if (Object.keys(newErrors).length > 0) {
           isValid = false;
-          // Llamamos a la nueva función optimizada
           focusOnError(newErrors);
       }
       return isValid;
@@ -362,6 +347,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
+  // --- 4. GUARDAR (USANDO USER SERVICE) ---
   const handleSave = async () => {
       if (!validateStep(3)) return;
 
@@ -373,7 +359,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               rfc: form.rfc,
               domicilio: form.address,
               colonia: form.colony,
-              cp: form.localityId,             
+              cp: form.zipCode,             
               id_cp: form.localityId,    
               municipio: form.municipality,
               localidad: form.locality,  
@@ -389,7 +375,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               conocidoApellidoPaterno: form.emergPaternal,
               conocidoApellidoMaterno: form.emergMaternal,
               conocidoDomicilio: form.emergAddress,
-              conocidoCp: form.emergLocalityId,
+              conocidoCp: form.emergZipCode,
               conocidoIdCp: form.emergLocalityId, 
               conocidoColonia: form.emergColony,
               conocidoMunicipio: form.emergMunicipality,
@@ -399,34 +385,16 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
           console.log("Enviando Update:", payload);
 
-          const response = await fetch('http://localhost:3001/api/usuarios/updateUsuario', {
-              method: 'POST', 
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-          });
+          // Llamada limpia al servicio
+          const data = await userService.updateUsuario(payload);
 
-          if (response.status === 204) {
-             setErrors(prev => ({ ...prev, locality: "Error al guardar (204)", zipCode: "Verificar CP" }));
-             throw new Error("Error 204: No se pudo actualizar.");
-          }
-
-          const data = await response.json();
-
-          if (data.code === "204" || (data.data && data.data.actualizado === false)) {
-              let errorMsg = data.message || "Error al actualizar.";
-              if (data.data && data.data.errores) {
-                  const detalles = Object.values(data.data.errores).join("\n- ");
-                  if (detalles) errorMsg += `\nDetalles:\n- ${detalles}`;
-              }
-              throw new Error(errorMsg);
-          }
-
-          console.log("✅ Usuario actualizado correctamente:", data);
+          // Si hubo éxito (el servicio lanza error si no)
+          console.log("Usuario actualizado correctamente:", data);
           onSave(form);
 
       } catch (error: any) {
-          console.error("❌ Error Update:", error);
-          alert(`${error.message}`);
+          console.error("Error Update:", error);
+          alert(error.message || 'Error al actualizar perfil');
       } finally {
           setIsSubmitting(false);
       }
@@ -518,7 +486,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                     <label className={`text-[10px] font-bold uppercase ml-1 ${errors.locality ? 'text-red-500' : 'text-gray-500'}`}>Localidad</label>
                     {localitiesList.length > 0 ? (
                         <select 
-                            /* REFERENCIA AQUÍ */
                             // @ts-ignore
                             ref={inputRefs.locality}
                             value={form.localityId || ""} 
@@ -557,7 +524,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                     <label className={`text-[10px] font-bold uppercase ml-1 ${errors.emergLocality ? 'text-red-500' : 'text-gray-500'}`}>Localidad</label>
                     {emergLocalitiesList.length > 0 ? (
                         <select 
-                            /* REFERENCIA AQUÍ */
                             // @ts-ignore
                             ref={inputRefs.emergLocality}
                             value={form.emergLocalityId || ""} 
