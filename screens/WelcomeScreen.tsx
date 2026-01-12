@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
 import MD5 from 'crypto-js/md5'; 
-import { jwtDecode } from "jwt-decode"; // <--- 1. IMPORTANTE: Para leer el token
+import { jwtDecode } from "jwt-decode"; 
 import { UserData } from '../types';
 
-// Definimos qué tiene el token por dentro
+// Definimos la estructura del token JWT
 interface DecodedToken {
   username: string;
   rol: string;
-  aData: number;       // <--- Este es tu ID de Usuario (el 7, 9, etc)
-  perfil: string;      // <--- "Incompleto" o "Completo"
+  aData: number;       // ID de Usuario
+  perfil: string;      // "Incompleto" o "Completo"
   iat: number;
   exp: number;
 }
 
 interface WelcomeScreenProps {
-  // Actualizamos onStart para enviar datos, la siguiente pantalla y el ID real
   onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'Documents') => void;
 }
 
@@ -39,7 +38,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
         password: md5Password 
       };
 
-      console.log("Enviando credenciales (MD5)...", payload);
+      console.log("Enviando credenciales...", payload);
 
       const response = await fetch('http://localhost:3001/auth/login', {
         method: 'POST',
@@ -69,24 +68,24 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       const tokenString = data.token || data.data?.token; 
 
       if (!tokenString) {
-          throw new Error("Login exitoso pero no se recibió token.");
+          throw new Error("Login exitoso pero no se recibió token de sesión.");
       }
 
       // 3. Decodificamos el token para sacar el ID y el Perfil
       try {
           const decoded = jwtDecode<DecodedToken>(tokenString);
-          console.log("🔓 Token decodificado:", decoded);
+          console.log("Token decodificado:", decoded);
 
           // 4. Decidimos a dónde ir basado en el perfil del token
           const destino = decoded.perfil === "Incompleto" ? 'Documents' : 'Dashboard';
           
-          console.log(`✅ Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData})`);
+          console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData})`);
 
           // 5. Enviamos todo al padre (App.tsx)
           onStart({ 
             email: email,
-            idUsuario: decoded.aData, // <--- ¡AQUÍ VA EL ID REAL!
-            // token: tokenString 
+            idUsuario: decoded.aData, 
+            // token: tokenString // Descomentar si decides pasar el token aquí
           }, destino);
 
       } catch (decodeError) {
@@ -95,7 +94,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       }
 
     } catch (err: any) {
-      console.error("❌ Error Login:", err);
+      console.error("Error Login:", err);
       setError(err.message || 'Error al conectar con el servidor.');
     } finally {
       setIsLoading(false);
@@ -164,7 +163,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
 
         <div className="mt-4 text-center pb-8">
            <p className="text-sm text-gray-500 mb-4">¿Es tu primera vez?</p>
-           {/* Si es registro nuevo, mandamos sin destino específico para que vaya al flujo normal de registro */}
            <button onClick={() => onStart()} className="w-full h-14 border-2 border-primary text-primary rounded-2xl font-black text-lg hover:bg-primary/5 active:scale-95 transition-all">Crear Cuenta Nueva</button>
         </div>
       </main>
