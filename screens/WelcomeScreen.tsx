@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import MD5 from 'crypto-js/md5'; 
 import { jwtDecode } from "jwt-decode"; 
 import { UserData } from '../types';
+import { authService } from '../src/api/authService'; // <--- Importamos el servicio
 
 // Definimos la estructura del token JWT
 interface DecodedToken {
@@ -33,55 +34,34 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       // 1. Encriptar password a MD5
       const md5Password = MD5(password).toString();
 
-      const payload = {
+      console.log("Enviando credenciales...");
+
+      // 2. Usar el servicio de autenticación
+      // El apiClient se encarga de lanzar excepciones si hay error (codes != 200)
+      const data = await authService.login({
         username: email,
         password: md5Password 
-      };
-
-      console.log("Enviando credenciales...", payload);
-
-      const response = await fetch('http://localhost:3001/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
       console.log("Respuesta Backend:", data);
 
-      // --- VALIDACIÓN DE ERRORES ---
-      
-      // Caso A: Error específico de lógica (330)
-      if (data.code === "330") {
-         const mensajeDetalle = data.data?.status || data.message; 
-         throw new Error(mensajeDetalle);
-      }
-
-      // Caso B: Cualquier otro error HTTP o del API
-      if (data.code && data.code !== "200") {
-         throw new Error(data.message || 'Error desconocido del servidor');
-      }
-
-      // --- LOGIN EXITOSO: PROCESAR TOKEN ---
-
-      // 2. Buscamos el token en la respuesta
+      // 3. Procesar Token
       const tokenString = data.token || data.data?.token; 
 
       if (!tokenString) {
           throw new Error("Login exitoso pero no se recibió token de sesión.");
       }
 
-      // 3. Decodificamos el token para sacar el ID y el Perfil
+      // 4. Decodificar Token para obtener ID y Perfil
       try {
           const decoded = jwtDecode<DecodedToken>(tokenString);
           console.log("Token decodificado:", decoded);
 
-          // 4. Decidimos a dónde ir basado en el perfil del token
           const destino = decoded.perfil === "Incompleto" ? 'Documents' : 'Dashboard';
           
           console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData})`);
 
-          // 5. Enviamos todo al padre (App.tsx)
+          // 5. Notificar al padre (App.tsx)
           onStart({ 
             email: email,
             idUsuario: decoded.aData, 
@@ -95,6 +75,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
 
     } catch (err: any) {
       console.error("Error Login:", err);
+      // El mensaje de error ya viene procesado por el apiClient
       setError(err.message || 'Error al conectar con el servidor.');
     } finally {
       setIsLoading(false);

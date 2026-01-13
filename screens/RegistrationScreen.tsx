@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import MD5 from 'crypto-js/md5'; 
 import { UserData } from '../types';
 import { fetchCurpData } from '../src/utils/curpHelpers';
-import { userService } from '../src/api/userService'; // <--- IMPORTAMOS EL SERVICIO
+import { userService } from '../src/api/userService'; // <--- SERVICIO CENTRALIZADO
 
 interface RegistrationScreenProps {
   userData: UserData;
@@ -11,7 +11,6 @@ interface RegistrationScreenProps {
 }
 
 const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBack, onContinue }) => {
-  // Estado del formulario
   const [form, setForm] = useState({
     email: userData.email || '',
     password: '',
@@ -22,17 +21,14 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
     birthDate: userData.birthDate || '',
   });
 
-  // Estados de control visual
   const [loadingCurp, setLoadingCurp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [lastFetchedCurp, setLastFetchedCurp] = useState('');
 
-  // --- ESTADOS PARA EL MODAL DE ERROR ---
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Referencias para Auto-Focus
   const inputRefs = {
     email: useRef<HTMLInputElement>(null),
     password: useRef<HTMLInputElement>(null),
@@ -46,7 +42,6 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
   const CURP_REGEX = /^[A-Z]{4}\d{6}[HMX][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[A-Z0-9]\d$/;
   const NAME_REGEX = /^[A-ZÑ\s]*$/;
 
-  // --- FUNCIÓN HELPER: HACER FOCUS AL PRIMER ERROR ---
   const focusOnError = (errorList: { [key: string]: string }) => {
       const errorKeys = Object.keys(errorList);
       if (errorKeys.length === 0) return;
@@ -59,13 +54,11 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
           const ref = inputRefs[firstErrorField];
           if (ref && ref.current) {
               ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              // Timeout para asegurar focus en móviles
               setTimeout(() => ref.current.focus(), 100);
           }
       }
   };
 
-  // --- HANDLERS DE INPUTS ---
   const handleNameInput = (field: 'firstName' | 'paternalName' | 'maternalName', value: string) => {
     const upperValue = value.toUpperCase();
     if (NAME_REGEX.test(upperValue)) {
@@ -92,7 +85,6 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
     }
   };
 
-  // --- VALIDACIÓN FRONTEND ---
   const validate = () => {
     const newErrors: { [key: string]: string } = {};
     
@@ -109,7 +101,6 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
 
     if (!form.firstName.trim()) newErrors.firstName = 'Nombre requerido';
     if (!form.paternalName.trim()) newErrors.paternalName = 'Apellido P. requerido';
-    
     if (!form.birthDate) newErrors.birthDate = 'Fecha requerida';
 
     setErrors(newErrors);
@@ -141,18 +132,14 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
     }
   };
 
-  // =========================================================
-  //  LOGICA PRINCIPAL (USANDO USER SERVICE)
-  // =========================================================
+  // --- LÓGICA PRINCIPAL ---
   const handleContinue = async () => {
-    // 1. Validación local (Frontend)
     if (!validate()) return;
 
     setIsSubmitting(true);
     setErrors({});
 
     try {
-        // Encriptado MD5
         const md5Password = MD5(form.password).toString();
 
         const payload = {
@@ -168,25 +155,19 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
 
         console.log("Enviando datos...", payload);
         
-        // --- CAMBIO: USAMOS EL SERVICIO CENTRALIZADO ---
-        // El apiClient ya se encarga de lanzar error si el code != 200
+        // --- LLAMADA AL SERVICIO ---
         const data = await userService.createUsuario(payload);
 
-        // --- ÉXITO ---
-        console.log("✅ Registrado con ID:", data.id_usuario);
+        console.log("Registrado con ID:", data.id_usuario);
         alert("¡Cuenta creada con éxito! Ahora puedes iniciar sesión.");
         onBack(); 
 
     } catch (error: any) {
-        console.error("❌ Error Registro:", error);
+        console.error("Error Registro:", error);
         
-        // El mensaje de error ya viene limpio desde apiClient
+        // El servicio ya nos devuelve el mensaje procesado
         setErrorMessage(error.message || 'Error desconocido.');
         setShowErrorModal(true);
-        
-        // NOTA: Si necesitas el mapeo de errores específicos (código 550),
-        // deberías ajustar el apiClient para que devuelva el objeto de error completo
-        // en lugar de lanzar solo el mensaje.
     } finally {
         setIsSubmitting(false);
     }
@@ -194,8 +175,6 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
 
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark relative">
-      
-      {/* HEADER */}
       <header className="safe-top px-6 pt-8 pb-6 flex items-center justify-between bg-white dark:bg-surface-dark shadow-sm sticky top-0 z-10">
         <button onClick={onBack} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
           <span className="material-symbols-outlined">arrow_back_ios_new</span>
@@ -206,7 +185,6 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
         <div className="w-10"></div>
       </header>
 
-      {/* MAIN */}
       <main className="flex-1 overflow-y-auto px-6 pb-[calc(10rem+env(safe-area-inset-bottom))]">
         <div className="py-4">
           <h1 className="text-2xl font-black mb-1 text-gray-900 dark:text-white">Crear Perfil</h1>
@@ -273,14 +251,12 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
         </div>
       </main>
 
-      {/* FOOTER */}
       <div className="p-6 absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background-light dark:from-background-dark via-background-light dark:via-background-dark to-transparent pt-10 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] z-20">
         <button onClick={handleContinue} disabled={isSubmitting} className={`w-full h-14 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-black text-lg shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-70 cursor-wait' : ''}`}>
           {isSubmitting ? (<span>Procesando...</span>) : (<>Continuar <span className="material-symbols-outlined">arrow_forward</span></>)}
         </button>
       </div>
 
-      {/* --- MODAL DE ERROR --- */}
       {showErrorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-2xl w-full max-w-sm text-center transform transition-all animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-gray-700">

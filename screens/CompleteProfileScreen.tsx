@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserData } from '../types';
-import { userService } from '../src/api/userService';     // <--- Servicio Usuario
-import { catalogService } from '../src/api/catalogService'; // <--- Servicio Catálogo
+// Corregimos los imports para que sean relativos estándar
+import { userService } from '../src/api/userService';
+import { catalogService } from '../src/api/catalogService';
 
 interface CompleteProfileScreenProps {
   userData: UserData;
@@ -129,18 +130,15 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
-  // --- REFERENCIAS PARA AUTO-FOCUS ---
   const inputRefs = {
       rfc: useRef<HTMLInputElement>(null),
       workplace: useRef<HTMLInputElement>(null),
-      
       address: useRef<HTMLInputElement>(null),
       zipCode: useRef<HTMLInputElement>(null), 
       colony: useRef<HTMLInputElement>(null),
       municipality: useRef<HTMLSelectElement>(null),
       locality: useRef<HTMLSelectElement | HTMLInputElement>(null),
       phone: useRef<HTMLInputElement>(null),
-      
       emergFirstName: useRef<HTMLInputElement>(null),
       emergPaternal: useRef<HTMLInputElement>(null),
       emergAddress: useRef<HTMLInputElement>(null),
@@ -149,7 +147,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       emergPhone: useRef<HTMLInputElement>(null),
   };
 
-  // --- 1. CARGA INICIAL (USANDO USER SERVICE) ---
+  // --- 1. CARGA DE DATOS (GET) ---
   useEffect(() => {
     const fetchUserData = async () => {
       if (!idUsuario) return;
@@ -158,7 +156,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       try {
         console.log("Obteniendo datos para ID:", idUsuario);
         
-        // Llamada limpia al servicio
+        // Usamos el servicio. El servicio ya sabe que debe enviar { id: idUsuario }
         const json = await userService.getUsuarioById(idUsuario);
 
         if (json.data && json.data.usuario) {
@@ -219,13 +217,11 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
-  // --- 2. BUSQUEDA CP (USANDO CATALOG SERVICE) ---
+  // --- 2. CARGA DE CP (CATALOGO) ---
   const fetchZipData = async (cp: string, isEmergency: boolean) => {
       try {
-          // Llamada limpia al servicio
           const data = await catalogService.getLocalidadByCP(cp);
 
-          // Si viene vacío o code 204
           if (!data || data.code === "204" || (Object.keys(data).length === 0)) {
               if (isEmergency) {
                   setErrors(prev => ({ ...prev, emergZipCode: "CP no encontrado" }));
@@ -239,7 +235,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               return;
           }
 
-          // Si éxito
           if (data.code === "200" && data.data && data.data.catCPs.length > 0) {
               const list = data.data.catCPs;
               const firstRecord = list[0]; 
@@ -255,7 +250,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           }
       } catch (error) {
           console.error("Error fetching CP:", error);
-          // Opcional: mostrar error en UI
       }
   };
 
@@ -277,7 +271,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       return null;
   };
 
-  // --- 3. AUTO-FOCUS LOGIC (WEB + MOBILE) ---
   const focusOnError = (errorList: any) => {
       const errorKeys = Object.keys(errorList);
       if (errorKeys.length === 0) return;
@@ -295,7 +288,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           const ref = inputRefs[firstErrorField];
           if (ref && ref.current) {
               ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              // Timeout para asegurar que el teclado abra en Android/iOS
               setTimeout(() => {
                   ref.current.focus();
               }, 100);
@@ -347,7 +339,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
-  // --- 4. GUARDAR (USANDO USER SERVICE) ---
+  // --- 3. GUARDADO (UPDATE) ---
   const handleSave = async () => {
       if (!validateStep(3)) return;
 
@@ -388,7 +380,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           // Llamada limpia al servicio
           const data = await userService.updateUsuario(payload);
 
-          // Si hubo éxito (el servicio lanza error si no)
           console.log("Usuario actualizado correctamente:", data);
           onSave(form);
 
