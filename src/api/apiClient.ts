@@ -1,9 +1,8 @@
 // src/api/apiClient.ts
 
+
 // Usamos process.env directo. Si no existe, usa localhost por defecto.
-const API_URL = process.env.REACT_APP_API_URL;
-console.log("Valor real leído:", API_URL); // Debería salir la URL
-export const API_BASE_URL = API_URL
+const BASE_URL = import.meta.env.VITE_API_URL
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
