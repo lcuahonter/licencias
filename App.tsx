@@ -84,9 +84,9 @@ const App: React.FC = () => {
                 updateUserData(loginData);
 
                 // 3. Decidir navegación basada en el token (Prioridad Alta)
-                if (nextScreen === 'Documents') {
-                    // Si el token dice "Incompleto", mandamos a completar perfil
-                    setCurrentStep(AppStep.COMPLETE_PROFILE); 
+                if (nextScreen === 'DocumentUploadScreen') {
+                    // Si el token dice "Incompleto", mandamos a cargar documentos
+                    setCurrentStep(AppStep.DOCUMENTS); 
                     return;
                 } else if (nextScreen === 'Dashboard') {
                     setCurrentStep(AppStep.DASHBOARD);

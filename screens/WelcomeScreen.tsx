@@ -15,7 +15,7 @@ interface DecodedToken {
 }
 
 interface WelcomeScreenProps {
-  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'Documents') => void;
+  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen') => void;
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
@@ -57,7 +57,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
           const decoded = jwtDecode<DecodedToken>(tokenString);
           console.log("Token decodificado:", decoded);
 
-          const destino = decoded.perfil === "Incompleto" ? 'Documents' : 'Dashboard';
+          const destino = decoded.perfil === "Incompleto" ? 'DocumentUploadScreen' : 'Dashboard';
           
           console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData})`);
 
