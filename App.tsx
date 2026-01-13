@@ -116,7 +116,7 @@ const App: React.FC = () => {
         />;
             
       case AppStep.REGISTRATION: return <RegistrationScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.DOCUMENTS); }} />;
-      case AppStep.DOCUMENTS: return <DocumentUploadScreen onBack={() => setCurrentStep(AppStep.REGISTRATION)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.BIOMETRICS); }} />;
+      case AppStep.DOCUMENTS: return <DocumentUploadScreen onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.BIOMETRICS); }} />;
       case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} />;
       case AppStep.REVIEW: return <ReviewScreen userData={userData} onBack={() => setCurrentStep(AppStep.BIOMETRICS)} onSend={() => setCurrentStep(AppStep.DASHBOARD)} onEdit={updateUserData} />;
       
