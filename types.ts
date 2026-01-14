@@ -31,6 +31,9 @@ export interface LicenseRequest {
   // NUEVO: Lista de documentos rechazados (ej: ['ineFront', 'photo'])
   // Esto es necesario para el modal de corrección
   rejectedDocuments?: string[]; 
+  
+  // NUEVO: Datos crudos del endpoint /api/solicitudes/solicitudesByIdUsuario
+  rawData?: any;
 }
 
 export interface UserData {

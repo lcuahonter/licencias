@@ -75,7 +75,9 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
               let userFresh: any = null;
               try {
                 const u = await userService.getUsuarioById(decoded.aData, tokenString);
+                console.log("Respuesta getUsuarioById:", u);
                 userFresh = u?.data?.usuario ?? u?.data ?? null;
+                console.log("UserFresh extraído:", userFresh);
               } catch (e) {
                 console.warn('No fue posible recuperar usuario al login:', e);
               }
@@ -84,6 +86,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
               let hasDocs = true;
               try {
                 const docsResp = await documentService.getByUser(decoded.aData, tokenString);
+                console.log("Respuesta getByUser documentos:", docsResp);
                 const docsCode = docsResp?.code || docsResp?.data?.code;
                 hasDocs = docsCode === '200';
               } catch (e) {
@@ -91,6 +94,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
                 hasDocs = true;
               }
 
+              console.log(`Perfil: ${userFresh?.perfil}, tieneDocs: ${hasDocs}`);
               if (userFresh?.perfil === 'Incompleto') {
                 destino = 'DocumentUploadScreen';
               } else {

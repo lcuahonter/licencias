@@ -21,6 +21,7 @@ const DOC_LABELS: Record<string, string> = {
 
 import { solicitudService } from '../src/api/solicitudService';
 import { documentService } from '../src/api/documentService';
+import { userService } from '../src/api/userService';
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile, onContinueRequest, onGoToDocuments, idUsuario, token }) => {
   
@@ -50,7 +51,42 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
   };
 
   // Banner de perfil: el backend expone campo `perfil` como 'Incompleto' / 'Completo'
-  const isProfileIncomplete = (userData as any).perfil === 'Incompleto';
+  const [userDataFresh, setUserDataFresh] = useState<any>(userData);
+  const isProfileIncomplete = userDataFresh?.perfil === 'Incompleto';
+  
+  // Consultar usuario actualizado del servidor para obtener estado del perfil
+  React.useEffect(() => {
+    if (!idUsuario || !token) return;
+    let mounted = true;
+    
+    userService.getUsuarioById(idUsuario, token)
+      .then(resp => {
+        console.log("Respuesta COMPLETA de getUsuarioById:", resp);
+        // El perfil está en resp.data.perfil, el usuario en resp.data.usuario
+        const userFresh = {
+          ...resp?.data?.usuario,
+          perfil: resp?.data?.perfil
+        };
+        console.log("UserFresh COMBINADO:", userFresh);
+        console.log("userFresh.perfil =", userFresh?.perfil);
+        
+        if (mounted && userFresh) {
+          setUserDataFresh(userFresh);
+        }
+      })
+      .catch(err => console.warn('Error consultando usuario en Dashboard:', err));
+    
+    return () => { mounted = false; };
+  }, [idUsuario, token]);
+  
+  // DEBUG: Log al renderizar para ver el valor del userData
+  React.useEffect(() => {
+    console.log("=== DEBUG BANNER ===");
+    console.log("userDataFresh:", userDataFresh);
+    console.log("userDataFresh.perfil:", userDataFresh?.perfil);
+    console.log("isProfileIncomplete:", isProfileIncomplete);
+  }, [userDataFresh, isProfileIncomplete]);
+  
   const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
 
   // Consultamos si el usuario tiene documentos en el servidor (para otros usos en el perfil)
@@ -109,7 +145,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
 
   // --- HANDLERS ---
   const handleOpenNewReq = () => {
-    // Abrir modal de nueva solicitud incluso si el perfil no está completo.
+    // Validar que el perfil esté completo antes de permitir nueva solicitud
+    if (isProfileIncomplete) {
+      onGoToProfile();
+      return;
+    }
+
+    // Abrir modal de nueva solicitud
     const defaultType = 'Automovilista';
     setSelectedType(defaultType);
 
@@ -167,6 +209,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
         const createdId = res?.data?.solicitud?.id || res?.data?.id || Date.now().toString();
         const folio = res?.data?.solicitud?.folio || res?.data?.folio || `DGO-${Math.floor(Math.random() * 10000)}`;
 
+        // Consultar las solicitudes del usuario para obtener los datos reales
+        let solicitudesActuales: any[] = [];
+        try {
+          const solicResp = await solicitudService.getByUser(idUsuario, token);
+          solicitudesActuales = solicResp?.data?.solicitudesData ?? solicResp?.data?.solicitudes ?? [];
+          console.log("Solicitudes del usuario después de crear:", solicitudesActuales);
+        } catch (err) {
+          console.warn('Error consultando solicitudes:', err);
+        }
+
         const newRequest: LicenseRequest = {
             id: String(createdId),
             type: selectedType,
@@ -175,7 +227,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
             date: new Date().toLocaleDateString('es-MX'),
             status: method === 'card' ? 'paid_pending_docs' : 'pending_payment',
             folio,
-            rejectedDocuments: []
+            rejectedDocuments: [],
+            rawData: solicitudesActuales.length > 0 ? solicitudesActuales[0] : null
         };
 
         // Guardamos localmente (mock) y notificamos al padre para continuar
@@ -183,22 +236,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
         setShowPaymentModal(false);
         setShowNewReqModal(false);
 
-        // Notificamos (App.jsx) para que maneje la navegación a la siguiente pantalla
-        onContinueRequest(newRequest);
-
+        // No abrir DocumentUploadScreen, quedarse en Dashboard
+        // El usuario verá la solicitud pendiente en "Solicitudes en Proceso"
+        
         // CALLBACK ADICIONAL: Subir documentos asociados a esta solicitud si el usuario ya los cargó
         try {
-          // Recuperamos la lista de solicitudes del usuario para obtener el ID real
-          const all = await solicitudService.getByUser(idUsuario, token);
-          const solicitudes = all?.data?.solicitudes ?? all?.data ?? all;
-          // Buscamos la solicitud más reciente sin numerolicencia (pendiente de asignación)
-          let found: any = null;
-          if (Array.isArray(solicitudes)) {
-            found = solicitudes.reverse().find((s: any) => !s.numerolicencia) ?? solicitudes.reverse()[0];
-          }
-          const idsolicitud = found?.id || found?.idsolicitud || createdId || null;
+          // Usar el ID REAL de la solicitud que obuvimos del endpoint
+          const idsolicitud = solicitudesActuales.length > 0 ? solicitudesActuales[0].id : null;
+          
+          console.log("ID de solicitud para documentos:", idsolicitud);
+          console.log("userData.documents:", (userData as any).documents);
+          console.log("userData.fileMeta:", (userData as any).fileMeta);
 
           if (idsolicitud && (userData as any).documents) {
+            console.log("Iniciando subida de documentos...");
             const metas = (userData as any).fileMeta || {};
             const optional = (userData as any).optionalEnabled || {};
 
@@ -344,22 +395,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
              </div>
         )}
 
-        {/* Banner para documentos faltantes (perfil completo pero sin documentos) */}
-        {!isProfileIncomplete && hasDocuments === false && (
-          <div className="mt-4" onClick={() => onGoToDocuments && onGoToDocuments()}>
-            <div className="bg-yellow-600 text-white p-4 rounded-2xl shadow-lg flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform">
-              <div className="bg-white/20 p-2 rounded-full"><span className="material-symbols-outlined">upload_file</span></div>
-              <div>
-                <h3 className="font-bold text-sm">Documentos faltantes</h3>
-                <p className="text-[10px] opacity-90">Aún no subes los documentos requeridos. Súbelos ahora para continuar.</p>
-              </div>
-              <div className="ml-auto">
-                <button onClick={(e) => { e.stopPropagation(); onGoToDocuments && onGoToDocuments(); }} className="bg-white text-yellow-700 px-3 py-2 rounded-xl font-bold">Subir</button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <section>
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-sm">badge</span> Licencias Vigentes</h3>
             {activeLicenses.length === 0 ? (
@@ -389,13 +424,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                  <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center"><p className="text-xs text-gray-400 font-medium">No hay trámites pendientes.</p></div>
             ) : (
                 <div className="space-y-3">
-                    {activeProcessList.map((req) => (
+                    {activeProcessList.map((req) => {
+                      const rawData = req.rawData;
+                      const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
+                      const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
+                      const estatus = rawData?.estatus || 'En revisión';
+                      const statusDisplay = req.status === 'rejected' ? 'RECHAZADO' : req.status === 'pending_payment' ? 'PENDIENTE PAGO' : (estatus || 'EN REVISIÓN');
+                      
+                      return (
                         <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden ${req.status === 'rejected' ? 'border-red-500' : 'border-yellow-400'}`}>
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-1"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status === 'rejected' ? 'RECHAZADO' : req.status === 'pending_payment' ? 'PENDIENTE PAGO' : 'EN REVISIÓN'}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
-                                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Licencia {req.type}</h3>
-                                    <p className="text-xs text-gray-500">{req.process}</p>
+                                    <div className="flex items-center gap-2 mb-1"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{statusDisplay}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
+                                    <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
+                                    {rawData?.idestatus && <p className="text-xs text-gray-400">Estado ID: {rawData.idestatus}</p>}
                                 </div>
                                 <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
                             </div>
@@ -408,7 +451,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                                 )}
                             </div>
                         </div>
-                    ))}
+                      );
+                    })}
                 </div>
             )}
         </section>

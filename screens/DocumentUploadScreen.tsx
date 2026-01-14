@@ -50,7 +50,10 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       .then(resp => {
         // El servicio puede devolver varias formas: { data: { catDocumentos: [...] } } o { data: [...] }
         const arr = resp?.data?.catDocumentos ?? resp?.data ?? resp?.catDocumentos ?? resp;
-        if (mounted && Array.isArray(arr)) setDocsCatalog(arr);
+        if (mounted && Array.isArray(arr)) {
+          console.log('Catálogo de documentos recibido:', arr);
+          setDocsCatalog(arr);
+        }
       })
       .catch(err => console.error('Error cargando catálogo de documentos:', err))
       .finally(() => mounted && setIsLoadingCatalog(false));
@@ -102,7 +105,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     return <img src={base64} alt="Preview" className="w-full h-full object-cover" />;
   };
 
-  const renderDocumentUpload = (item: any) => {
+  const renderDocumentUpload = (item: any, showHeader: boolean = true) => {
     const fieldKey = keyForItem(item);
     const isError = errorField === fieldKey;
     const hasValue = !!docs[fieldKey];
@@ -111,16 +114,27 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     if (isError) borderClass = "border-red-500 bg-red-50 dark:bg-red-900/20";
     else if (hasValue) borderClass = "border-green-500 bg-green-50 dark:bg-green-900/10";
 
-    const label = item.nombre || item.nombreDocumento || item.descripcion || item.label || `Documento ${item.id}`;
+    const titulo = item.nombre || item.documento || item.titulo || item.nombreDocumento || item.descripcion || `Documento ${item.id}`;
+    const descripcion = item.descripcion || item.label || '';
     const isMandatory = isTypeMandatory(item.id);
 
     return (
       <div key={fieldKey} className="animate-in fade-in zoom-in duration-300"> 
-        <div className="flex items-center justify-between mb-2">
-          <label className={`text-xs font-bold uppercase ${isError ? 'text-red-500' : 'text-gray-400'}`}>{label}</label>
-          <div className={`text-[10px] font-bold px-2 py-1 rounded ${isMandatory ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{isMandatory ? 'Obligatorio' : 'Opcional'}</div>
-        </div>
+        {/* Título y descripción - solo si showHeader es true */}
+        {showHeader && (
+          <div className="mb-2 flex flex-col sm:flex-row items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h4 className={`text-xs font-bold uppercase ${isError ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>{titulo}</h4>
+              {descripcion && <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 break-words">{descripcion}</p>}
+            </div>
+            {/* Badge de Obligatorio solo para obligatorios */}
+            {isMandatory && (
+              <div className={`text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap bg-red-50 text-red-700 flex-shrink-0`}>Obligatorio</div>
+            )}
+          </div>
+        )}
 
+        {/* Upload box siempre visible (obligatorio u opcional) */}
         <label className={`h-36 border-2 border-dashed rounded-2xl flex items-center justify-center cursor-pointer transition-all overflow-hidden relative ${borderClass}`}>
             <input 
               type="file" 
@@ -134,15 +148,6 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
             {fileMeta[fieldKey] && (
               <div className="absolute left-2 top-2 text-[10px] text-gray-500 bg-white/80 px-2 py-1 rounded">
                 {fileMeta[fieldKey].name} • {(fileMeta[fieldKey].size / 1024).toFixed(0)} KB
-              </div>
-            )}
-
-            {/* Optional toggle for optional docs */}
-            {!isMandatory && (
-              <div className="absolute right-2 top-2">
-                <label className="inline-flex items-center gap-2">
-                  <input type="checkbox" checked={!!optionalEnabled[fieldKey]} onChange={(e) => setOptionalEnabled(prev => ({ ...prev, [fieldKey]: e.target.checked }))} />
-                </label>
               </div>
             )}
 
@@ -161,52 +166,66 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   const isTypeMandatory = (tipoId: number) => {
     const item = docsCatalog.find(d => Number(d.id) === Number(tipoId));
     if (!item) return false;
-    const v = (item.obligatorio || item.requerido || item.required || item.mandatory || item.mandatorio || item.isRequired || item.requerido)?.toString().toLowerCase();
-    if (!v) return false;
-    return v === 'si' || v === 'true' || v === '1' || v === 'yes';
+    
+    // Primero intenta con campos booleanos/string tradicionales
+    const v = (item.obligatorio || item.requerido || item.required || item.mandatory || item.mandatorio || item.isRequired)?.toString().toLowerCase();
+    if (v === 'si' || v === 'true' || v === '1' || v === 'yes') return true;
+    
+    // Luego intenta con el campo "estatus" que viene del endpoint
+    const estatus = (item.estatus || item.status || '')?.toString().toLowerCase();
+    if (estatus === 'obligatorio' || estatus === 'required' || estatus === 'mandatory') return true;
+    
+    // También verifica idestatus si existe (8 podría significar Obligatorio)
+    const idestatus = item.idestatus;
+    if (idestatus === 8 || idestatus === '8') return true;
+    
+    return false;
+  };
+
+  // Verifica si un documento debe ser mostrado (solo idestatus 8 y 9)
+  const isDocumentActive = (item: any): boolean => {
+    const idestatus = item.idestatus;
+    return idestatus === 8 || idestatus === 9 || idestatus === '8' || idestatus === '9';
   };
 
   const isIdComplete = () => {
-    // INE logic: if any of INE types are mandatory (8 or 9 or 5) require both
-    const ineFrontMandatory = isTypeMandatory(FIELD_TO_TIPO.ineFront!);
-    const ineBackMandatory = isTypeMandatory(FIELD_TO_TIPO.ineBack!);
-    const ineMandatory = ineFrontMandatory || ineBackMandatory;
-
-    if (selectedIdType === 'ine') {
-      if (ineMandatory) return !!docs.ineFront && !!docs.ineBack;
-      return true; // optional
+    const idsToShow = getDocumentIdsForIdType(selectedIdType);
+    
+    // Verificar que todos los documentos de ID visibles tengan archivo
+    for (const tipoId of idsToShow) {
+      const item = docsCatalog.find(d => Number(d.id) === tipoId);
+      if (!item) continue;
+      
+      const k = keyForItem(item);
+      
+      // Si es obligatorio, requiere archivo
+      if (isTypeMandatory(tipoId)) {
+        if (!docs[k]) return false;
+      }
     }
-
-    // Passport
-    const passportMandatory = isTypeMandatory(FIELD_TO_TIPO.passport!);
-    if (selectedIdType === 'passport') {
-      if (passportMandatory) return !!docs.passport;
-      return true;
-    }
-
-    // Cedula
-    const cedulaMandatory = isTypeMandatory(FIELD_TO_TIPO.cedulaFront!);
-    if (selectedIdType === 'cedula') {
-      if (cedulaMandatory) return !!docs.cedulaFront && !!docs.cedulaBack;
-      return true;
-    }
-
+    
     return true;
   };
 
   const isComplete = () => {
     if (!docsCatalog || docsCatalog.length === 0) return true; // Si no hay catálogo, no bloqueamos
 
-    // Para cada item obligatorio del catálogo requerimos que exista archivo
-    for (const item of docsCatalog) {
-      if (!isTypeMandatory(item.id)) continue;
-      const k = keyForItem(item);
-      if (!docs[k]) return false;
-    }
-
-    // También se valida la selección de ID (si el catálogo requiere algún ID específico se considera ya en lo anterior)
+    // Solo validar los documentos de ID visibles según la selección actual
     if (!isIdComplete()) return false;
 
+    // Validar documentos requeridos adicionales (no son de identificación)
+    for (const item of docsCatalog) {
+      // Saltamos documentos de identificación (ya validados en isIdComplete)
+      if ([8, 9, 11, 12].includes(Number(item.id))) continue;
+      
+      // Si es obligatorio y no está habilitado como opcional, requiere archivo
+      if (isTypeMandatory(item.id)) {
+        const k = keyForItem(item);
+        if (!docs[k]) return false;
+      }
+    }
+
+    // Validar documentos opcionales habilitados
     for (const key of Object.keys(optionalEnabled)) {
       if (optionalEnabled[key] && !docs[key]) return false;
     }
@@ -224,6 +243,22 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     addressProof: 1,
     birthCertificate: 10,
     disabilityProof: 3 // Asumo 3 (Reconocimiento médico) por defecto
+  };
+
+  // Mapping: según el tipo de ID seleccionado, qué documentos mostrar
+  const getDocumentIdsForIdType = (idType: IdType): number[] => {
+    switch (idType) {
+      case 'ine': return [8, 9]; // INE Frente y Reverso
+      case 'passport': return [11]; // Pasaporte
+      case 'cedula': return [12]; // Cédula Profesional
+      default: return [];
+    }
+  };
+
+  // Filtra el catálogo para mostrar solo los documentos del tipo de ID seleccionado
+  const getFilteredCatalog = (): any[] => {
+    const idsToShow = getDocumentIdsForIdType(selectedIdType);
+    return docsCatalog.filter(item => idsToShow.includes(Number(item.id)) && isDocumentActive(item));
   };
 
 
@@ -304,22 +339,67 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
              {docsCatalog.length > 0 ? (
                <>
-                 {/* Separamos por obligatorios y opcionales para mejor UX */}
+                 {/* Documentos de identificación (filtrados por tipo seleccionado) */}
                  <div className="space-y-4">
-                   <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Requeridos</h3>
+                   <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documento de Identificación</h3>
                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     {docsCatalog.filter((it) => isTypeMandatory(it.id)).map(item => renderDocumentUpload(item))}
+                     {getFilteredCatalog().map(item => renderDocumentUpload(item))}
                    </div>
                  </div>
 
                  <hr className="border-gray-200 dark:border-gray-700 my-6" />
 
-                 <div className="space-y-4">
-                   <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Opcionales</h3>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     {docsCatalog.filter((it) => !isTypeMandatory(it.id)).map(item => renderDocumentUpload(item))}
+                 {/* Documentos Requeridos Adicionales (no son de identificación) */}
+                 {docsCatalog.filter((it) => ![8, 9, 11, 12].includes(Number(it.id)) && isTypeMandatory(it.id)).length > 0 && (
+                   <div className="space-y-4">
+                     <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Requeridos</h3>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                       {docsCatalog.filter((it) => ![8, 9, 11, 12].includes(Number(it.id)) && isDocumentActive(it) && isTypeMandatory(it.id)).map(item => renderDocumentUpload(item))}
+                     </div>
                    </div>
-                 </div>
+                 )}
+
+                 {/* Documentos Opcionales */}
+                 {docsCatalog.filter((it) => ![8, 9, 11, 12].includes(Number(it.id)) && isDocumentActive(it) && !isTypeMandatory(it.id)).length > 0 && (
+                   <div className="space-y-4">
+                     <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Opcionales</h3>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                       {docsCatalog.filter((it) => ![8, 9, 11, 12].includes(Number(it.id)) && isDocumentActive(it) && !isTypeMandatory(it.id)).map(item => {
+                         const fieldKey = keyForItem(item);
+                         const isEnabled = optionalEnabled[fieldKey] ?? false;
+                         const titulo = item.nombre || item.documento || item.descripcion || `Documento ${item.id}`;
+                         const descripcion = item.descripcion || item.label || 'Habilita para adjuntar.';
+                         
+                         return (
+                           <div key={fieldKey} className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 transition-all flex flex-col h-full">
+                             <div className="flex flex-col sm:flex-row items-start justify-between gap-3 flex-1">
+                               <div className="flex-1 min-w-0">
+                                 <h4 className="font-bold text-sm">{titulo}</h4>
+                                 <p className="text-xs text-gray-500 mt-1 break-words">{descripcion}</p>
+                               </div>
+                               
+                               <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-2 sm:mt-0">
+                                  <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={isEnabled}
+                                    onChange={(e) => setOptionalEnabled(prev => ({ ...prev, [fieldKey]: e.target.checked }))}
+                                  />
+                                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black dark:peer-checked:bg-white/90"></div>
+                               </label>
+                             </div>
+
+                             {isEnabled && (
+                               <div className="animate-in fade-in slide-in-from-top-2 duration-300 mt-4">
+                                 {renderDocumentUpload(item, false)}
+                               </div>
+                             )}
+                           </div>
+                         );
+                       })}
+                     </div>
+                   </div>
+                 )}
                </>
              ) : (
                <div className="text-sm text-gray-500">No hay información del catálogo. Puedes continuar con los documentos básicos.</div>
