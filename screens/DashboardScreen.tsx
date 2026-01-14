@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
 
 interface DashboardScreenProps {
@@ -6,24 +6,37 @@ interface DashboardScreenProps {
   onLogout: () => void;
   onGoToProfile: () => void;
   onContinueRequest: (req: LicenseRequest) => void;
-  // Nuevo: abrir pantalla de Documentos
   onGoToDocuments?: () => void;
   idUsuario?: number;
   token?: string;
 }
 
 const DOC_LABELS: Record<string, string> = {
-    ineFront: 'INE (Frente)',
-    ineBack: 'INE (Reverso)',
-    addressProof: 'Comprobante de Domicilio',
-    photo: 'Fotografía Biométrica'
+  ineFront: 'INE (Frente)',
+  ineBack: 'INE (Reverso)',
+  addressProof: 'Comprobante de Domicilio',
+  photo: 'Fotografía Biométrica',
+  // Mapeos adicionales para mensajes de error
+  passport: 'Pasaporte',
+  cedulaFront: 'Cédula (Frente)',
+  cedulaBack: 'Cédula (Reverso)',
+  birthCertificate: 'Acta de Nacimiento',
+  disabilityProof: 'Certificado de Discapacidad'
 };
 
 import { solicitudService } from '../src/api/solicitudService';
 import { documentService } from '../src/api/documentService';
 import { userService } from '../src/api/userService';
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile, onContinueRequest, onGoToDocuments, idUsuario, token }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ 
+  userData, 
+  onLogout, 
+  onGoToProfile, 
+  onContinueRequest, 
+  onGoToDocuments, 
+  idUsuario, 
+  token 
+}) => {
   
   // --- ESTADOS ---
   const [showNewReqModal, setShowNewReqModal] = useState(false);
@@ -41,35 +54,35 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
   const [selectedType, setSelectedType] = useState<LicenseType>('Automovilista');
   const [selectedProcess, setSelectedProcess] = useState<ProcessType>('Primera Vez');
   
-  // --- HELPERS (ACTUALIZADO CON TRANSPORTE PÚBLICO) ---
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  // --- HELPERS ---
+  
+  // Helper para esperar (evitar Race Condition del 204)
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
   const getCost = (type: LicenseType) => {
       switch (type) {
           case 'Motociclista': return 608.00;
-          case 'Transporte Público': return 1450.00; // Precio más alto
+          case 'Transporte Público': return 1450.00;
           default: return 912.00; // Automovilista
       }
   };
 
-  // Banner de perfil: el backend expone campo `perfil` como 'Incompleto' / 'Completo'
+  // --- DATOS DEL USUARIO (PERFIL) ---
   const [userDataFresh, setUserDataFresh] = useState<any>(userData);
   const isProfileIncomplete = userDataFresh?.perfil === 'Incompleto';
   
-  // Consultar usuario actualizado del servidor para obtener estado del perfil
-  React.useEffect(() => {
+  useEffect(() => {
     if (!idUsuario || !token) return;
     let mounted = true;
     
     userService.getUsuarioById(idUsuario, token)
       .then(resp => {
-        console.log("Respuesta COMPLETA de getUsuarioById:", resp);
-        // El perfil está en resp.data.perfil, el usuario en resp.data.usuario
         const userFresh = {
           ...resp?.data?.usuario,
           perfil: resp?.data?.perfil
         };
-        console.log("UserFresh COMBINADO:", userFresh);
-        console.log("userFresh.perfil =", userFresh?.perfil);
-        
         if (mounted && userFresh) {
           setUserDataFresh(userFresh);
         }
@@ -79,40 +92,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
     return () => { mounted = false; };
   }, [idUsuario, token]);
   
-  // DEBUG: Log al renderizar para ver el valor del userData
-  React.useEffect(() => {
-    console.log("=== DEBUG BANNER ===");
-    console.log("userDataFresh:", userDataFresh);
-    console.log("userDataFresh.perfil:", userDataFresh?.perfil);
-    console.log("isProfileIncomplete:", isProfileIncomplete);
-  }, [userDataFresh, isProfileIncomplete]);
-  
-  const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
-
-  // Consultamos si el usuario tiene documentos en el servidor (para otros usos en el perfil)
-  React.useEffect(() => {
-    if (!idUsuario) return;
-    let mounted = true;
-    documentService.getByUser(idUsuario, token)
-      .then(resp => {
-        const code = resp?.code || resp?.data?.code;
-        if (mounted) setHasDocuments(code === '200');
-      })
-      .catch(err => { console.warn('Error consultando documentos del usuario:', err); if (mounted) setHasDocuments(null); });
-    return () => { mounted = false; };
-  }, [idUsuario, token]);
-
+  // --- LICENCIAS Y TRÁMITES ---
   const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];
   const activeProcessList = userData.requests?.filter(r => 
       r.status !== 'completed' && r.status !== 'replaced' && r.status !== 'archived'
   ) || [];
 
-  // Verifica si ya tiene licencia activa de ese tipo exacto
   const hasLicenseForType = (type: LicenseType) => {
       return activeLicenses.some(r => r.type === type);
   };
 
-  // --- DETECCIÓN DE BIN ---
+  // --- VALIDACIÓN TARJETA ---
   const detectCardType = (number: string): 'visa' | 'mastercard' | 'unknown' => {
       const clean = number.replace(/\D/g, '');
       if (clean.match(/^4/)) return 'visa';
@@ -121,16 +111,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
   };
   const cardType = detectCardType(cardData.number);
 
-  // --- VALIDACIONES TARJETA ---
   const handleCardNameChange = (val: string) => {
       if (/^[A-Z\s]*$/.test(val.toUpperCase())) setCardData(prev => ({...prev, name: val.toUpperCase()}));
   };
+  
   const handleCardExpChange = (val: string) => {
       let clean = val.replace(/\D/g, '');
       if (clean.length > 4) return;
       let formatted = clean;
       if (clean.length >= 2) formatted = clean.substring(0, 2) + '/' + clean.substring(2);
       setCardData(prev => ({...prev, exp: formatted}));
+      
       if (clean.length === 4) {
           const mm = parseInt(clean.substring(0, 2));
           const yy = parseInt(clean.substring(2, 4));
@@ -143,34 +134,26 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
       } else setCardErrors(p => ({...p, exp: ''}));
   };
 
-  // --- HANDLERS ---
+  // --- HANDLERS DE MODALES ---
   const handleOpenNewReq = () => {
-    // Validar que el perfil esté completo antes de permitir nueva solicitud
     if (isProfileIncomplete) {
       onGoToProfile();
       return;
     }
-
-    // Abrir modal de nueva solicitud
     const defaultType = 'Automovilista';
     setSelectedType(defaultType);
-
-    // Validación inicial
     if (hasLicenseForType(defaultType)) setSelectedProcess('Renovación');
     else setSelectedProcess('Primera Vez');
-
     setShowNewReqModal(true);
   };
 
   const handleTypeSelect = (type: LicenseType) => {
       setSelectedType(type);
-      // Validación reactiva al cambiar tipo
       if (hasLicenseForType(type)) setSelectedProcess('Renovación');
       else setSelectedProcess('Primera Vez');
   };
 
   const handleProceedToPay = () => {
-    // Verificamos si ya hay un trámite EXACTAMENTE de este tipo en curso
     if (activeProcessList.some(r => r.type === selectedType)) { 
         alert(`Ya tienes un trámite de ${selectedType} en curso.`); 
         return; 
@@ -182,9 +165,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
     setShowPaymentModal(true);
   };
 
-  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
-
+  // =========================================================================
+  // LOGICA PRINCIPAL: CREAR SOLICITUD + POLLING + SUBIR DOCUMENTOS
+  // =========================================================================
   const finalizeRequest = async (method: 'card' | 'ventanilla') => {
+      // 1. Validaciones previas
       if (method === 'card') {
           if (detectCardType(cardData.number) === 'unknown') { alert("Tarjeta no válida."); return; }
           if (cardErrors.exp || cardData.exp.length < 5) { alert("Fecha incorrecta."); return; }
@@ -192,8 +177,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
 
       if (!idUsuario) { alert('Usuario no identificado.'); return; }
 
-      const idtipolicencia = selectedType === 'Motociclista' ? 2 : 1; // 1=Auto, 2=Moto
-      const idmetodopago = method === 'card' ? 1 : 2; // 1=Tarjeta, 2=Ventanilla
+      const idtipolicencia = selectedType === 'Motociclista' ? 2 : 1;
+      const idmetodopago = method === 'card' ? 1 : 2;
 
       const payload = {
         idusuario: idUsuario,
@@ -203,158 +188,141 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
 
       try {
         setIsSubmittingRequest(true);
-        const res = await solicitudService.createSolicitud(payload, token);
 
-        // Extraer datos retornados (id y folio) si vienen
-        const createdId = res?.data?.solicitud?.id || res?.data?.id || Date.now().toString();
-        const folio = res?.data?.solicitud?.folio || res?.data?.folio || `DGO-${Math.floor(Math.random() * 10000)}`;
+        // -------------------------------------------------------------------
+        // PASO 1: CREAR LA SOLICITUD
+        // -------------------------------------------------------------------
+        await solicitudService.createSolicitud(payload, token);
+        console.log("1. Solicitud enviada a crear exitosamente.");
 
-        // Consultar las solicitudes del usuario para obtener los datos reales
-        let solicitudesActuales: any[] = [];
-        try {
-          const solicResp = await solicitudService.getByUser(idUsuario, token);
-          solicitudesActuales = solicResp?.data?.solicitudesData ?? solicResp?.data?.solicitudes ?? [];
-          console.log("Solicitudes del usuario después de crear:", solicitudesActuales);
-        } catch (err) {
-          console.warn('Error consultando solicitudes:', err);
+        // -------------------------------------------------------------------
+        // PASO 2: RECUPERAR ID CON POLLING (EVITAR ERROR 204)
+        // -------------------------------------------------------------------
+        let idSolicitudReal: number | null = null;
+        let solicitudDataCompleta = null;
+        
+        let intentos = 0;
+        const maxIntentos = 3;
+        const delayMs = 1500; // 1.5 segundos de espera entre intentos
+
+        while (intentos < maxIntentos && !idSolicitudReal) {
+            intentos++;
+            console.log(`Intento ${intentos} de recuperar la solicitud... esperando DB.`);
+            
+            // Espera obligatoria para dar tiempo a la BD
+            await wait(delayMs);
+
+            try {
+                const solicResp = await solicitudService.getByUser(idUsuario, token);
+                
+                // Mapeo defensivo de la respuesta
+                const listaRaw = solicResp?.data?.solicitudesData || solicResp?.data?.solicitudes;
+                
+                if (Array.isArray(listaRaw) && listaRaw.length > 0) {
+                    // Ordenamos descendente por ID (el más alto es el nuevo)
+                    const sortedList = listaRaw.sort((a: any, b: any) => b.id - a.id);
+                    const ultimaSolicitud = sortedList[0];
+                    
+                    idSolicitudReal = ultimaSolicitud.id;
+                    solicitudDataCompleta = ultimaSolicitud;
+                    console.log(`> Solicitud encontrada en intento ${intentos}. ID: ${idSolicitudReal}`);
+                } else {
+                    console.warn(`> Intento ${intentos}: Respuesta vacía o 204.`);
+                }
+            } catch (fetchErr) {
+                console.warn(`> Intento ${intentos} fallido por red:`, fetchErr);
+            }
         }
 
+        // Si después de 3 intentos no aparece, alertamos pero no bloqueamos la app
+        if (!idSolicitudReal) {
+            alert("La solicitud se creó, pero el sistema está tardando en procesarla. Verifica tu historial en unos minutos.");
+            setIsSubmittingRequest(false);
+            setShowPaymentModal(false);
+            setShowNewReqModal(false);
+            return;
+        }
+
+        // -------------------------------------------------------------------
+        // PASO 3: ACTUALIZAR UI MOCK
+        // -------------------------------------------------------------------
         const newRequest: LicenseRequest = {
-            id: String(createdId),
+            id: String(idSolicitudReal),
             type: selectedType,
             process: selectedProcess,
             cost: getCost(selectedType),
             date: new Date().toLocaleDateString('es-MX'),
             status: method === 'card' ? 'paid_pending_docs' : 'pending_payment',
-            folio,
+            folio: solicitudDataCompleta?.folio || 'PROCESANDO',
             rejectedDocuments: [],
-            rawData: solicitudesActuales.length > 0 ? solicitudesActuales[0] : null
+            rawData: solicitudDataCompleta
         };
-
-        // Guardamos localmente (mock) y notificamos al padre para continuar
+        // Método temporal para actualizar la vista sin recargar
         (window as any).tempAddRequest(newRequest);
+        
         setShowPaymentModal(false);
         setShowNewReqModal(false);
 
-        // No abrir DocumentUploadScreen, quedarse en Dashboard
-        // El usuario verá la solicitud pendiente en "Solicitudes en Proceso"
-        
-        // CALLBACK ADICIONAL: Subir documentos asociados a esta solicitud si el usuario ya los cargó
-        try {
-          // Usar el ID REAL de la solicitud que obuvimos del endpoint
-          const idsolicitud = solicitudesActuales.length > 0 ? solicitudesActuales[0].id : null;
-          
-          console.log("ID de solicitud para documentos:", idsolicitud);
-          console.log("userData.documents:", (userData as any).documents);
-          console.log("userData.fileMeta:", (userData as any).fileMeta);
-
-          if (idsolicitud && (userData as any).documents) {
-            console.log("Iniciando subida de documentos...");
-            const metas = (userData as any).fileMeta || {};
-            const optional = (userData as any).optionalEnabled || {};
-
+        // -------------------------------------------------------------------
+        // PASO 4: SUBIR DOCUMENTOS
+        // -------------------------------------------------------------------
+        // Verificamos si hay documentos en memoria cargados desde DocumentUploadScreen
+        if ((userData as any).documents && Array.isArray((userData as any).documents)) {
+            console.log(`Iniciando carga automática de documentos al ID ${idSolicitudReal}...`);
             const userDocs = (userData as any).documents;
+            
+            // Contador para feedback simple
+            let docsOk = 0;
 
-            // Si viene en formato arreglo (nuevo), lo iteramos directamente
-            if (Array.isArray(userDocs)) {
-              for (const doc of userDocs) {
-                const tipo = doc.idtipodocumento || doc.tipoId || null;
-                const base64 = doc.archivoBase64 ? `data:${doc.formato};base64,${doc.archivoBase64}` : null;
-                if (!base64) continue;
+            for (const doc of userDocs) {
+                if (!doc.archivoBase64) continue;
 
                 const payloadDoc = {
-                  idusuario: idUsuario,
-                  idsolicitud,
-                  idtipodocumento: tipo,
-                  formato: doc.formato || 'jpg',
-                  nombreoriginal: doc.nombreoriginal || 'documento',
-                  tamanio: doc.tamanio || 0,
-                  archivoBase64: doc.archivoBase64
+                    idusuario: idUsuario,
+                    idsolicitud: idSolicitudReal, // Usamos el ID recuperado
+                    idtipodocumento: doc.idtipodocumento,
+                    formato: doc.formato || 'jpg',
+                    nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}`,
+                    tamanio: doc.tamanio || 0,
+                    archivoBase64: doc.archivoBase64
                 };
 
                 try {
-                  await documentService.createDocumento(payloadDoc, token);
+                    await documentService.createDocumento(payloadDoc, token);
+                    docsOk++;
                 } catch (derr: any) {
-                  console.error('Error subiendo documento', doc, derr);
-                  if (derr.isAuthError) {
-                    alert('Sesión expirada al subir documentos. Por favor inicia sesión de nuevo.');
-                    onLogout();
-                    return;
-                  }
-                  alert(`No se pudo subir ${doc.label || 'Documento'}: ${derr.message || 'Error'}`);
+                    console.error(`Error subiendo doc ${doc.idtipodocumento}`, derr);
+                    if (derr.isAuthError) {
+                        alert('Sesión expirada durante la carga de documentos.');
+                        onLogout();
+                        return;
+                    }
                 }
-              }
-            } else {
-              // Fallback: antiguo formato (objeto con keys)
-              const FIELD_TO_TIPO: Record<string, number | null> = {
-                ineFront: 8,
-                ineBack: 9,
-                passport: 11,
-                cedulaFront: 12,
-                cedulaBack: 12,
-                addressProof: 1,
-                birthCertificate: 10,
-                disabilityProof: 3
-              };
-
-              const docsObj = userDocs as Record<string, string>;
-              for (const key of Object.keys(docsObj)) {
-                const base64 = docsObj[key];
-                if (!base64) continue;
-                if (optional[key] === false) continue;
-
-                const tipo = FIELD_TO_TIPO[key];
-                if (!tipo) continue;
-
-                const meta = metas[key] || { name: 'unknown', size: 0, type: 'application/octet-stream' };
-                const formato = meta.type?.includes('pdf') ? 'pdf' : (meta.type?.split('/')?.[1] || 'bin');
-
-                const payloadDoc = {
-                  idusuario: idUsuario,
-                  idsolicitud,
-                  idtipodocumento: tipo,
-                  formato,
-                  nombreoriginal: meta.name,
-                  tamanio: meta.size,
-                  archivoBase64: base64.split(',')[1]
-                };
-
-                try {
-                  await documentService.createDocumento(payloadDoc, token);
-                } catch (derr: any) {
-                  console.error('Error subiendo documento', key, derr);
-                  if (derr.isAuthError) {
-                    alert('Sesión expirada al subir documentos. Por favor inicia sesión de nuevo.');
-                    onLogout();
-                    return;
-                  }
-                  alert(`No se pudo subir ${DOC_LABELS[key] || key}: ${derr.message || 'Error'}`);
-                }
-              }
             }
-          }
-        } catch (ex) {
-          console.warn('No fue posible subir documentos automáticamente:', ex);
+            
+            if (docsOk > 0) {
+                alert(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
+            } else {
+                alert("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
+            }
+        } else {
+            console.log("No hay documentos en memoria para subir automáticamente.");
         }
 
       } catch (err: any) {
-        console.error('Error creando la solicitud:', err);
-        // Si es error de autenticación, forzar cierre de sesión
+        console.error('Error Crítico al Finalizar:', err);
         if (err.isAuthError) {
           alert('Sesión expirada. Por favor inicia sesión de nuevo.');
           onLogout();
-          return;
+        } else {
+          alert('Error al procesar la solicitud. Inténtalo de nuevo.');
         }
-        const internal = err.internalCode || err.code || null;
-        const backendDetail = err.data?.error || err.data?.message || err.message || 'Error al crear solicitud';
-        const composed = internal ? `${internal} - ${backendDetail}` : backendDetail;
-        alert(`Error al crear la solicitud: ${composed}`);
       } finally {
         setIsSubmittingRequest(false);
       }
   };
 
-  // --- DEMO HELPERS ---
+  // --- DEMO HELPERS (Mocks para UI) ---
   const handleDemoApprove = (reqId: string) => {
     if(window.confirm("DEMO: ¿Aprobar?")) {
         const req = activeProcessList.find(r => r.id === reqId);
@@ -365,22 +333,29 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
         }
     }
   };
+  
   const handleDemoRejection = (reqId: string) => {
       if(!window.confirm("DEMO: ¿Rechazar?")) return;
       (window as any).tempUpdateRequestData(reqId, { status: 'rejected', rejectedDocuments: ['photo'] });
   };
+  
   const generatePaymentSlip = () => { finalizeRequest('ventanilla'); };
+  
   const handleOpenFixModal = (req: LicenseRequest) => { setFixingRequest(req); setFixedDocs({}); };
+  
   const triggerFileUpload = (docKey: string) => { setActiveDocKey(docKey); setTimeout(() => fileInputRef.current?.click(), 50); };
+  
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0] && activeDocKey) { setFixedDocs(p => ({...p, [activeDocKey]: true})); e.target.value = ''; }};
+  
   const handleSubmitCorrections = () => { if (!fixingRequest) return; setTimeout(() => { (window as any).tempUpdateRequestData(fixingRequest.id, { status: 'paid_pending_docs', rejectedDocuments: [] }); setFixingRequest(null); alert("Enviado a revisión."); }, 1000); };
 
+  // --- RENDER ---
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-background-dark relative">
       <header className="px-6 pt-10 pb-6 flex items-center justify-between bg-white dark:bg-surface-dark shadow-sm sticky top-0 z-10">
         <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
-                {userData.photo ? <img src={userData.photo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><span className="material-symbols-outlined">person</span></div>}
+                {userData.photo ? <img src={userData.photo} className="w-full h-full object-cover" alt="User" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><span className="material-symbols-outlined">person</span></div>}
             </div>
             <div><h1 className="text-lg font-black text-gray-900 dark:text-white">Mi Billetera</h1><p className="text-xs text-gray-500">Licencias Digitales Durango</p></div>
         </div>
@@ -460,28 +435,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
 
       <button onClick={handleOpenNewReq} className="absolute bottom-6 right-6 w-14 h-14 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-20"><span className="material-symbols-outlined text-3xl">add</span></button>
 
-      {/* MODAL 1: SELECCIÓN (ACTUALIZADO CON 3 BOTONES) */}
+      {/* MODAL 1: SELECCIÓN */}
       {showNewReqModal && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in slide-in-from-bottom-10 space-y-5">
                 <div className="flex justify-between items-center border-b border-gray-100 pb-3"><h2 className="text-lg font-black">Nueva Solicitud</h2><button onClick={() => setShowNewReqModal(false)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
                 
-                {/* GRID DE 3 COLUMNAS PARA LOS BOTONES */}
                 <div className="space-y-2">
                     <div className="grid grid-cols-3 gap-2">
-                        {/* Auto */}
                         <button onClick={() => handleTypeSelect('Automovilista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Automovilista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                             <span className="material-symbols-outlined text-2xl">directions_car</span>
                             <span className="text-[10px] font-bold">Auto</span>
                         </button>
-                        
-                        {/* Moto */}
                         <button onClick={() => handleTypeSelect('Motociclista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Motociclista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                             <span className="material-symbols-outlined text-2xl">two_wheeler</span>
                             <span className="text-[10px] font-bold">Moto</span>
                         </button>
-                        
-                        {/* Transporte Público */}
                         <button onClick={() => handleTypeSelect('Transporte Público')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Transporte Público' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                             <span className="material-symbols-outlined text-2xl">directions_bus</span>
                             <span className="text-[10px] font-bold text-center leading-tight">Transporte<br/>Público</span>
@@ -489,7 +458,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                     </div>
                 </div>
 
-                {/* SELECTOR INTELIGENTE */}
                 <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-gray-400">Trámite</label>
                     <select 
@@ -538,6 +506,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                     )}
                     {paymentStep === 'card' && (
                         <div className="space-y-5 animate-in slide-in-from-right">
+                             {/* VISUALIZACIÓN TARJETA */}
                             <div className={`rounded-xl p-5 text-white shadow-lg relative overflow-hidden transition-all duration-500 
                                 ${cardType === 'visa' ? 'bg-gradient-to-br from-blue-800 to-blue-950' : 
                                   cardType === 'mastercard' ? 'bg-gradient-to-br from-red-700 to-orange-800' : 
@@ -553,6 +522,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                                 <div className="flex justify-between text-[10px] opacity-70 uppercase tracking-wider"><span>Titular</span><span>Expira</span></div>
                                 <div className="flex justify-between font-bold text-sm tracking-wide"><span>{cardData.name || 'NOMBRE'}</span><span>{cardData.exp || 'MM/AA'}</span></div>
                             </div>
+                            
+                            {/* FORMULARIO */}
                             <div className="space-y-3">
                                 <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Número de Tarjeta</label><input maxLength={19} value={cardData.number} onChange={(e) => { let val = e.target.value.replace(/\D/g, '').substring(0,16); val = val.match(/.{1,4}/g)?.join(' ') || val; setCardData({...cardData, number: val}); }} placeholder="0000 0000 0000 0000" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary font-mono text-sm" /></div>
                                 <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Titular (Sin Ñ)</label><input value={cardData.name} onChange={(e) => handleCardNameChange(e.target.value)} placeholder="COMO APARECE EN LA TARJETA" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary uppercase text-sm" /></div>
@@ -561,7 +532,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">CVV</label><input type="password" maxLength={3} value={cardData.cvv} onChange={(e) => setCardData({...cardData, cvv: e.target.value.replace(/\D/g,'')})} placeholder="123" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary text-center font-mono text-sm" /></div>
                                 </div>
                             </div>
-                            <button onClick={() => finalizeRequest('card')} disabled={!cardData.number || !cardData.cvv || !!cardErrors.exp} className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">Pagar Ahora <span className="material-symbols-outlined text-sm">lock</span></button>
+                            <button onClick={() => finalizeRequest('card')} disabled={!cardData.number || !cardData.cvv || !!cardErrors.exp || isSubmittingRequest} className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSubmittingRequest ? 'Procesando...' : 'Pagar Ahora'} <span className="material-symbols-outlined text-sm">lock</span>
+                            </button>
                         </div>
                     )}
                     {paymentStep === 'cash' && (
@@ -569,7 +542,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                             <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto text-primary mb-2"><span className="material-symbols-outlined text-4xl">print</span></div>
                             <div><h3 className="text-lg font-black text-gray-900 dark:text-white">Ficha de Pago</h3><p className="text-gray-500 text-xs leading-relaxed px-4">Descarga e imprime tu ficha para pagar en cualquier banco o tienda de conveniencia.</p></div>
                             <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-600"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Referencia Única</p><p className="text-xl font-mono font-bold text-gray-900 dark:text-white tracking-widest">DGO-{Math.floor(Math.random() * 10000)}</p></div>
-                            <button onClick={generatePaymentSlip} className="w-full h-12 bg-primary text-white rounded-xl font-bold text-sm shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"><span className="material-symbols-outlined">download</span> Descargar PDF</button>
+                            <button onClick={generatePaymentSlip} disabled={isSubmittingRequest} className="w-full h-12 bg-primary text-white rounded-xl font-bold text-sm shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"><span className="material-symbols-outlined">download</span> {isSubmittingRequest ? 'Generando...' : 'Descargar PDF'}</button>
                         </div>
                     )}
                 </div>
@@ -577,6 +550,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
         </div>
       )}
 
+      {/* MODAL CORRECCIÓN DOCUMENTOS */}
       {fixingRequest && (
         <div className="absolute inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in slide-in-from-bottom-10 flex flex-col max-h-[80vh]">

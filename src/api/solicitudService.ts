@@ -10,10 +10,10 @@ export const solicitudService = {
     });
   },
 
-  getByUser: async (idusuario: number, token?: string) => {
+  getByUser: async (idUsuario: number, token?: string) => {
     return await apiRequest<any>(API_ENDPOINTS.SOLICITUDES.BY_USER, {
       method: 'POST',
-      body: { idusuario },
+      body: { idUsuario },
       token
     });
   }
