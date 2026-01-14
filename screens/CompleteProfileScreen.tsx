@@ -10,7 +10,6 @@ interface CompleteProfileScreenProps {
   token?: string;
   onBack: () => void;
   onSave: (data: Partial<UserData>) => void;
-  onSessionExpired?: () => void;
 }
 
 // --- COMPONENTES UI (Helpers) ---
@@ -175,13 +174,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             phone: userAPI.telefono || prev.phone,
           }));
         }
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error al obtener usuario:", error);
-        if (error.isAuthError) {
-          alert('Sesión expirada. Por favor inicia sesión de nuevo.');
-          if (typeof (onSessionExpired as any) === 'function') onSessionExpired();
-          return;
-        }
       } finally {
         setIsLoadingData(false);
       }
@@ -358,7 +352,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               rfc: form.rfc,
               domicilio: form.address,
               colonia: form.colony,
-              cp: form.zipCode,             
+              cp: form.localityId,             
               id_cp: form.localityId,    
               municipio: form.municipality,
               localidad: form.locality,  
@@ -374,7 +368,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               conocidoApellidoPaterno: form.emergPaternal,
               conocidoApellidoMaterno: form.emergMaternal,
               conocidoDomicilio: form.emergAddress,
-              conocidoCp: form.emergZipCode,
+              conocidoCp: form.emergLocalityId,
               conocidoIdCp: form.emergLocalityId, 
               conocidoColonia: form.emergColony,
               conocidoMunicipio: form.emergMunicipality,
@@ -392,11 +386,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
       } catch (error: any) {
           console.error("Error Update:", error);
-          if (error.isAuthError) {
-              alert('Sesión expirada. Por favor inicia sesión de nuevo.');
-              if (typeof (onSessionExpired as any) === 'function') onSessionExpired();
-              return;
-          }
           alert(error.message || 'Error al actualizar perfil');
       } finally {
           setIsSubmitting(false);
