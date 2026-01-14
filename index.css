@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CLASES DE ÁREAS SEGURAS */
+
+.safe-top {
+  /* Baja lo que mida el Notch + 12px extra de aire */
+  padding-top: calc(env(safe-area-inset-top) + 12px);
+}
+
+.safe-bottom {
+  /* Sube lo que mida la barra de botones + 12px extra */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+}
+
+/* Para contenedores que necesitan margen en vez de padding */
+.safe-m-top {
+  margin-top: env(safe-area-inset-top);
+}

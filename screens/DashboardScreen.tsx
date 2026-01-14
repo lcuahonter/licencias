@@ -5,6 +5,9 @@ interface DashboardScreenProps {
   userData: UserData;
   onLogout: () => void;
   onGoToProfile: () => void;
+  onContinueRequest: (req: LicenseRequest) => void;
+  idUsuario?: number;
+  token?: string;
 }
 
 const DOC_LABELS: Record<string, string> = {
@@ -14,7 +17,9 @@ const DOC_LABELS: Record<string, string> = {
     photo: 'Fotografía Biométrica'
 };
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile }) => {
+import { solicitudService } from '../src/api/solicitudService';
+
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile, onContinueRequest, idUsuario, token }) => {
   
   // --- ESTADOS ---
   const [showNewReqModal, setShowNewReqModal] = useState(false);
@@ -32,78 +37,84 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
   const [selectedType, setSelectedType] = useState<LicenseType>('Automovilista');
   const [selectedProcess, setSelectedProcess] = useState<ProcessType>('Primera Vez');
   
-  // --- HELPERS ---
-  const getCost = (type: LicenseType) => type === 'Motociclista' ? 608.00 : 912.00;
-  const isProfileComplete = !!userData.address && !!userData.emergencyContact;
-
-  // --- CORRECCIÓN DE LISTAS ---
-  // 1. Licencias Activas: Solo las completadas
-  const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];
-  
-  // 2. Procesos Activos: Todo lo que NO está completado Y NO está archivado/reemplazado
-  const activeProcessList = userData.requests?.filter(r => 
-      r.status !== 'completed' && 
-      r.status !== 'replaced' && 
-      r.status !== 'archived'
-  ) || [];
-
-  // --- VALIDACIONES DE TARJETA ---
-  const handleCardNameChange = (val: string) => {
-      const upper = val.toUpperCase();
-      if (/^[A-Z\s]*$/.test(upper)) {
-          setCardData(prev => ({...prev, name: upper}));
+  // --- HELPERS (ACTUALIZADO CON TRANSPORTE PÚBLICO) ---
+  const getCost = (type: LicenseType) => {
+      switch (type) {
+          case 'Motociclista': return 608.00;
+          case 'Transporte Público': return 1450.00; // Precio más alto
+          default: return 912.00; // Automovilista
       }
   };
 
+  const isProfileComplete = !!userData.address && !!userData.emergencyContact;
+
+  const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];
+  const activeProcessList = userData.requests?.filter(r => 
+      r.status !== 'completed' && r.status !== 'replaced' && r.status !== 'archived'
+  ) || [];
+
+  // Verifica si ya tiene licencia activa de ese tipo exacto
+  const hasLicenseForType = (type: LicenseType) => {
+      return activeLicenses.some(r => r.type === type);
+  };
+
+  // --- DETECCIÓN DE BIN ---
+  const detectCardType = (number: string): 'visa' | 'mastercard' | 'unknown' => {
+      const clean = number.replace(/\D/g, '');
+      if (clean.match(/^4/)) return 'visa';
+      if (clean.match(/^5[1-5]/) || clean.match(/^2[2-7]/)) return 'mastercard'; 
+      return 'unknown';
+  };
+  const cardType = detectCardType(cardData.number);
+
+  // --- VALIDACIONES TARJETA ---
+  const handleCardNameChange = (val: string) => {
+      if (/^[A-Z\s]*$/.test(val.toUpperCase())) setCardData(prev => ({...prev, name: val.toUpperCase()}));
+  };
   const handleCardExpChange = (val: string) => {
       let clean = val.replace(/\D/g, '');
       if (clean.length > 4) return;
       let formatted = clean;
       if (clean.length >= 2) formatted = clean.substring(0, 2) + '/' + clean.substring(2);
       setCardData(prev => ({...prev, exp: formatted}));
-      
       if (clean.length === 4) {
           const mm = parseInt(clean.substring(0, 2));
           const yy = parseInt(clean.substring(2, 4));
           const now = new Date();
           const curMonth = now.getMonth() + 1;
           const curYear = parseInt(now.getFullYear().toString().slice(-2));
-          let error = '';
-          if (mm < 1 || mm > 12) error = 'Mes inválido';
-          else if (yy < curYear) error = 'Vencida';
-          else if (yy === curYear && mm < curMonth) error = 'Vencida';
-          setCardErrors(prev => ({...prev, exp: error}));
-      } else {
-          setCardErrors(prev => ({...prev, exp: ''}));
-      }
+          if (mm < 1 || mm > 12) setCardErrors(p => ({...p, exp: 'Mes inválido'}));
+          else if (yy < curYear || (yy === curYear && mm < curMonth)) setCardErrors(p => ({...p, exp: 'Vencida'}));
+          else setCardErrors(p => ({...p, exp: ''}));
+      } else setCardErrors(p => ({...p, exp: ''}));
   };
 
-  // --- HANDLERS PRINCIPALES ---
+  // --- HANDLERS ---
   const handleOpenNewReq = () => {
-    if (!isProfileComplete) {
-        alert("Completa tu perfil primero.");
-        onGoToProfile();
-        return;
-    }
-    const hasAuto = activeLicenses.some(r => r.type === 'Automovilista' || r.type === 'Automovilista Particular');
-    setSelectedType('Automovilista');
-    if (hasAuto) setSelectedProcess('Renovación');
+    // Abrir modal de nueva solicitud incluso si el perfil no está completo.
+    const defaultType = 'Automovilista';
+    setSelectedType(defaultType);
+
+    // Validación inicial
+    if (hasLicenseForType(defaultType)) setSelectedProcess('Renovación');
     else setSelectedProcess('Primera Vez');
+
     setShowNewReqModal(true);
   };
 
   const handleTypeSelect = (type: LicenseType) => {
       setSelectedType(type);
-      const normalizedType = type.includes('Auto') ? 'Automovilista' : 'Motociclista';
-      const hasLicense = activeLicenses.some(r => r.type.includes(normalizedType));
-      if (hasLicense) setSelectedProcess('Renovación');
+      // Validación reactiva al cambiar tipo
+      if (hasLicenseForType(type)) setSelectedProcess('Renovación');
       else setSelectedProcess('Primera Vez');
   };
 
   const handleProceedToPay = () => {
-    const normalizedType = selectedType.includes('Auto') ? 'Automovilista' : 'Motociclista';
-    const hasPending = activeProcessList.some(r => r.type.includes(normalizedType));
-    if (hasPending) { alert(`Ya tienes un trámite de ${selectedType} en curso.`); return; }
+    // Verificamos si ya hay un trámite EXACTAMENTE de este tipo en curso
+    if (activeProcessList.some(r => r.type === selectedType)) { 
+        alert(`Ya tienes un trámite de ${selectedType} en curso.`); 
+        return; 
+    }
     setShowNewReqModal(false);
     setPaymentStep('select');
     setCardData({ number: '', name: '', exp: '', cvv: '' });
@@ -111,79 +122,88 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
     setShowPaymentModal(true);
   };
 
-  const finalizeRequest = (method: 'card' | 'ventanilla') => {
-      if (method === 'card' && (cardErrors.exp || cardData.exp.length < 5)) { alert("Corrige la fecha."); return; }
-      setTimeout(() => {
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  const finalizeRequest = async (method: 'card' | 'ventanilla') => {
+      if (method === 'card') {
+          if (detectCardType(cardData.number) === 'unknown') { alert("Tarjeta no válida."); return; }
+          if (cardErrors.exp || cardData.exp.length < 5) { alert("Fecha incorrecta."); return; }
+      }
+
+      if (!idUsuario) { alert('Usuario no identificado.'); return; }
+
+      const idtipolicencia = selectedType === 'Motociclista' ? 2 : 1; // 1=Auto, 2=Moto
+      const idmetodopago = method === 'card' ? 1 : 2; // 1=Tarjeta, 2=Ventanilla
+
+      const payload = {
+        idusuario: idUsuario,
+        idtipolicencia,
+        idmetodopago
+      };
+
+      try {
+        setIsSubmittingRequest(true);
+        const res = await solicitudService.createSolicitud(payload, token);
+
+        // Extraer datos retornados (id y folio) si vienen
+        const createdId = res?.data?.solicitud?.id || res?.data?.id || Date.now().toString();
+        const folio = res?.data?.solicitud?.folio || res?.data?.folio || `DGO-${Math.floor(Math.random() * 10000)}`;
+
         const newRequest: LicenseRequest = {
-            id: Date.now().toString(),
+            id: String(createdId),
             type: selectedType,
             process: selectedProcess,
             cost: getCost(selectedType),
             date: new Date().toLocaleDateString('es-MX'),
             status: method === 'card' ? 'paid_pending_docs' : 'pending_payment',
-            folio: `DGO-${Math.floor(Math.random() * 10000)}`,
+            folio,
             rejectedDocuments: []
         };
-        (window as any).tempAddRequest(newRequest); 
+
+        // Guardamos localmente (mock) y notificamos al padre para continuar
+        (window as any).tempAddRequest(newRequest);
         setShowPaymentModal(false);
-      }, 1500);
+        setShowNewReqModal(false);
+
+        // Notificamos (App.jsx) para que maneje la navegación a la siguiente pantalla
+        onContinueRequest(newRequest);
+
+      } catch (err: any) {
+        console.error('Error creando la solicitud:', err);
+        // Si es error de autenticación, forzar cierre de sesión
+        if (err.isAuthError) {
+          alert('Sesión expirada. Por favor inicia sesión de nuevo.');
+          onLogout();
+          return;
+        }
+        const internal = err.internalCode || err.code || null;
+        const backendDetail = err.data?.error || err.data?.message || err.message || 'Error al crear solicitud';
+        const composed = internal ? `${internal} - ${backendDetail}` : backendDetail;
+        alert(`Error al crear la solicitud: ${composed}`);
+      } finally {
+        setIsSubmittingRequest(false);
+      }
   };
 
-  // --- DEMO: APROBACIÓN (LOGICA CORREGIDA) ---
+  // --- DEMO HELPERS ---
   const handleDemoApprove = (reqId: string) => {
-    if(window.confirm("DEMO: ¿Aprobar licencia y generar digital?")) {
+    if(window.confirm("DEMO: ¿Aprobar?")) {
         const req = activeProcessList.find(r => r.id === reqId);
-        
         if (req) {
-            // SI ES RENOVACIÓN: Buscar la licencia activa del mismo tipo y "Reemplazarla"
-            // Al poner status 'replaced', los filtros de arriba la ignoran, así que desaparece.
             const oldLicenses = activeLicenses.filter(l => l.type === req.type);
-            oldLicenses.forEach(old => {
-                (window as any).tempUpdateRequestData(old.id, { status: 'replaced' });
-            });
-
-            // Activar la nueva
-            setTimeout(() => {
-                (window as any).tempUpdateRequestData(reqId, { status: 'completed' });
-            }, 100);
+            oldLicenses.forEach(old => (window as any).tempUpdateRequestData(old.id, { status: 'replaced' }));
+            setTimeout(() => (window as any).tempUpdateRequestData(reqId, { status: 'completed' }), 100);
         }
     }
   };
-
   const handleDemoRejection = (reqId: string) => {
-      if(!window.confirm("DEMO: ¿Simular rechazo?")) return;
-      const possibleDocs = ['ineFront', 'ineBack', 'addressProof', 'photo'];
-      let rejected = possibleDocs.filter(() => Math.random() > 0.5);
-      if (rejected.length === 0) rejected = ['photo'];
-      (window as any).tempUpdateRequestData(reqId, { status: 'rejected', rejectedDocuments: rejected });
+      if(!window.confirm("DEMO: ¿Rechazar?")) return;
+      (window as any).tempUpdateRequestData(reqId, { status: 'rejected', rejectedDocuments: ['photo'] });
   };
-
-  // --- PDF GENERATOR ---
-  const generatePaymentSlip = () => {
-    const printWindow = window.open('', '', 'height=800,width=600');
-    if (printWindow) {
-        const today = new Date().toLocaleDateString('es-MX');
-        const total = getCost(selectedType).toFixed(2);
-        const lineaCaptura = `0034 9823 1290 4821 0000 ${Math.floor(Math.random() * 99)}`;
-        printWindow.document.write('<html><head><title>Ficha de Pago</title>');
-        printWindow.document.write('<style>body{font-family: Arial, sans-serif; padding: 40px; color: #333;} .header{text-align:center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 30px;} .logo{font-size: 24px; font-weight: bold; color: #1a237e;} .title{font-size: 18px; text-transform: uppercase; margin-top: 10px;} .box{border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; background: #f9f9f9;} .row{display: flex; justify-content: space-between; margin-bottom: 10px;} .label{font-weight: bold; color: #555;} .total{font-size: 24px; font-weight: bold; color: #d32f2f; text-align: right;} .barcode{text-align: center; margin-top: 40px; letter-spacing: 5px; font-family: "Courier New", monospace; font-size: 14px;}</style></head><body>');
-        printWindow.document.write('<div class="header"><div class="logo">GOBIERNO DE DURANGO</div><div class="title">Secretaría de Finanzas</div></div>');
-        printWindow.document.write('<div class="box"><h3>REFERENCIA DE PAGO</h3>');
-        printWindow.document.write(`<div class="row"><span class="label">Contribuyente:</span> <span>${userData.firstName} ${userData.lastName}</span></div>`);
-        printWindow.document.write(`<div class="row"><span class="label">Trámite:</span> <span>Licencia ${selectedType} (${selectedProcess})</span></div>`);
-        printWindow.document.write(`<div class="row"><span class="label">Fecha Emisión:</span> <span>${today}</span></div></div>`);
-        printWindow.document.write('<div class="box" style="border: 2px solid #1a237e;"><h2 style="text-align:center; margin:0;">'+lineaCaptura+'</h2><hr style="border:0; border-top:1px dashed #ccc; margin: 20px 0;"><div class="total">TOTAL: $'+total+' MXN</div></div>');
-        printWindow.document.write('<div class="barcode">|| ||| || ||||| ||| || |||| ||| || |||||<br/>'+lineaCaptura+'</div>');
-        printWindow.document.write('<br/><p style="text-align:center; font-size:12px;">Pagar en: BBVA, Santander, OXXO.</p></body></html>');
-        printWindow.document.close();
-        printWindow.print();
-        finalizeRequest('ventanilla');
-    }
-  };
-
+  const generatePaymentSlip = () => { finalizeRequest('ventanilla'); };
   const handleOpenFixModal = (req: LicenseRequest) => { setFixingRequest(req); setFixedDocs({}); };
-  const triggerFileUpload = (docKey: string) => { setActiveDocKey(docKey); setTimeout(() => { if (fileInputRef.current) fileInputRef.current.click(); }, 50); };
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file && activeDocKey) { setFixedDocs(prev => ({ ...prev, [activeDocKey]: true })); e.target.value = ''; } };
+  const triggerFileUpload = (docKey: string) => { setActiveDocKey(docKey); setTimeout(() => fileInputRef.current?.click(), 50); };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0] && activeDocKey) { setFixedDocs(p => ({...p, [activeDocKey]: true})); e.target.value = ''; }};
   const handleSubmitCorrections = () => { if (!fixingRequest) return; setTimeout(() => { (window as any).tempUpdateRequestData(fixingRequest.id, { status: 'paid_pending_docs', rejectedDocuments: [] }); setFixingRequest(null); alert("Enviado a revisión."); }, 1000); };
 
   return (
@@ -235,40 +255,26 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                  <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center"><p className="text-xs text-gray-400 font-medium">No hay trámites pendientes.</p></div>
             ) : (
                 <div className="space-y-3">
-                    {activeProcessList.map((req) => {
-                        const isRejected = req.status === 'rejected';
-                        return (
-                            <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden transition-all ${isRejected ? 'border-red-500' : 'border-yellow-400'}`}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${isRejected ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{isRejected ? 'RECHAZADO' : req.status === 'pending_payment' ? 'PENDIENTE PAGO' : 'EN REVISIÓN'}</span>
-                                            <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
-                                        </div>
-                                        <h3 className="text-base font-bold text-gray-900 dark:text-white">Licencia {req.type}</h3>
-                                        <p className="text-xs text-gray-500">{req.process}</p>
-                                    </div>
-                                    <div className={`p-2 rounded-full ${isRejected ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{isRejected ? 'block' : 'hourglass_top'}</span></div>
+                    {activeProcessList.map((req) => (
+                        <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden ${req.status === 'rejected' ? 'border-red-500' : 'border-yellow-400'}`}>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{req.status === 'rejected' ? 'RECHAZADO' : req.status === 'pending_payment' ? 'PENDIENTE PAGO' : 'EN REVISIÓN'}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Licencia {req.type}</h3>
+                                    <p className="text-xs text-gray-500">{req.process}</p>
                                 </div>
-                                {isRejected && req.rejectedDocuments && (
-                                    <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
-                                        <div className="font-bold flex items-center gap-1 mb-1"><span className="material-symbols-outlined text-sm">error</span> Acción Requerida:</div>
-                                        <ul className="list-disc list-inside font-bold">{req.rejectedDocuments.map(doc => (<li key={doc}>{DOC_LABELS[doc] || doc}</li>))}</ul>
-                                    </div>
-                                )}
-                                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                                    {!isRejected ? (
-                                        <>
-                                            <button onClick={() => handleDemoRejection(req.id)} className="text-xs font-bold text-red-500 hover:bg-red-50 px-3 py-1.5 rounded-lg flex items-center gap-1"><span className="material-symbols-outlined text-sm">thumb_down</span> Rechazar</button>
-                                            <button onClick={() => handleDemoApprove(req.id)} className="text-xs font-bold text-green-600 hover:bg-green-50 px-3 py-1.5 rounded-lg flex items-center gap-1"><span className="material-symbols-outlined text-sm">check_circle</span> Aceptar</button>
-                                        </>
-                                    ) : (
-                                        <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-red-700 flex items-center justify-center gap-2 shadow-lg shadow-red-500/30"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
-                                    )}
-                                </div>
+                                <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
                             </div>
-                        );
-                    })}
+                            {req.status === 'rejected' && req.rejectedDocuments && (<div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100"><div className="font-bold flex items-center gap-1 mb-1"><span className="material-symbols-outlined text-sm">error</span> Acción Requerida:</div><ul className="list-disc list-inside font-bold">{req.rejectedDocuments.map(doc => <li key={doc}>{DOC_LABELS[doc] || doc}</li>)}</ul></div>)}
+                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
+                                {req.status === 'rejected' ? (
+                                    <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
+                                ) : (
+                                    <><button onClick={() => handleDemoRejection(req.id)} className="text-xs font-bold text-red-500 px-3 py-1.5 flex items-center gap-1"><span className="material-symbols-outlined text-sm">thumb_down</span> Rechazar</button><button onClick={() => handleDemoApprove(req.id)} className="text-xs font-bold text-green-600 px-3 py-1.5 flex items-center gap-1"><span className="material-symbols-outlined text-sm">check_circle</span> Aceptar</button></>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </section>
@@ -276,31 +282,66 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
 
       <button onClick={handleOpenNewReq} className="absolute bottom-6 right-6 w-14 h-14 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-20"><span className="material-symbols-outlined text-3xl">add</span></button>
 
+      {/* MODAL 1: SELECCIÓN (ACTUALIZADO CON 3 BOTONES) */}
       {showNewReqModal && (
         <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in slide-in-from-bottom-10 space-y-5">
                 <div className="flex justify-between items-center border-b border-gray-100 pb-3"><h2 className="text-lg font-black">Nueva Solicitud</h2><button onClick={() => setShowNewReqModal(false)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
-                <div className="space-y-2"><div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => handleTypeSelect('Automovilista')} className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${selectedType === 'Automovilista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}><span className="material-symbols-outlined">directions_car</span><span className="text-xs font-bold">Auto</span></button>
-                    <button onClick={() => handleTypeSelect('Motociclista')} className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${selectedType === 'Motociclista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}><span className="material-symbols-outlined">two_wheeler</span><span className="text-xs font-bold">Moto</span></button>
-                </div></div>
+                
+                {/* GRID DE 3 COLUMNAS PARA LOS BOTONES */}
+                <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                        {/* Auto */}
+                        <button onClick={() => handleTypeSelect('Automovilista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Automovilista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
+                            <span className="material-symbols-outlined text-2xl">directions_car</span>
+                            <span className="text-[10px] font-bold">Auto</span>
+                        </button>
+                        
+                        {/* Moto */}
+                        <button onClick={() => handleTypeSelect('Motociclista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Motociclista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
+                            <span className="material-symbols-outlined text-2xl">two_wheeler</span>
+                            <span className="text-[10px] font-bold">Moto</span>
+                        </button>
+                        
+                        {/* Transporte Público */}
+                        <button onClick={() => handleTypeSelect('Transporte Público')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Transporte Público' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
+                            <span className="material-symbols-outlined text-2xl">directions_bus</span>
+                            <span className="text-[10px] font-bold text-center leading-tight">Transporte<br/>Público</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* SELECTOR INTELIGENTE */}
                 <div className="space-y-2">
                     <label className="text-xs font-bold uppercase text-gray-400">Trámite</label>
-                    <select value={selectedProcess} onChange={(e) => setSelectedProcess(e.target.value as ProcessType)} className="w-full h-12 bg-gray-50 border border-gray-200 rounded-xl px-4 text-sm outline-none">
-                        {activeLicenses.some(r => r.type.includes(selectedType.includes('Auto') ? 'Automovilista' : 'Motociclista')) ? (
-                            <option value="Renovación">Renovación</option>
+                    <select 
+                        value={selectedProcess} 
+                        onChange={(e) => setSelectedProcess(e.target.value as ProcessType)} 
+                        className="w-full h-12 bg-gray-50 border border-gray-200 rounded-xl px-4 text-sm outline-none appearance-none"
+                    >
+                        {hasLicenseForType(selectedType) ? (
+                            <>
+                                <option value="Renovación">Renovación</option>
+                                <option value="Reposición">Reposición</option>
+                            </>
                         ) : (
                             <option value="Primera Vez">Primera Vez</option>
                         )}
-                        <option value="Reposición">Reposición (Extravío)</option>
                     </select>
+                    <p className="text-[10px] text-gray-400 text-right">
+                        {hasLicenseForType(selectedType) 
+                            ? "Ya cuentas con esta licencia (Renovación disponible)." 
+                            : "Trámite de primera vez."}
+                    </p>
                 </div>
+
                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-gray-500">Total:</span><span className="text-xl font-black text-gray-900 dark:text-white">${getCost(selectedType)}.00</span></div>
                 <button onClick={handleProceedToPay} className="w-full h-12 bg-primary text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2">Pagar Derechos <span className="material-symbols-outlined text-sm">payments</span></button>
             </div>
         </div>
       )}
 
+      {/* MODAL 2: PAGO */}
       {showPaymentModal && (
         <div className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
              <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 max-h-[85vh] flex flex-col">
@@ -313,30 +354,33 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
                 <div className="p-6 overflow-y-auto flex-1">
                     {paymentStep === 'select' && (
                         <div className="space-y-4 animate-in fade-in">
-                            <button onClick={() => setPaymentStep('card')} className="w-full bg-white dark:bg-gray-800 p-5 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary dark:hover:border-primary transition-all group text-left shadow-sm hover:shadow-md flex items-center gap-4">
-                                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl text-primary"><span className="material-symbols-outlined text-2xl">credit_card</span></div>
-                                <div className="flex-1"><h3 className="font-bold text-gray-900 dark:text-white">Tarjeta de Crédito / Débito</h3><div className="flex gap-2 mt-1 opacity-60"><span className="text-[10px] font-bold border border-gray-300 rounded px-1">VISA</span><span className="text-[10px] font-bold border border-gray-300 rounded px-1">MC</span></div></div><span className="material-symbols-outlined text-gray-300 group-hover:text-primary">chevron_right</span>
-                            </button>
-                            <button onClick={() => setPaymentStep('cash')} className="w-full bg-white dark:bg-gray-800 p-5 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition-all group text-left shadow-sm hover:shadow-md flex items-center gap-4">
-                                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl text-green-600"><span className="material-symbols-outlined text-2xl">storefront</span></div>
-                                <div className="flex-1"><h3 className="font-bold text-gray-900 dark:text-white">Pago en Ventanilla</h3><p className="text-xs text-gray-500">Bancos, OXXO y Kioscos</p></div><span className="material-symbols-outlined text-gray-300 group-hover:text-green-500">chevron_right</span>
-                            </button>
+                            <button onClick={() => setPaymentStep('card')} className="w-full bg-white dark:bg-gray-800 p-5 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary transition-all group text-left shadow-sm flex items-center gap-4"><div className="bg-blue-50 p-3 rounded-xl text-primary"><span className="material-symbols-outlined text-2xl">credit_card</span></div><div className="flex-1"><h3 className="font-bold text-gray-900 dark:text-white">Tarjeta de Crédito / Débito</h3><div className="flex gap-2 mt-1 opacity-60"><span className="text-[10px] border px-1 rounded">VISA</span><span className="text-[10px] border px-1 rounded">MC</span></div></div><span className="material-symbols-outlined text-gray-300">chevron_right</span></button>
+                            <button onClick={() => setPaymentStep('cash')} className="w-full bg-white dark:bg-gray-800 p-5 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-green-500 transition-all group text-left shadow-sm flex items-center gap-4"><div className="bg-green-50 p-3 rounded-xl text-green-600"><span className="material-symbols-outlined text-2xl">storefront</span></div><div className="flex-1"><h3 className="font-bold text-gray-900 dark:text-white">Pago en Ventanilla</h3><p className="text-xs text-gray-500">Bancos, OXXO y Kioscos</p></div><span className="material-symbols-outlined text-gray-300">chevron_right</span></button>
                         </div>
                     )}
                     {paymentStep === 'card' && (
                         <div className="space-y-5 animate-in slide-in-from-right">
-                            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
-                                <div className="flex justify-between mb-6"><span className="material-symbols-outlined">contactless</span><span className="font-bold italic">VISA</span></div>
+                            <div className={`rounded-xl p-5 text-white shadow-lg relative overflow-hidden transition-all duration-500 
+                                ${cardType === 'visa' ? 'bg-gradient-to-br from-blue-800 to-blue-950' : 
+                                  cardType === 'mastercard' ? 'bg-gradient-to-br from-red-700 to-orange-800' : 
+                                  'bg-gradient-to-br from-gray-800 to-gray-900'}`}
+                            >
+                                <div className="flex justify-between mb-6">
+                                    <span className="material-symbols-outlined">contactless</span>
+                                    <span className="font-bold italic text-xl">
+                                        {cardType === 'visa' ? 'VISA' : cardType === 'mastercard' ? 'MasterCard' : ''}
+                                    </span>
+                                </div>
                                 <p className="font-mono text-lg tracking-widest mb-3">{cardData.number || '•••• •••• •••• ••••'}</p>
                                 <div className="flex justify-between text-[10px] opacity-70 uppercase tracking-wider"><span>Titular</span><span>Expira</span></div>
                                 <div className="flex justify-between font-bold text-sm tracking-wide"><span>{cardData.name || 'NOMBRE'}</span><span>{cardData.exp || 'MM/AA'}</span></div>
                             </div>
                             <div className="space-y-3">
-                                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Número de Tarjeta</label><input maxLength={19} value={cardData.number} onChange={(e) => { let val = e.target.value.replace(/\D/g, '').substring(0,16); val = val.match(/.{1,4}/g)?.join(' ') || val; setCardData({...cardData, number: val}); }} placeholder="0000 0000 0000 0000" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary font-mono text-sm transition-all" /></div>
-                                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Titular (Sin Ñ)</label><input value={cardData.name} onChange={(e) => handleCardNameChange(e.target.value)} placeholder="COMO APARECE EN LA TARJETA" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary uppercase text-sm transition-all" /></div>
+                                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Número de Tarjeta</label><input maxLength={19} value={cardData.number} onChange={(e) => { let val = e.target.value.replace(/\D/g, '').substring(0,16); val = val.match(/.{1,4}/g)?.join(' ') || val; setCardData({...cardData, number: val}); }} placeholder="0000 0000 0000 0000" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary font-mono text-sm" /></div>
+                                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Titular (Sin Ñ)</label><input value={cardData.name} onChange={(e) => handleCardNameChange(e.target.value)} placeholder="COMO APARECE EN LA TARJETA" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary uppercase text-sm" /></div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Expiración</label><input maxLength={5} value={cardData.exp} onChange={(e) => handleCardExpChange(e.target.value)} placeholder="MM/AA" className={`w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border outline-none focus:border-primary text-center font-mono text-sm transition-all ${cardErrors.exp ? 'border-red-500' : 'border-gray-200'}`} /></div>
-                                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">CVV</label><input type="password" maxLength={3} value={cardData.cvv} onChange={(e) => setCardData({...cardData, cvv: e.target.value.replace(/\D/g,'')})} placeholder="123" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary text-center font-mono text-sm transition-all" /></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">Expiración</label><input maxLength={5} value={cardData.exp} onChange={(e) => handleCardExpChange(e.target.value)} placeholder="MM/AA" className={`w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border outline-none focus:border-primary text-center font-mono text-sm ${cardErrors.exp ? 'border-red-500' : 'border-gray-200'}`} /></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">CVV</label><input type="password" maxLength={3} value={cardData.cvv} onChange={(e) => setCardData({...cardData, cvv: e.target.value.replace(/\D/g,'')})} placeholder="123" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary text-center font-mono text-sm" /></div>
                                 </div>
                             </div>
                             <button onClick={() => finalizeRequest('card')} disabled={!cardData.number || !cardData.cvv || !!cardErrors.exp} className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">Pagar Ahora <span className="material-symbols-outlined text-sm">lock</span></button>

@@ -16,72 +16,103 @@ const PaymentScreen: React.FC<PaymentScreenProps> = ({ userData, onBack, onPayme
 
   const amount = 912.00; // Costo fijo ejemplo
 
-  // --- GENERAR PDF FICHA DE PAGO (VENTANILLA) ---
+  // --- GENERAR FICHA DE PAGO (SOLUCIÓN COMPATIBLE VERCEL) ---
   const generatePaymentSlip = () => {
-    const printWindow = window.open('', '', 'height=800,width=600');
-    if (printWindow) {
-        const today = new Date().toLocaleDateString('es-MX');
-        const folio = `DGO-${Math.floor(Math.random() * 1000000)}`;
-        const lineaCaptura = `0034 9823 1290 4821 0000 ${Math.floor(Math.random() * 99)}`;
+    // 1. Datos aleatorios para la ficha
+    const today = new Date().toLocaleDateString('es-MX');
+    const folio = `DGO-${Math.floor(Math.random() * 1000000)}`;
+    const lineaCaptura = `0034 9823 1290 4821 0000 ${Math.floor(Math.random() * 99)}`;
 
-        printWindow.document.write('<html><head><title>Ficha de Pago</title>');
-        printWindow.document.write('<style>body{font-family: Arial, sans-serif; padding: 40px; color: #333;} .header{text-align:center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 30px;} .logo{font-size: 24px; font-weight: bold; color: #1a237e;} .title{font-size: 18px; text-transform: uppercase; margin-top: 10px;} .box{border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; background: #f9f9f9;} .row{display: flex; justify-content: space-between; margin-bottom: 10px;} .label{font-weight: bold; color: #555;} .total{font-size: 24px; font-weight: bold; color: #d32f2f; text-align: right;} .barcode{text-align: center; margin-top: 40px; letter-spacing: 5px; font-family: "Courier New", monospace; font-size: 14px;} .instructions{font-size: 12px; color: #666; margin-top: 20px; line-height: 1.5;}</style>');
-        printWindow.document.write('</head><body>');
-        
-        // Header
-        printWindow.document.write('<div class="header">');
-        printWindow.document.write('<div class="logo">GOBIERNO DEL ESTADO DE DURANGO</div>');
-        printWindow.document.write('<div class="title">Secretaría de Finanzas y Administración</div>');
-        printWindow.document.write('</div>');
+    // 2. Construir el contenido HTML de la ficha
+    const htmlContent = `
+        <html>
+            <head>
+                <title>Ficha de Pago - Gobierno de Durango</title>
+                <style>
+                    body{font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 800px; margin: 0 auto; background-color: #fff;} 
+                    .header{text-align:center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 30px;} 
+                    .logo{font-size: 20px; font-weight: bold; color: #1a237e;} 
+                    .title{font-size: 16px; text-transform: uppercase; margin-top: 10px;} 
+                    .box{border: 1px solid #ccc; padding: 15px; border-radius: 8px; margin-bottom: 20px; background: #f9f9f9;} 
+                    .row{display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;} 
+                    .label{font-weight: bold; color: #555;} 
+                    .total{font-size: 22px; font-weight: bold; color: #d32f2f; text-align: right; margin-top: 10px;} 
+                    .barcode{text-align: center; margin-top: 30px; letter-spacing: 3px; font-family: monospace; font-size: 12px; word-break: break-all;} 
+                    .instructions{font-size: 11px; color: #666; margin-top: 20px; line-height: 1.4;}
+                    @media print { body { padding: 0; } button { display: none; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo">GOBIERNO DEL ESTADO DE DURANGO</div>
+                    <div class="title">Secretaría de Finanzas y Administración</div>
+                </div>
 
-        // Detalles Contribuyente
-        printWindow.document.write('<div class="box">');
-        printWindow.document.write(`<h3>REFERENCIA DE PAGO</h3>`);
-        printWindow.document.write(`<div class="row"><span class="label">Contribuyente:</span> <span>${userData.firstName} ${userData.lastName}</span></div>`);
-        printWindow.document.write(`<div class="row"><span class="label">RFC/CURP:</span> <span>${userData.idNumber}</span></div>`);
-        printWindow.document.write(`<div class="row"><span class="label">Concepto:</span> <span>EXPEDICIÓN DE LICENCIA DE CONDUCIR</span></div>`);
-        printWindow.document.write(`<div class="row"><span class="label">Fecha Emisión:</span> <span>${today}</span></div>`);
-        printWindow.document.write(`<div class="row"><span class="label">Vigencia:</span> <span>5 días naturales</span></div>`);
-        printWindow.document.write('</div>');
+                <div class="box">
+                    <h3>REFERENCIA DE PAGO</h3>
+                    <div class="row"><span class="label">Contribuyente:</span> <span>${userData.firstName} ${userData.lastName}</span></div>
+                    <div class="row"><span class="label">RFC/CURP:</span> <span>${userData.idNumber}</span></div>
+                    <div class="row"><span class="label">Concepto:</span> <span>LICENCIA DE CONDUCIR</span></div>
+                    <div class="row"><span class="label">Fecha Emisión:</span> <span>${today}</span></div>
+                    <div class="row"><span class="label">Vigencia:</span> <span>5 días naturales</span></div>
+                </div>
 
-        // Línea de Captura y Total
-        printWindow.document.write('<div class="box" style="border: 2px solid #1a237e;">');
-        printWindow.document.write('<p style="text-align:center; font-size: 12px; margin-bottom: 5px;">LÍNEA DE CAPTURA</p>');
-        printWindow.document.write(`<h2 style="text-align:center; letter-spacing: 2px; margin: 0;">${lineaCaptura}</h2>`);
-        printWindow.document.write('<hr style="border:0; border-top:1px dashed #ccc; margin: 20px 0;">');
-        printWindow.document.write(`<div class="total">TOTAL A PAGAR: $${amount.toFixed(2)} MXN</div>`);
-        printWindow.document.write('</div>');
+                <div class="box" style="border: 2px solid #1a237e;">
+                    <p style="text-align:center; font-size: 12px; margin-bottom: 5px;">LÍNEA DE CAPTURA</p>
+                    <h2 style="text-align:center; letter-spacing: 1px; margin: 0; font-size: 18px;">${lineaCaptura}</h2>
+                    <hr style="border:0; border-top:1px dashed #ccc; margin: 15px 0;">
+                    <div class="total">TOTAL: $${amount.toFixed(2)} MXN</div>
+                </div>
 
-        // Código de Barras Simulado
-        printWindow.document.write('<div class="barcode">');
-        printWindow.document.write('|| ||| || ||||| ||| || |||| ||| || |||||<br/>');
-        printWindow.document.write(lineaCaptura);
-        printWindow.document.write('</div>');
+                <div class="barcode">
+                    || ||| || ||||| ||| || |||| ||| || |||||<br/>
+                    ${lineaCaptura}
+                </div>
 
-        // Instrucciones
-        printWindow.document.write('<div class="instructions">');
-        printWindow.document.write('<strong>Instrucciones de Pago:</strong><br/>');
-        printWindow.document.write('1. Acuda a cualquier sucursal bancaria (BBVA, Santander, Banorte) o tiendas de conveniencia (OXXO, Kioscos Multipago).<br/>');
-        printWindow.document.write('2. Presente esta ficha al cajero para realizar el escaneo de la línea de captura.<br/>');
-        printWindow.document.write('3. Conserve su comprobante de pago para continuar con el trámite.<br/>');
-        printWindow.document.write('4. El pago se reflejará en el sistema en un lapso de 24 a 48 horas hábiles.');
-        printWindow.document.write('</div>');
+                <div class="instructions">
+                    <strong>Instrucciones:</strong><br/>
+                    1. Acuda a cualquier sucursal bancaria o tienda de conveniencia.<br/>
+                    2. Presente esta ficha impres o digital.<br/>
+                    3. El pago se reflejará en 24 a 48 horas hábiles.
+                </div>
+                
+                <script>
+                    // Intentar imprimir automáticamente al abrir
+                    setTimeout(function() { window.print(); }, 500);
+                </script>
+            </body>
+        </html>
+    `;
 
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.print();
-        
-        // Simular éxito diferido para ventanilla
-        setTimeout(() => {
-            onPaymentSuccess({ 
-                method: 'ventanilla', 
-                amount, 
-                date: new Date().toISOString(), 
-                reference: lineaCaptura,
-                status: 'pending' // Estado pendiente
-            });
-        }, 1000);
-    }
+    // 3. Crear un archivo virtual (Blob)
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    // 4. Crear enlace invisible
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Ficha_Pago_${folio}.html`; 
+    document.body.appendChild(link);
+    
+    // 5. Forzar clic para descargar
+    link.click();
+
+    // 6. Limpieza con RETRASO (Crucial para que funcione la descarga)
+    setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }, 2000); // Esperamos 2 segundos
+    
+    // 7. Simular éxito diferido para continuar el flujo en la app
+    setTimeout(() => {
+        onPaymentSuccess({ 
+            method: 'ventanilla', 
+            amount, 
+            date: new Date().toISOString(), 
+            reference: lineaCaptura,
+            status: 'pending' // Estado pendiente
+        });
+    }, 1500);
   };
 
   const handleCardPayment = () => {

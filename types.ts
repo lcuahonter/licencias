@@ -13,7 +13,7 @@ export enum AppStep {
   ADMIN_DASHBOARD = 'admin_dashboard'
 }
 
-export type LicenseType = 'Automovilista' | 'Motociclista' | 'Automovilista Particular';
+export type LicenseType = 'Automovilista' | 'Motociclista' | 'Transporte Público';;
 export type ProcessType = 'Primera Vez' | 'Refrendo' | 'Reposición';
 
 // Estatus posibles de la solicitud
@@ -60,6 +60,9 @@ export interface UserData {
   emergencyContact?: string;
   emergencyPhone?: string;
   medicalConditions?: string;
+
+  // Token de sesión (JWT) para llamadas autenticadas
+  token?: string;
 
   // Lista de Solicitudes
   requests: LicenseRequest[];

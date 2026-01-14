@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
+import MD5 from 'crypto-js/md5'; 
+import { jwtDecode } from "jwt-decode"; 
 import { UserData } from '../types';
+import { authService } from '../src/api/authService'; // <--- Importamos el servicio
+
+// Definimos la estructura del token JWT
+interface DecodedToken {
+  username: string;
+  rol: string;
+  aData: number;       // ID de Usuario
+  perfil: string;      // "Incompleto" o "Completo"
+  iat: number;
+  exp: number;
+}
 
 interface WelcomeScreenProps {
-  onStart: (data?: Partial<UserData>) => void;
+  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen' | 'OperatorDashboard') => void;
 }
+
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   const [email, setEmail] = useState('');
@@ -12,45 +26,72 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Credenciales Demo
-  const DEMO_PASS = 'demo';
-  const ADMIN_PASS = 'admin'; // Contraseña exclusiva para admin
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      // 1. LÓGICA DE ADMINISTRADOR
-      if (email === 'admin@gmail.com' && password === ADMIN_PASS) {
-          onStart({ email: 'admin@gmail.com' }); // App.tsx redirigirá
-          return;
+    try {
+      // 1. Encriptar password a MD5
+      const md5Password = MD5(password).toString();
+
+      console.log("Enviando credenciales...");
+
+      // 2. Usar el servicio de autenticación
+      // El apiClient se encarga de lanzar excepciones si hay error (codes != 200)
+      const data = await authService.login({
+        username: email,
+        password: md5Password 
+      });
+
+      console.log("Respuesta Backend:", data);
+
+      // 3. Procesar Token
+      const tokenString = data.token || data.data?.token; 
+
+      if (!tokenString) {
+          throw new Error("Login exitoso pero no se recibió token de sesión.");
       }
 
-      // 2. LÓGICA DE USUARIOS NORMALES / OPERADOR
-      const VALID_USERS = ['existente@gmail.com', 'operador@gmail.com'];
-      
-      if (VALID_USERS.includes(email.toLowerCase()) && password === DEMO_PASS) {
-        onStart({ 
+      // 4. Decodificar Token para obtener ID y Perfil
+      try {
+          const decoded = jwtDecode<DecodedToken>(tokenString);
+          console.log("Token decodificado:", decoded);
+
+          // Priorizar rol cuando venga en el token
+          let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard';
+          if (decoded.rol === 'Revisor') {
+              destino = 'OperatorDashboard';
+          } else if (decoded.rol === 'Usuario') {
+              // En este momento los usuarios van a cargas de documentos (puede cambiar después)
+              destino = 'DocumentUploadScreen';
+          } else {
+              destino = decoded.perfil === "Incompleto" ? 'DocumentUploadScreen' : 'Dashboard';
+          }
+
+          console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData}, rol: ${decoded.rol})`);
+
+          // 5. Notificar al padre (App.tsx)
+          onStart({ 
             email: email,
-            firstName: email.includes('existente') ? 'Juan' : '',
-            lastName: email.includes('existente') ? 'Pérez' : ''
-        }); 
-      } else {
-        setError('Usuario no encontrado o contraseña incorrecta.');
-        setIsLoading(false);
+            idUsuario: decoded.aData, 
+            token: tokenString
+          }, destino);
+
+      } catch (decodeError) {
+          console.error("Error al leer el token", decodeError);
+          throw new Error("Error al procesar la sesión del usuario.");
       }
-    }, 1000);
+
+    } catch (err: any) {
+      console.error("Error Login:", err);
+      // El mensaje de error ya viene procesado por el apiClient
+      setError(err.message || 'Error al conectar con el servidor.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // ... (El resto del handleSocialLogin y el return UI se mantienen IGUAL que tu versión anterior)
-  // ... Solo asegúrate de copiar el return completo que ya tenías.
-
-  // --- COPIA AQUÍ TU RETURN DEL WELCOME SCREEN QUE YA TIENES (CON LOS LOGOS SOCIALES) ---
-  // (No lo repito para no hacer spam, solo cambia la función handleLogin de arriba)
-  
-  // AQUI ABAJO TE DEJO EL RETURN COMPLETO PARA QUE SOLO COPIES Y PEGUES EL ARCHIVO SI PREFIERES:
   return (
     <div className="flex flex-col h-full bg-white dark:bg-surface-dark relative">
       <div className="h-[35%] bg-primary relative overflow-hidden rounded-b-[3rem] shadow-xl">
@@ -100,32 +141,16 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
             </div>
           </div>
           {error && (
-            <div className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl flex items-center gap-2">
+            <div className="text-xs text-red-500 font-bold bg-red-50 p-3 rounded-xl flex items-center gap-2 animate-in slide-in-from-top-1">
                <span className="material-symbols-outlined text-sm">error</span>
                {error}
             </div>
           )}
-          <button type="submit" disabled={isLoading} className="w-full h-14 bg-primary text-white rounded-2xl font-black text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+          <button type="submit" disabled={isLoading} className={`w-full h-14 bg-primary text-white rounded-2xl font-black text-lg shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 ${isLoading ? 'opacity-70 cursor-wait' : ''}`}>
             {isLoading ? 'Entrando...' : 'Iniciar Sesión'}
             {!isLoading && <span className="material-symbols-outlined">login</span>}
           </button>
         </form>
-
-        <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200 dark:border-gray-700"></div></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white dark:bg-surface-dark px-2 text-gray-400 font-bold">O continúa con</span></div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-            <button type="button" onClick={() => onStart({ email: 'existente@gmail.com', firstName: 'Juan', lastName: 'Pérez' })} className="h-12 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-surface-dark">
-              <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
-              <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Google</span>
-            </button>
-            <button type="button" onClick={() => onStart({ email: 'operador@gmail.com' })} className="h-12 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors bg-white dark:bg-surface-dark">
-              <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" className="w-5 h-5" alt="Facebook" />
-              <span className="text-sm font-bold text-gray-700 dark:text-gray-200">Facebook</span>
-            </button>
-        </div>
 
         <div className="mt-4 text-center pb-8">
            <p className="text-sm text-gray-500 mb-4">¿Es tu primera vez?</p>
