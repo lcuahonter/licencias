@@ -85,8 +85,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
-  const [localitiesList, setLocalitiesList] = useState<{id: number, localidad: string, municipio: string}[]>([]);
-  const [emergLocalitiesList, setEmergLocalitiesList] = useState<{id: number, localidad: string, municipio: string}[]>([]);
+  const [coloniesList, setColoniesList] = useState<{id: number, localidad: string, municipio: string}[]>([]);
+  const [emergColoniesList, setEmergColoniesList] = useState<{id: number, localidad: string, municipio: string}[]>([]);
 
   const [form, setForm] = useState({
     // Datos Personales
@@ -107,10 +107,10 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     // Domicilio
     address: userData.address || '',
     zipCode: userData.zipCode || '',
-    colony: userData.colony || '',
+    colony: '',
+    colonyId: 0,
     municipality: userData.municipality || '',
-    locality: '',     
-    localityId: 0,    
+    locality: userData.colony || '',    
     state: 'DURANGO',
     phoneLada: '+52',
     phone: userData.phone || '',
@@ -122,9 +122,9 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     emergAddress: '',
     emergZipCode: '',
     emergColony: '',
+    emergColonyId: 0,
     emergMunicipality: '',
     emergLocality: '',   
-    emergLocalityId: 0,  
     emergPhoneLada: '+52',
     emergPhone: userData.emergencyPhone || ''
   });
@@ -201,19 +201,19 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       }
   };
 
-  const handleLocalitySelect = (id: string, isEmergency: boolean) => {
+  const handleColonySelect = (id: string, isEmergency: boolean) => {
       const selectedId = Number(id);
       if (isEmergency) {
-          const item = emergLocalitiesList.find(i => i.id === selectedId);
+          const item = emergColoniesList.find(i => i.id === selectedId);
           if (item) {
-              setForm(prev => ({ ...prev, emergLocality: item.localidad, emergLocalityId: item.id }));
-              setErrors(prev => { const n = {...prev}; delete n.emergLocality; return n; });
+              setForm(prev => ({ ...prev, emergColony: item.localidad, emergColonyId: item.id }));
+              setErrors(prev => { const n = {...prev}; delete n.emergColony; return n; });
           }
       } else {
-          const item = localitiesList.find(i => i.id === selectedId);
+          const item = coloniesList.find(i => i.id === selectedId);
           if (item) {
-              setForm(prev => ({ ...prev, locality: item.localidad, localityId: item.id }));
-              setErrors(prev => { const n = {...prev}; delete n.locality; return n; });
+              setForm(prev => ({ ...prev, colony: item.localidad, colonyId: item.id }));
+              setErrors(prev => { const n = {...prev}; delete n.colony; return n; });
           }
       }
   };
@@ -226,12 +226,12 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           if (!data || data.code === "204" || (Object.keys(data).length === 0)) {
               if (isEmergency) {
                   setErrors(prev => ({ ...prev, emergZipCode: "CP no encontrado" }));
-                  setEmergLocalitiesList([]);
-                  setForm(prev => ({ ...prev, emergMunicipality: '', emergLocality: '', emergLocalityId: 0 }));
+                  setEmergColoniesList([]);
+                  setForm(prev => ({ ...prev, emergMunicipality: '', emergColony: '', emergColonyId: 0 }));
               } else {
                   setErrors(prev => ({ ...prev, zipCode: "CP no encontrado" }));
-                  setLocalitiesList([]);
-                  setForm(prev => ({ ...prev, municipality: '', locality: '', localityId: 0 }));
+                  setColoniesList([]);
+                  setForm(prev => ({ ...prev, municipality: '', colony: '', colonyId: 0 }));
               }
               return;
           }
@@ -240,12 +240,12 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               const list = data.data.catCPs;
               const firstRecord = list[0]; 
               if (isEmergency) {
-                  setEmergLocalitiesList(list);
-                  setForm(prev => ({ ...prev, emergMunicipality: firstRecord.municipio.toUpperCase(), emergLocality: '', emergLocalityId: 0, emergState: 'DURANGO' }));
+                  setEmergColoniesList(list);
+                  setForm(prev => ({ ...prev, emergMunicipality: firstRecord.municipio.toUpperCase(), emergColony: '', emergColonyId: 0, emergState: 'DURANGO' }));
                   setErrors(prev => { const n = {...prev}; delete n.emergZipCode; return n; });
               } else {
-                  setLocalitiesList(list);
-                  setForm(prev => ({ ...prev, municipality: firstRecord.municipio.toUpperCase(), locality: '', localityId: 0, state: 'DURANGO' }));
+                  setColoniesList(list);
+                  setForm(prev => ({ ...prev, municipality: firstRecord.municipio.toUpperCase(), colony: '', colonyId: 0, state: 'DURANGO' }));
                   setErrors(prev => { const n = {...prev}; delete n.zipCode; return n; });
               }
           }
@@ -256,12 +256,12 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
   useEffect(() => {
       if (form.zipCode.length === 5) fetchZipData(form.zipCode, false);
-      else setLocalitiesList([]);
+      else setColoniesList([]);
   }, [form.zipCode]);
 
   useEffect(() => {
       if (form.emergZipCode.length === 5) fetchZipData(form.emergZipCode, true);
-      else setEmergLocalitiesList([]);
+      else setEmergColoniesList([]);
   }, [form.emergZipCode]);
 
   const validateRFC = (rfc: string) => {
@@ -471,30 +471,28 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-right">
                 <InputField innerRef={inputRefs.address} label="Calle y Número" value={form.address} onChange={(val: string) => handleSafeInput('address', val, 'address')} placeholder="AV. 20 DE NOVIEMBRE #123" error={errors.address} />
                 <InputField innerRef={inputRefs.zipCode} label="Código Postal" value={form.zipCode} onChange={(val: string) => handleSafeInput('zipCode', val, 'numeric')} placeholder="34000" numeric width="half" max={5} error={errors.zipCode} />
-                <InputField innerRef={inputRefs.colony} label="Colonia" value={form.colony} onChange={(val: string) => handleSafeInput('colony', val, 'address')} placeholder="ESCRIBE MANUALMENTE" width="half" error={errors.colony} />
-                <InputField label="Municipio" value={form.municipality} readOnly={true} width="half" />
                 
                 <div className="col-span-1 space-y-1">
-                    <label className={`text-[10px] font-bold uppercase ml-1 ${errors.locality ? 'text-red-500' : 'text-gray-500'}`}>Localidad</label>
-                    {localitiesList.length > 0 ? (
+                    <label className={`text-[10px] font-bold uppercase ml-1 ${errors.colony ? 'text-red-500' : 'text-gray-500'}`}>Colonia</label>
+                    {coloniesList.length > 0 ? (
                         <select 
-                            // @ts-ignore
-                            ref={inputRefs.locality}
-                            value={form.localityId || ""} 
-                            onChange={(e) => handleLocalitySelect(e.target.value, false)} 
-                            className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold uppercase ${errors.locality ? 'border-red-500' : 'border-gray-100 dark:border-gray-700'}`}
+                            value={form.colonyId || ""} 
+                            onChange={(e) => handleColonySelect(e.target.value, false)} 
+                            className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold uppercase ${errors.colony ? 'border-red-500' : 'border-gray-100 dark:border-gray-700'}`}
                         >
                             <option value="">Seleccione...</option>
-                            {localitiesList.map(item => (
+                            {coloniesList.map(item => (
                                 <option key={item.id} value={item.id}>{item.localidad}</option>
                             ))}
                         </select>
                     ) : (
-                        <input readOnly value={form.locality} placeholder="Autocompletado..." className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
+                        <input readOnly value={form.colony} placeholder="Selecciona CP primero..." className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
                     )}
-                    {errors.locality && <p className="text-[9px] text-red-500 font-bold ml-2">{errors.locality}</p>}
+                    {errors.colony && <p className="text-[9px] text-red-500 font-bold ml-2">{errors.colony}</p>}
                 </div>
 
+                <InputField label="Municipio" value={form.municipality} readOnly={true} width="half" />
+                <InputField innerRef={inputRefs.locality} label="Localidad" value={form.locality} onChange={(val: string) => handleSafeInput('locality', val, 'text')} placeholder="ESCRIBE MANUALMENTE" width="half" error={errors.locality} />
                 <InputField label="Entidad" value={form.state} readOnly={true} width="half" />
                 <PhoneInput innerRef={inputRefs.phone} ladaValue={form.phoneLada} phoneValue={form.phone} onLadaChange={(v: string) => setForm({...form, phoneLada: v})} onPhoneChange={(v: string) => setForm({...form, phone: v})} error={errors.phone} />
             </div>
@@ -509,30 +507,28 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 <div className="col-span-2 border-t border-gray-100 my-2"></div>
                 <InputField innerRef={inputRefs.emergAddress} label="Calle y Número (Emergencia)" value={form.emergAddress} onChange={(val: string) => handleSafeInput('emergAddress', val, 'address')} error={errors.emergAddress} />
                 <InputField innerRef={inputRefs.emergZipCode} label="C.P." value={form.emergZipCode} onChange={(val: string) => handleSafeInput('emergZipCode', val, 'numeric')} placeholder="34000" numeric width="half" max={5} error={errors.emergZipCode} />
-                <InputField label="Colonia" value={form.emergColony} onChange={(val: string) => handleSafeInput('emergColony', val, 'address')} width="half" placeholder="ESCRIBE MANUALMENTE" />
-                <InputField label="Municipio" value={form.emergMunicipality} readOnly={true} width="half" />
                 
                 <div className="col-span-1 space-y-1">
-                    <label className={`text-[10px] font-bold uppercase ml-1 ${errors.emergLocality ? 'text-red-500' : 'text-gray-500'}`}>Localidad</label>
-                    {emergLocalitiesList.length > 0 ? (
+                    <label className={`text-[10px] font-bold uppercase ml-1 ${errors.emergColony ? 'text-red-500' : 'text-gray-500'}`}>Colonia</label>
+                    {emergColoniesList.length > 0 ? (
                         <select 
-                            // @ts-ignore
-                            ref={inputRefs.emergLocality}
-                            value={form.emergLocalityId || ""} 
-                            onChange={(e) => handleLocalitySelect(e.target.value, true)} 
-                            className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold uppercase ${errors.emergLocality ? 'border-red-500' : 'border-gray-100 dark:border-gray-700'}`}
+                            value={form.emergColonyId || ""} 
+                            onChange={(e) => handleColonySelect(e.target.value, true)} 
+                            className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold uppercase ${errors.emergColony ? 'border-red-500' : 'border-gray-100 dark:border-gray-700'}`}
                         >
                             <option value="">Seleccione...</option>
-                            {emergLocalitiesList.map(item => (
+                            {emergColoniesList.map(item => (
                                 <option key={item.id} value={item.id}>{item.localidad}</option>
                             ))}
                         </select>
                     ) : (
-                        <input readOnly value={form.emergLocality} placeholder="Autocompletado..." className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
+                        <input readOnly value={form.emergColony} placeholder="Selecciona CP primero..." className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
                     )}
-                    {errors.emergLocality && <p className="text-[9px] text-red-500 font-bold ml-2">{errors.emergLocality}</p>}
+                    {errors.emergColony && <p className="text-[9px] text-red-500 font-bold ml-2">{errors.emergColony}</p>}
                 </div>
-                
+
+                <InputField label="Municipio" value={form.emergMunicipality} readOnly={true} width="half" />
+                <InputField label="Localidad" value={form.emergLocality} onChange={(val: string) => handleSafeInput('emergLocality', val, 'text')} width="half" placeholder="ESCRIBE MANUALMENTE" />
                 <PhoneInput innerRef={inputRefs.emergPhone} ladaValue={form.emergPhoneLada} phoneValue={form.emergPhone} onLadaChange={(v: string) => setForm({...form, emergPhoneLada: v})} onPhoneChange={(v: string) => setForm({...form, emergPhone: v})} error={errors.emergPhone} />
             </div>
         )}
