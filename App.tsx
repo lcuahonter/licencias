@@ -44,6 +44,9 @@ const App: React.FC = () => {
     bloodGroup: 'O+', organDonor: true, requests: [] 
   });
 
+  // Token de sesión que se usará para llamadas autenticadas
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
   // --- LOGICA DE NAVEGACION ---
   const nextStep = useCallback(() => {
     const steps = Object.values(AppStep);
@@ -83,13 +86,22 @@ const App: React.FC = () => {
                 // 2. Guardar datos básicos (email, etc)
                 updateUserData(loginData);
 
+                // 2.b Guardar token si viene
+                if ((loginData as any).token) {
+                    setAuthToken((loginData as any).token as string);
+                }
+
                 // 3. Decidir navegación basada en el token (Prioridad Alta)
                 if (nextScreen === 'DocumentUploadScreen') {
-                    // Si el token dice "Incompleto", mandamos a cargar documentos
+                    // Si el token indica perfil incompleto o usuario, mandamos a cargar documentos
                     setCurrentStep(AppStep.DOCUMENTS); 
                     return;
                 } else if (nextScreen === 'Dashboard') {
                     setCurrentStep(AppStep.DASHBOARD);
+                    return;
+                } else if (nextScreen === 'OperatorDashboard') {
+                    // Revisor -> panel del operador
+                    setCurrentStep(AppStep.OPERATOR_DASHBOARD);
                     return;
                 }
 
@@ -116,18 +128,21 @@ const App: React.FC = () => {
         />;
             
       case AppStep.REGISTRATION: return <RegistrationScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.DOCUMENTS); }} />;
-      case AppStep.DOCUMENTS: return <DocumentUploadScreen onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.BIOMETRICS); }} />;
+      case AppStep.DOCUMENTS: return <DocumentUploadScreen idUsuario={userId} token={authToken || undefined} idSolicitud={0} onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.BIOMETRICS); }} />;
       case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} />;
       case AppStep.REVIEW: return <ReviewScreen userData={userData} onBack={() => setCurrentStep(AppStep.BIOMETRICS)} onSend={() => setCurrentStep(AppStep.DASHBOARD)} onEdit={updateUserData} />;
       
       case AppStep.DASHBOARD: 
         return <DashboardScreen 
             userData={userData} 
+            idUsuario={userId}
+            token={authToken || undefined}
             onGoToProfile={() => setCurrentStep(AppStep.COMPLETE_PROFILE)} 
             onContinueRequest={(req) => { updateUserData({ licenseType: req.type === 'Motociclista' ? 'Motociclista' : 'Automovilista Particular' }); setCurrentStep(AppStep.APPOINTMENT); }} 
             onLogout={() => { 
                 setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); 
                 setUserId(0); // Limpiamos ID al salir
+                setAuthToken(null); // Limpiamos token
                 setCurrentStep(AppStep.WELCOME); 
             }} 
         />;
@@ -136,12 +151,14 @@ const App: React.FC = () => {
         return <CompleteProfileScreen 
             userData={userData} 
             idUsuario={userId} // <--- 2. PASAMOS EL ID AL COMPONENTE
+            token={authToken || undefined}
+            onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }}
             onBack={() => setCurrentStep(AppStep.DASHBOARD)} 
             onSave={(data) => { updateUserData(data); setCurrentStep(AppStep.DASHBOARD); }} 
         />;
       
-      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen onLogout={() => setCurrentStep(AppStep.WELCOME)} />;
-      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen onLogout={() => setCurrentStep(AppStep.WELCOME)} />;
+      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
+      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
       case AppStep.PAYMENT: return <PaymentScreen userData={userData} onBack={() => setCurrentStep(AppStep.APPOINTMENT)} onPaymentSuccess={(paymentData) => { updateUserData({ payment: paymentData }); setCurrentStep(AppStep.DASHBOARD); }} />;
       case AppStep.SUCCESS: return <SuccessScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} />;

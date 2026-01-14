@@ -8,18 +8,20 @@ export const userService = {
     });
   },
 
-  getUsuarioById: async (id: number) => {
-    // Nota: Como este endpoint en tu backend es POST y público
+  getUsuarioById: async (id: number, token?: string) => {
+    // Nota: Este endpoint ahora puede requerir autenticación en el backend
     return await apiRequest<any>('/api/usuarios/getUsuarioById', {
       method: 'POST',
-      body: { id } // Ajustamos aquí el nombre del campo para que el screen no se preocupe
+      body: { id }, // Ajustamos aquí el nombre del campo para que el screen no se preocupe
+      token
     });
   },
 
-  updateUsuario: async (payload: any) => {
+  updateUsuario: async (payload: any, token?: string) => {
     return await apiRequest<any>('/api/usuarios/updateUsuario', {
       method: 'POST',
-      body: payload
+      body: payload,
+      token
     });
   }
 };

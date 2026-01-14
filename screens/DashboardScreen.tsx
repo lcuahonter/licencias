@@ -5,6 +5,9 @@ interface DashboardScreenProps {
   userData: UserData;
   onLogout: () => void;
   onGoToProfile: () => void;
+  onContinueRequest: (req: LicenseRequest) => void;
+  idUsuario?: number;
+  token?: string;
 }
 
 const DOC_LABELS: Record<string, string> = {
@@ -14,7 +17,9 @@ const DOC_LABELS: Record<string, string> = {
     photo: 'Fotografía Biométrica'
 };
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile }) => {
+import { solicitudService } from '../src/api/solicitudService';
+
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile, onContinueRequest, idUsuario, token }) => {
   
   // --- ESTADOS ---
   const [showNewReqModal, setShowNewReqModal] = useState(false);
@@ -86,12 +91,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
 
   // --- HANDLERS ---
   const handleOpenNewReq = () => {
-    if (!isProfileComplete) { alert("Completa tu perfil primero."); onGoToProfile(); return; }
-    
-    // Default
+    // Abrir modal de nueva solicitud incluso si el perfil no está completo.
     const defaultType = 'Automovilista';
     setSelectedType(defaultType);
-    
+
     // Validación inicial
     if (hasLicenseForType(defaultType)) setSelectedProcess('Renovación');
     else setSelectedProcess('Primera Vez');
@@ -119,25 +122,67 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
     setShowPaymentModal(true);
   };
 
-  const finalizeRequest = (method: 'card' | 'ventanilla') => {
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  const finalizeRequest = async (method: 'card' | 'ventanilla') => {
       if (method === 'card') {
           if (detectCardType(cardData.number) === 'unknown') { alert("Tarjeta no válida."); return; }
           if (cardErrors.exp || cardData.exp.length < 5) { alert("Fecha incorrecta."); return; }
       }
-      setTimeout(() => {
+
+      if (!idUsuario) { alert('Usuario no identificado.'); return; }
+
+      const idtipolicencia = selectedType === 'Motociclista' ? 2 : 1; // 1=Auto, 2=Moto
+      const idmetodopago = method === 'card' ? 1 : 2; // 1=Tarjeta, 2=Ventanilla
+
+      const payload = {
+        idusuario: idUsuario,
+        idtipolicencia,
+        idmetodopago
+      };
+
+      try {
+        setIsSubmittingRequest(true);
+        const res = await solicitudService.createSolicitud(payload, token);
+
+        // Extraer datos retornados (id y folio) si vienen
+        const createdId = res?.data?.solicitud?.id || res?.data?.id || Date.now().toString();
+        const folio = res?.data?.solicitud?.folio || res?.data?.folio || `DGO-${Math.floor(Math.random() * 10000)}`;
+
         const newRequest: LicenseRequest = {
-            id: Date.now().toString(),
+            id: String(createdId),
             type: selectedType,
             process: selectedProcess,
             cost: getCost(selectedType),
             date: new Date().toLocaleDateString('es-MX'),
             status: method === 'card' ? 'paid_pending_docs' : 'pending_payment',
-            folio: `DGO-${Math.floor(Math.random() * 10000)}`,
+            folio,
             rejectedDocuments: []
         };
-        (window as any).tempAddRequest(newRequest); 
+
+        // Guardamos localmente (mock) y notificamos al padre para continuar
+        (window as any).tempAddRequest(newRequest);
         setShowPaymentModal(false);
-      }, 1500);
+        setShowNewReqModal(false);
+
+        // Notificamos (App.jsx) para que maneje la navegación a la siguiente pantalla
+        onContinueRequest(newRequest);
+
+      } catch (err: any) {
+        console.error('Error creando la solicitud:', err);
+        // Si es error de autenticación, forzar cierre de sesión
+        if (err.isAuthError) {
+          alert('Sesión expirada. Por favor inicia sesión de nuevo.');
+          onLogout();
+          return;
+        }
+        const internal = err.internalCode || err.code || null;
+        const backendDetail = err.data?.error || err.data?.message || err.message || 'Error al crear solicitud';
+        const composed = internal ? `${internal} - ${backendDetail}` : backendDetail;
+        alert(`Error al crear la solicitud: ${composed}`);
+      } finally {
+        setIsSubmittingRequest(false);
+      }
   };
 
   // --- DEMO HELPERS ---

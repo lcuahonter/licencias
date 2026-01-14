@@ -61,6 +61,9 @@ export interface UserData {
   emergencyPhone?: string;
   medicalConditions?: string;
 
+  // Token de sesión (JWT) para llamadas autenticadas
+  token?: string;
+
   // Lista de Solicitudes
   requests: LicenseRequest[];
 

@@ -9,5 +9,11 @@ export const API_ENDPOINTS = {
   },
   CATALOGOS: {
     LOCALIDAD_POR_CP: '/api/catalogo/localidadByCP',
+  },
+  DOCUMENTOS: {
+    CREATE: '/api/documentos/createDocumento'
+  },
+  SOLICITUDES: {
+    CREATE: '/api/solicitudes/createSolicitud'
   }
 };

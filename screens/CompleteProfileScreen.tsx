@@ -7,8 +7,10 @@ import { catalogService } from '../src/api/catalogService';
 interface CompleteProfileScreenProps {
   userData: UserData;
   idUsuario: number;
+  token?: string;
   onBack: () => void;
   onSave: (data: Partial<UserData>) => void;
+  onSessionExpired?: () => void;
 }
 
 // --- COMPONENTES UI (Helpers) ---
@@ -78,7 +80,7 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
 
 // --- MAIN COMPONENT ---
 
-const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData, idUsuario, onBack, onSave }) => {
+const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData, idUsuario, token, onBack, onSave }) => {
   
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,8 +158,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       try {
         console.log("Obteniendo datos para ID:", idUsuario);
         
-        // Usamos el servicio. El servicio ya sabe que debe enviar { id: idUsuario }
-        const json = await userService.getUsuarioById(idUsuario);
+        // Usamos el servicio. Enviamos token si está disponible
+        const json = await userService.getUsuarioById(idUsuario, token);
 
         if (json.data && json.data.usuario) {
           const userAPI = json.data.usuario;
@@ -173,8 +175,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             phone: userAPI.telefono || prev.phone,
           }));
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error al obtener usuario:", error);
+        if (error.isAuthError) {
+          alert('Sesión expirada. Por favor inicia sesión de nuevo.');
+          if (typeof (onSessionExpired as any) === 'function') onSessionExpired();
+          return;
+        }
       } finally {
         setIsLoadingData(false);
       }
@@ -378,13 +385,18 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           console.log("Enviando Update:", payload);
 
           // Llamada limpia al servicio
-          const data = await userService.updateUsuario(payload);
+          const data = await userService.updateUsuario(payload, token);
 
           console.log("Usuario actualizado correctamente:", data);
           onSave(form);
 
       } catch (error: any) {
           console.error("Error Update:", error);
+          if (error.isAuthError) {
+              alert('Sesión expirada. Por favor inicia sesión de nuevo.');
+              if (typeof (onSessionExpired as any) === 'function') onSessionExpired();
+              return;
+          }
           alert(error.message || 'Error al actualizar perfil');
       } finally {
           setIsSubmitting(false);

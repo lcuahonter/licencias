@@ -15,8 +15,9 @@ interface DecodedToken {
 }
 
 interface WelcomeScreenProps {
-  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen') => void;
+  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen' | 'OperatorDashboard') => void;
 }
+
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   const [email, setEmail] = useState('');
@@ -57,15 +58,24 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
           const decoded = jwtDecode<DecodedToken>(tokenString);
           console.log("Token decodificado:", decoded);
 
-          const destino = decoded.perfil === "Incompleto" ? 'DocumentUploadScreen' : 'Dashboard';
-          
-          console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData})`);
+          // Priorizar rol cuando venga en el token
+          let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard';
+          if (decoded.rol === 'Revisor') {
+              destino = 'OperatorDashboard';
+          } else if (decoded.rol === 'Usuario') {
+              // En este momento los usuarios van a cargas de documentos (puede cambiar después)
+              destino = 'DocumentUploadScreen';
+          } else {
+              destino = decoded.perfil === "Incompleto" ? 'DocumentUploadScreen' : 'Dashboard';
+          }
+
+          console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData}, rol: ${decoded.rol})`);
 
           // 5. Notificar al padre (App.tsx)
           onStart({ 
             email: email,
             idUsuario: decoded.aData, 
-            // token: tokenString // Descomentar si decides pasar el token aquí
+            token: tokenString
           }, destino);
 
       } catch (decodeError) {

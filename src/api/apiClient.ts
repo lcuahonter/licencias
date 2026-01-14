@@ -37,7 +37,16 @@ export const apiRequest = async <T>(endpoint: string, options: RequestOptions = 
 
     if (!response.ok || (data.code && data.code !== "200" && data.code !== "204")) {
        const message = data.message || data.data?.status || 'Error en el servidor';
-       throw new Error(message);
+       const err: any = new Error(message);
+       // Adjuntamos metadatos para que los handlers puedan reaccionar a códigos internos
+       err.code = data.code;
+       err.internalCode = data.internalCode;
+       err.data = data.data;
+       // Señalamos errores de autenticación (ej. token expirado) para manejo centralizado
+       const msgLower = (message || '').toString().toLowerCase();
+       const backendMessages = (data.data?.messages || data.data?.error || '').toString().toLowerCase();
+       err.isAuthError = data.code === '401' || msgLower.includes('jwt expired') || backendMessages.includes('jwt expired');
+       throw err;
     }
 
     return data;
