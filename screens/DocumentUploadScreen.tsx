@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserData } from '../types';
 
 interface DocumentUploadScreenProps {
@@ -20,7 +20,7 @@ const ID_OPTIONS: { id: IdType; label: string; icon: string }[] = [
   { id: 'cedula', label: 'Cédula Prof.', icon: 'badge' },
 ];
 
-import { documentService } from '../src/api/documentService';
+import { catalogService } from '../src/api/catalogService';
 
 const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onContinue, idUsuario, idSolicitud, token }) => {
   
@@ -31,25 +31,32 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   const [hasDisability, setHasDisability] = useState(false);
   const [errorField, setErrorField] = useState<string | null>(null);
 
-  // Estado de documentos (base64) y metadatos del archivo (original)
-  const [docs, setDocs] = useState<Record<string, string>>({
-    ineFront: '',
-    ineBack: '',
-    passport: '',
-    cedulaFront: '', // Frente
-    cedulaBack: '',  // Reverso
-    addressProof: '',
-    birthCertificate: '',
-    disabilityProof: ''
-  });
-
+  // Estado dinámico de documentos (clave dinámica por catálogo) y metadatos
+  const [docs, setDocs] = useState<Record<string, string>>({});
   const [fileMeta, setFileMeta] = useState<Record<string, { name: string; size: number; type: string }>>({});
 
-  // Estados para subir uno-a-uno y mostrar resultado por campo
-  const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
-  const [uploadErrors, setUploadErrors] = useState<Record<string, string | null>>({});
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadedCount, setUploadedCount] = useState(0);
+  // Helper: genera una key estable para un item del catálogo
+  const keyForItem = (item: any) => `cat_${item.id}`;
+
+  // Catálogo de documentos y controles para opcionales
+  const [docsCatalog, setDocsCatalog] = useState<any[]>([]);
+  const [optionalEnabled, setOptionalEnabled] = useState<Record<string, boolean>>({});
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setIsLoadingCatalog(true);
+    catalogService.getDocumentos()
+      .then(resp => {
+        // El servicio puede devolver varias formas: { data: { catDocumentos: [...] } } o { data: [...] }
+        const arr = resp?.data?.catDocumentos ?? resp?.data ?? resp?.catDocumentos ?? resp;
+        if (mounted && Array.isArray(arr)) setDocsCatalog(arr);
+      })
+      .catch(err => console.error('Error cargando catálogo de documentos:', err))
+      .finally(() => mounted && setIsLoadingCatalog(false));
+
+    return () => { mounted = false; };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
     if (errorField === field) setErrorField(null);
@@ -95,21 +102,25 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     return <img src={base64} alt="Preview" className="w-full h-full object-cover" />;
   };
 
-  const renderDocumentUpload = (label: string, fieldKey: string) => {
+  const renderDocumentUpload = (item: any) => {
+    const fieldKey = keyForItem(item);
     const isError = errorField === fieldKey;
     const hasValue = !!docs[fieldKey];
-    const status = uploadStatus[fieldKey] || 'idle';
-    const errorMsg = uploadErrors[fieldKey];
 
     let borderClass = "border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800";
     if (isError) borderClass = "border-red-500 bg-red-50 dark:bg-red-900/20";
     else if (hasValue) borderClass = "border-green-500 bg-green-50 dark:bg-green-900/10";
 
+    const label = item.nombre || item.nombreDocumento || item.descripcion || item.label || `Documento ${item.id}`;
+    const isMandatory = isTypeMandatory(item.id);
+
     return (
-      <div className="animate-in fade-in zoom-in duration-300"> 
-        <label className={`text-xs font-bold uppercase mb-2 block ${isError ? 'text-red-500' : 'text-gray-400'}`}>
-          {label}
-        </label>
+      <div key={fieldKey} className="animate-in fade-in zoom-in duration-300"> 
+        <div className="flex items-center justify-between mb-2">
+          <label className={`text-xs font-bold uppercase ${isError ? 'text-red-500' : 'text-gray-400'}`}>{label}</label>
+          <div className={`text-[10px] font-bold px-2 py-1 rounded ${isMandatory ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{isMandatory ? 'Obligatorio' : 'Opcional'}</div>
+        </div>
+
         <label className={`h-36 border-2 border-dashed rounded-2xl flex items-center justify-center cursor-pointer transition-all overflow-hidden relative ${borderClass}`}>
             <input 
               type="file" 
@@ -126,22 +137,19 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
               </div>
             )}
 
-            {/* Upload status indicator */}
-            <div className="absolute right-2 top-2 flex items-center gap-2">
-              {status === 'uploading' && <span className="material-symbols-outlined animate-spin text-gray-500">autorenew</span>}
-              {status === 'success' && <span className="material-symbols-outlined text-green-600">check_circle</span>}
-              {status === 'error' && (
-                <div className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-red-500">error</span>
-                  <button onClick={(e) => { e.stopPropagation(); uploadSingle(fieldKey); }} className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded">Reintentar</button>
-                </div>
-              )}
-            </div>
+            {/* Optional toggle for optional docs */}
+            {!isMandatory && (
+              <div className="absolute right-2 top-2">
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" checked={!!optionalEnabled[fieldKey]} onChange={(e) => setOptionalEnabled(prev => ({ ...prev, [fieldKey]: e.target.checked }))} />
+                </label>
+              </div>
+            )}
 
             {/* Error message under thumbnail */}
-            {errorMsg && (
+            {isError && (
               <div className="absolute left-2 bottom-2 right-2 text-[11px] text-red-600 bg-red-50 px-2 py-1 rounded">
-                {errorMsg}
+                Archivo inválido o demasiado grande
               </div>
             )}
         </label>
@@ -150,25 +158,61 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   };
 
   // Lógica de validación corregida para Cédula (Frente + Reverso)
-  const isIdComplete = () => {
-    switch (selectedIdType) {
-      case 'ine': 
-        return docs.ineFront && docs.ineBack;
-      case 'passport': 
-        return docs.passport;
-      case 'cedula': 
-        return docs.cedulaFront && docs.cedulaBack; // Ahora requiere ambos
-      default: 
-        return false;
-    }
+  const isTypeMandatory = (tipoId: number) => {
+    const item = docsCatalog.find(d => Number(d.id) === Number(tipoId));
+    if (!item) return false;
+    const v = (item.obligatorio || item.requerido || item.required || item.mandatory || item.mandatorio || item.isRequired || item.requerido)?.toString().toLowerCase();
+    if (!v) return false;
+    return v === 'si' || v === 'true' || v === '1' || v === 'yes';
   };
 
-  const isComplete = 
-    isIdComplete() && 
-    docs.addressProof && 
-    docs.birthCertificate &&
-    (!hasDisability || docs.disabilityProof) &&
-    !errorField; // listo para enviar localmente o al backend
+  const isIdComplete = () => {
+    // INE logic: if any of INE types are mandatory (8 or 9 or 5) require both
+    const ineFrontMandatory = isTypeMandatory(FIELD_TO_TIPO.ineFront!);
+    const ineBackMandatory = isTypeMandatory(FIELD_TO_TIPO.ineBack!);
+    const ineMandatory = ineFrontMandatory || ineBackMandatory;
+
+    if (selectedIdType === 'ine') {
+      if (ineMandatory) return !!docs.ineFront && !!docs.ineBack;
+      return true; // optional
+    }
+
+    // Passport
+    const passportMandatory = isTypeMandatory(FIELD_TO_TIPO.passport!);
+    if (selectedIdType === 'passport') {
+      if (passportMandatory) return !!docs.passport;
+      return true;
+    }
+
+    // Cedula
+    const cedulaMandatory = isTypeMandatory(FIELD_TO_TIPO.cedulaFront!);
+    if (selectedIdType === 'cedula') {
+      if (cedulaMandatory) return !!docs.cedulaFront && !!docs.cedulaBack;
+      return true;
+    }
+
+    return true;
+  };
+
+  const isComplete = () => {
+    if (!docsCatalog || docsCatalog.length === 0) return true; // Si no hay catálogo, no bloqueamos
+
+    // Para cada item obligatorio del catálogo requerimos que exista archivo
+    for (const item of docsCatalog) {
+      if (!isTypeMandatory(item.id)) continue;
+      const k = keyForItem(item);
+      if (!docs[k]) return false;
+    }
+
+    // También se valida la selección de ID (si el catálogo requiere algún ID específico se considera ya en lo anterior)
+    if (!isIdComplete()) return false;
+
+    for (const key of Object.keys(optionalEnabled)) {
+      if (optionalEnabled[key] && !docs[key]) return false;
+    }
+
+    return !errorField;
+  };
 
   // Identificador de tipo de documento por campo (confirma mapeos si hace falta)
   const FIELD_TO_TIPO: Record<string, number | null> = {
@@ -182,93 +226,35 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     disabilityProof: 3 // Asumo 3 (Reconocimiento médico) por defecto
   };
 
-  // Sube un archivo individualmente y maneja estados por campo
-  const uploadSingle = async (fieldKey: string) => {
-    const base64 = docs[fieldKey];
-    if (!base64) return { success: false, message: 'No file' };
 
-    const meta = fileMeta[fieldKey] || { name: 'unknown', size: 0, type: 'application/octet-stream' };
-    const tipo = FIELD_TO_TIPO[fieldKey] ?? null;
 
-    if (!tipo) {
-      console.warn(`Skipping upload for ${fieldKey}: no tipo asignado`);
-      return { success: false, message: 'Tipo no asignado' };
+  // Prepara y envía los documentos al padre como arreglo con el id de tipo
+  const submitDocuments = () => {
+    const documentsArray: any[] = [];
+
+    for (const item of docsCatalog) {
+      const k = keyForItem(item);
+      const base64 = docs[k];
+      const meta = fileMeta[k];
+
+      // Si es opcional y no está habilitado por el usuario, lo ignoramos
+      if (!isTypeMandatory(item.id) && optionalEnabled[k] === false) continue;
+
+      if (base64) {
+        const formato = (meta?.type || '').includes('pdf') ? 'pdf' : ((meta?.type || '').split('/')?.[1] || 'bin');
+        documentsArray.push({
+          idtipodocumento: item.id,
+          formato,
+          nombreoriginal: meta?.name || `documento_${item.id}`,
+          tamanio: meta?.size || 0,
+          archivoBase64: base64.split(',')[1],
+          label: item.nombre || item.descripcion || ''
+        });
+      }
     }
 
-    const formato = meta.type.includes('pdf') ? 'pdf' : (meta.type.split('/')[1] || 'bin');
-
-    const payload = {
-      idusuario: idUsuario,
-      idsolicitud: idSolicitud || 1, // por pruebas usar 1 si no existe
-      idtipodocumento: tipo,
-      formato,
-      nombreoriginal: meta.name,
-      tamanio: meta.size,
-      archivoBase64: base64.split(',')[1]
-    };
-
-    try {
-      setUploadStatus(prev => ({ ...prev, [fieldKey]: 'uploading' }));
-      setUploadErrors(prev => ({ ...prev, [fieldKey]: null }));
-
-      await documentService.createDocumento(payload, token);
-
-      setUploadStatus(prev => ({ ...prev, [fieldKey]: 'success' }));
-      setUploadedCount(prev => prev + 1);
-      return { success: true };
-    } catch (err: any) {
-      console.error(`Error subiendo ${fieldKey}:`, err);
-
-      // Si es error de autenticación, notificar y forzar expiración de sesión
-    
-
-      setUploadStatus(prev => ({ ...prev, [fieldKey]: 'error' }));
-//Esto es prueba
-      // Intentamos extraer información útil del error (internalCode, data.error, message)
-      const internal = err.internalCode || err.code || null;
-      const backendDetail = err.data?.error || err.data?.message || err.message || 'Error al subir';
-      const composed = internal ? `${internal} - ${backendDetail}` : backendDetail;
-
-      setUploadErrors(prev => ({ ...prev, [fieldKey]: composed }));
-      return { success: false, message: composed };
-    }
-  };
-
-  // Sube archivos uno por uno para poder mostrar resultados individuales
-  const uploadDocuments = async () => {
-    if (!idUsuario || !token) {
-      onContinue({ documents: docs, hasDisability, selectedIdType });
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadedCount(0);
-
-    const fields = Object.keys(docs);
-
-    for (let i = 0; i < fields.length; i++) {
-      const fieldKey = fields[i];
-      if (!docs[fieldKey]) continue; // saltar sin archivo
-
-      // Reset status if starting
-      setUploadStatus(prev => ({ ...prev, [fieldKey]: 'idle' }));
-
-      // Esperamos al resultado del upload individual
-      await uploadSingle(fieldKey);
-    }
-
-    setIsUploading(false);
-
-    // Verificamos si hubo errores
-    const failedFields = Object.keys(docs).filter(k => uploadStatus[k] === 'error');
-
-    if (failedFields.length > 0) {
-      alert(`${failedFields.length} archivo(s) fallaron al subir. Revisa los errores y reintenta.`);
-      return; // no avanzamos automáticamente
-    }
-
-    // Si todo salió bien, notificamos al padre
-    onContinue({ documents: docs, hasDisability, selectedIdType });
+    // Envío al padre: ahora documents es un arreglo con objetos (más robusto)
+    onContinue({ documents: documentsArray, fileMeta, hasDisability, selectedIdType, optionalEnabled, catalog: docsCatalog });
   };
 
   return (
@@ -284,6 +270,9 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       </header>
 
       <main className="flex-1 overflow-y-auto px-6 pb-32 pt-4">
+          {isLoadingCatalog && (
+            <div className="text-sm text-gray-500 mb-4">Cargando catálogo de documentos…</div>
+          )}
           
            {/* SELECTOR DE TIPO DE ID */}
            <div className="mb-8">
@@ -311,31 +300,30 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
            <div className="space-y-6">
              
-             {/* CAMPOS DINÁMICOS */}
-             {selectedIdType === 'ine' && (
+             {/* CAMPOS DINÁMICOS (Derivados del catálogo) */}
+
+             {docsCatalog.length > 0 ? (
                <>
-                 {renderDocumentUpload('INE (Frente)', 'ineFront')}
-                 {renderDocumentUpload('INE (Reverso)', 'ineBack')}
+                 {/* Separamos por obligatorios y opcionales para mejor UX */}
+                 <div className="space-y-4">
+                   <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Requeridos</h3>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     {docsCatalog.filter((it) => isTypeMandatory(it.id)).map(item => renderDocumentUpload(item))}
+                   </div>
+                 </div>
+
+                 <hr className="border-gray-200 dark:border-gray-700 my-6" />
+
+                 <div className="space-y-4">
+                   <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Opcionales</h3>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                     {docsCatalog.filter((it) => !isTypeMandatory(it.id)).map(item => renderDocumentUpload(item))}
+                   </div>
+                 </div>
                </>
+             ) : (
+               <div className="text-sm text-gray-500">No hay información del catálogo. Puedes continuar con los documentos básicos.</div>
              )}
-
-             {selectedIdType === 'passport' && (
-               renderDocumentUpload('Foto de Pasaporte', 'passport')
-             )}
-
-             {/* Cédula ahora muestra Frente y Reverso */}
-             {selectedIdType === 'cedula' && (
-               <>
-                  {renderDocumentUpload('Cédula Prof. (Frente)', 'cedulaFront')}
-                  {renderDocumentUpload('Cédula Prof. (Reverso)', 'cedulaBack')}
-               </>
-             )}
-
-             <hr className="border-gray-200 dark:border-gray-700 my-6" />
-
-             {/* DOCUMENTOS COMUNES */}
-             {renderDocumentUpload('Comprobante de Domicilio', 'addressProof')}
-             {renderDocumentUpload('Acta de Nacimiento', 'birthCertificate')}
 
              {/* DISCAPACIDAD */}
              <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 transition-all mt-4">
@@ -358,7 +346,8 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
                {hasDisability && (
                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                   {renderDocumentUpload('Certificado Médico', 'disabilityProof')}
+                   {/* Si el catálogo trae un item para discapacidad lo mostrará arriba; esto es de respaldo */}
+                   {renderDocumentUpload({ id: FIELD_TO_TIPO.disabilityProof, nombre: 'Certificado Médico' })}
                  </div>
                )}
              </div>
@@ -368,11 +357,11 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
       <div className="p-6 absolute bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 z-20 safe-bottom">
         <button 
-          onClick={uploadDocuments}
-          disabled={!isComplete || isUploading}
+          onClick={submitDocuments}
+          disabled={!isComplete()}
           className="w-full h-14 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-black text-lg shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isUploading ? `Subiendo (${uploadedCount}/${Object.keys(docs).filter(k => docs[k]).length})...` : 'Guardar y Continuar'}
+          Guardar y Continuar
           <span className="material-symbols-outlined">save</span>
         </button>
       </div>

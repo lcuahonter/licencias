@@ -3,13 +3,15 @@ import MD5 from 'crypto-js/md5';
 import { jwtDecode } from "jwt-decode"; 
 import { UserData } from '../types';
 import { authService } from '../src/api/authService'; // <--- Importamos el servicio
+import { userService } from '../src/api/userService';
+import { documentService } from '../src/api/documentService';
 
 // Definimos la estructura del token JWT
 interface DecodedToken {
   username: string;
-  rol: string;
-  aData: number;       // ID de Usuario
-  perfil: string;      // "Incompleto" o "Completo"
+  rol: number;           // Ahora rol es un ID (número)
+  aData: number;         // ID de Usuario
+  perfil: string;        // "Incompleto" o "Completo"
   iat: number;
   exp: number;
 }
@@ -58,20 +60,60 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
           const decoded = jwtDecode<DecodedToken>(tokenString);
           console.log("Token decodificado:", decoded);
 
-          // Priorizar rol cuando venga en el token
-          let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard';
-          if (decoded.rol === 'Revisor') {
+          // Priorizar rol cuando venga en el token (ahora es ID: 3=Operador, 2=Usuario, 1=Admin)
+          let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard' | 'AdminDashboard' = 'Dashboard';
+          const rolId = decoded.rol;
+
+          if (rolId === 3) {
+              // Operador
               destino = 'OperatorDashboard';
-          } else if (decoded.rol === 'Usuario') {
-              // En este momento los usuarios van a cargas de documentos (puede cambiar después)
-              destino = 'DocumentUploadScreen';
-          } else {
-              destino = decoded.perfil === "Incompleto" ? 'DocumentUploadScreen' : 'Dashboard';
+          } else if (rolId === 1) {
+              // Admin
+              destino = 'AdminDashboard';
+          } else if (rolId === 2) {
+              // Usuario normal: consultar estado de perfil y documentos
+              let userFresh: any = null;
+              try {
+                const u = await userService.getUsuarioById(decoded.aData, tokenString);
+                userFresh = u?.data?.usuario ?? u?.data ?? null;
+              } catch (e) {
+                console.warn('No fue posible recuperar usuario al login:', e);
+              }
+
+              // Consultar documentos del usuario (puede devolver code: '200' => tiene, '204' => no tiene)
+              let hasDocs = true;
+              try {
+                const docsResp = await documentService.getByUser(decoded.aData, tokenString);
+                const docsCode = docsResp?.code || docsResp?.data?.code;
+                hasDocs = docsCode === '200';
+              } catch (e) {
+                console.warn('Error consultando documentos del usuario:', e);
+                hasDocs = true;
+              }
+
+              if (userFresh?.perfil === 'Incompleto') {
+                destino = 'DocumentUploadScreen';
+              } else {
+                destino = hasDocs ? 'Dashboard' : 'DocumentUploadScreen';
+              }
+
+              // Inyectamos información real del usuario al payload
+              onStart({ 
+                email: email,
+                idUsuario: decoded.aData, 
+                token: tokenString,
+                perfil: userFresh?.perfil,
+                firstName: userFresh?.nombres,
+                lastName: userFresh?.apellidopaterno ? `${userFresh.apellidopaterno} ${userFresh.apellidomaterno || ''}`.trim() : undefined,
+                idNumber: userFresh?.curp || undefined,
+                phone: userFresh?.telefono || undefined,
+              }, destino);
+
+              console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData}, rolId: ${rolId}, perfil: ${userFresh?.perfil}, tieneDocs: ${hasDocs})`);
+              return;
           }
 
-          console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData}, rol: ${decoded.rol})`);
-
-          // 5. Notificar al padre (App.tsx)
+          // Para roles no mapeados (por defecto ir a Dashboard)
           onStart({ 
             email: email,
             idUsuario: decoded.aData, 

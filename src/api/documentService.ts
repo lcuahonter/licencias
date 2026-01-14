@@ -8,5 +8,13 @@ export const documentService = {
       body: payload,
       token
     });
+  },
+
+  getByUser: async (idusuario: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.DOCUMENTOS.BY_USER, {
+      method: 'POST',
+      body: { idusuario },
+      token
+    });
   }
 };

@@ -382,7 +382,24 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           const data = await userService.updateUsuario(payload, token);
 
           console.log("Usuario actualizado correctamente:", data);
-          onSave(form);
+          // Re-obtenemos el usuario para asegurarnos del estado del perfil (Incompleto -> Completo)
+          try {
+            const refreshed = await userService.getUsuarioById(idUsuario, token);
+            const userAPI = refreshed?.data?.usuario ?? refreshed?.data ?? null;
+            const payload: Partial<any> = {
+              firstName: userAPI?.nombres || form.firstName,
+              lastName: userAPI?.apellidopaterno ? `${userAPI.apellidopaterno} ${userAPI?.apellidomaterno || ''}`.trim() : form.paternalName,
+              idNumber: userAPI?.curp || form.curp,
+              email: userAPI?.email || form.email,
+              address: userAPI?.domicilio || form.address,
+              phone: userAPI?.telefono || form.phone,
+              perfil: userAPI?.perfil || 'Completo'
+            };
+            onSave(payload);
+          } catch (rferr) {
+            console.warn('No se pudo refrescar usuario tras actualizar perfil:', rferr);
+            onSave(form);
+          }
 
       } catch (error: any) {
           console.error("Error Update:", error);

@@ -6,6 +6,8 @@ interface DashboardScreenProps {
   onLogout: () => void;
   onGoToProfile: () => void;
   onContinueRequest: (req: LicenseRequest) => void;
+  // Nuevo: abrir pantalla de Documentos
+  onGoToDocuments?: () => void;
   idUsuario?: number;
   token?: string;
 }
@@ -18,8 +20,9 @@ const DOC_LABELS: Record<string, string> = {
 };
 
 import { solicitudService } from '../src/api/solicitudService';
+import { documentService } from '../src/api/documentService';
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile, onContinueRequest, idUsuario, token }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, onGoToProfile, onContinueRequest, onGoToDocuments, idUsuario, token }) => {
   
   // --- ESTADOS ---
   const [showNewReqModal, setShowNewReqModal] = useState(false);
@@ -46,7 +49,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
       }
   };
 
-  const isProfileComplete = !!userData.address && !!userData.emergencyContact;
+  // Banner de perfil: el backend expone campo `perfil` como 'Incompleto' / 'Completo'
+  const isProfileIncomplete = (userData as any).perfil === 'Incompleto';
+  const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
+
+  // Consultamos si el usuario tiene documentos en el servidor (para otros usos en el perfil)
+  React.useEffect(() => {
+    if (!idUsuario) return;
+    let mounted = true;
+    documentService.getByUser(idUsuario, token)
+      .then(resp => {
+        const code = resp?.code || resp?.data?.code;
+        if (mounted) setHasDocuments(code === '200');
+      })
+      .catch(err => { console.warn('Error consultando documentos del usuario:', err); if (mounted) setHasDocuments(null); });
+    return () => { mounted = false; };
+  }, [idUsuario, token]);
 
   const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];
   const activeProcessList = userData.requests?.filter(r => 
@@ -168,6 +186,106 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
         // Notificamos (App.jsx) para que maneje la navegación a la siguiente pantalla
         onContinueRequest(newRequest);
 
+        // CALLBACK ADICIONAL: Subir documentos asociados a esta solicitud si el usuario ya los cargó
+        try {
+          // Recuperamos la lista de solicitudes del usuario para obtener el ID real
+          const all = await solicitudService.getByUser(idUsuario, token);
+          const solicitudes = all?.data?.solicitudes ?? all?.data ?? all;
+          // Buscamos la solicitud más reciente sin numerolicencia (pendiente de asignación)
+          let found: any = null;
+          if (Array.isArray(solicitudes)) {
+            found = solicitudes.reverse().find((s: any) => !s.numerolicencia) ?? solicitudes.reverse()[0];
+          }
+          const idsolicitud = found?.id || found?.idsolicitud || createdId || null;
+
+          if (idsolicitud && (userData as any).documents) {
+            const metas = (userData as any).fileMeta || {};
+            const optional = (userData as any).optionalEnabled || {};
+
+            const userDocs = (userData as any).documents;
+
+            // Si viene en formato arreglo (nuevo), lo iteramos directamente
+            if (Array.isArray(userDocs)) {
+              for (const doc of userDocs) {
+                const tipo = doc.idtipodocumento || doc.tipoId || null;
+                const base64 = doc.archivoBase64 ? `data:${doc.formato};base64,${doc.archivoBase64}` : null;
+                if (!base64) continue;
+
+                const payloadDoc = {
+                  idusuario: idUsuario,
+                  idsolicitud,
+                  idtipodocumento: tipo,
+                  formato: doc.formato || 'jpg',
+                  nombreoriginal: doc.nombreoriginal || 'documento',
+                  tamanio: doc.tamanio || 0,
+                  archivoBase64: doc.archivoBase64
+                };
+
+                try {
+                  await documentService.createDocumento(payloadDoc, token);
+                } catch (derr: any) {
+                  console.error('Error subiendo documento', doc, derr);
+                  if (derr.isAuthError) {
+                    alert('Sesión expirada al subir documentos. Por favor inicia sesión de nuevo.');
+                    onLogout();
+                    return;
+                  }
+                  alert(`No se pudo subir ${doc.label || 'Documento'}: ${derr.message || 'Error'}`);
+                }
+              }
+            } else {
+              // Fallback: antiguo formato (objeto con keys)
+              const FIELD_TO_TIPO: Record<string, number | null> = {
+                ineFront: 8,
+                ineBack: 9,
+                passport: 11,
+                cedulaFront: 12,
+                cedulaBack: 12,
+                addressProof: 1,
+                birthCertificate: 10,
+                disabilityProof: 3
+              };
+
+              const docsObj = userDocs as Record<string, string>;
+              for (const key of Object.keys(docsObj)) {
+                const base64 = docsObj[key];
+                if (!base64) continue;
+                if (optional[key] === false) continue;
+
+                const tipo = FIELD_TO_TIPO[key];
+                if (!tipo) continue;
+
+                const meta = metas[key] || { name: 'unknown', size: 0, type: 'application/octet-stream' };
+                const formato = meta.type?.includes('pdf') ? 'pdf' : (meta.type?.split('/')?.[1] || 'bin');
+
+                const payloadDoc = {
+                  idusuario: idUsuario,
+                  idsolicitud,
+                  idtipodocumento: tipo,
+                  formato,
+                  nombreoriginal: meta.name,
+                  tamanio: meta.size,
+                  archivoBase64: base64.split(',')[1]
+                };
+
+                try {
+                  await documentService.createDocumento(payloadDoc, token);
+                } catch (derr: any) {
+                  console.error('Error subiendo documento', key, derr);
+                  if (derr.isAuthError) {
+                    alert('Sesión expirada al subir documentos. Por favor inicia sesión de nuevo.');
+                    onLogout();
+                    return;
+                  }
+                  alert(`No se pudo subir ${DOC_LABELS[key] || key}: ${derr.message || 'Error'}`);
+                }
+              }
+            }
+          }
+        } catch (ex) {
+          console.warn('No fue posible subir documentos automáticamente:', ex);
+        }
+
       } catch (err: any) {
         console.error('Error creando la solicitud:', err);
         // Si es error de autenticación, forzar cierre de sesión
@@ -219,11 +337,27 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ userData, onLogout, o
       </header>
 
       <main className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
-        {!isProfileComplete && (
+        {isProfileIncomplete && (
              <div onClick={onGoToProfile} className="bg-red-600 text-white p-4 rounded-2xl shadow-lg flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform animate-pulse">
                 <div className="bg-white/20 p-2 rounded-full"><span className="material-symbols-outlined">person_alert</span></div>
                 <div><h3 className="font-bold text-sm">Perfil Incompleto</h3><p className="text-[10px] opacity-90">Toca aquí para completar tus datos.</p></div>
              </div>
+        )}
+
+        {/* Banner para documentos faltantes (perfil completo pero sin documentos) */}
+        {!isProfileIncomplete && hasDocuments === false && (
+          <div className="mt-4" onClick={() => onGoToDocuments && onGoToDocuments()}>
+            <div className="bg-yellow-600 text-white p-4 rounded-2xl shadow-lg flex items-center gap-4 cursor-pointer hover:scale-[1.02] transition-transform">
+              <div className="bg-white/20 p-2 rounded-full"><span className="material-symbols-outlined">upload_file</span></div>
+              <div>
+                <h3 className="font-bold text-sm">Documentos faltantes</h3>
+                <p className="text-[10px] opacity-90">Aún no subes los documentos requeridos. Súbelos ahora para continuar.</p>
+              </div>
+              <div className="ml-auto">
+                <button onClick={(e) => { e.stopPropagation(); onGoToDocuments && onGoToDocuments(); }} className="bg-white text-yellow-700 px-3 py-2 rounded-xl font-bold">Subir</button>
+              </div>
+            </div>
+          </div>
         )}
 
         <section>

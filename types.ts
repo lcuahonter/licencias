@@ -64,8 +64,11 @@ export interface UserData {
   // Token de sesión (JWT) para llamadas autenticadas
   token?: string;
 
+  // Perfil (Incompleto / Completo) proveniente del backend
+  perfil?: string;
+
   // Lista de Solicitudes
-  requests: LicenseRequest[];
+  requests: LicenseRequest[]; 
 
   appointment?: {
     date: string;

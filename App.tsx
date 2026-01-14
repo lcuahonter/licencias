@@ -138,6 +138,7 @@ const App: React.FC = () => {
             idUsuario={userId}
             token={authToken || undefined}
             onGoToProfile={() => setCurrentStep(AppStep.COMPLETE_PROFILE)} 
+            onGoToDocuments={() => setCurrentStep(AppStep.DOCUMENTS)}
             onContinueRequest={(req) => { updateUserData({ licenseType: req.type === 'Motociclista' ? 'Motociclista' : 'Automovilista Particular' }); setCurrentStep(AppStep.APPOINTMENT); }} 
             onLogout={() => { 
                 setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); 

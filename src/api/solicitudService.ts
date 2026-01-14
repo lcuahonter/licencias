@@ -8,5 +8,13 @@ export const solicitudService = {
       body: payload,
       token
     });
+  },
+
+  getByUser: async (idusuario: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.SOLICITUDES.BY_USER, {
+      method: 'POST',
+      body: { idusuario },
+      token
+    });
   }
 };
