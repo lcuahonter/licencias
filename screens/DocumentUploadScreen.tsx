@@ -223,7 +223,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     
 
       setUploadStatus(prev => ({ ...prev, [fieldKey]: 'error' }));
-
+//Esto es prueba
       // Intentamos extraer información útil del error (internalCode, data.error, message)
       const internal = err.internalCode || err.code || null;
       const backendDetail = err.data?.error || err.data?.message || err.message || 'Error al subir';
