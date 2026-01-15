@@ -353,7 +353,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               idUsuario: idUsuario, 
               rfc: form.rfc,
               domicilio: form.address,
-              colonia: form.colonyId,              // ID de la colonia (del select)
+              colonia: form.colonyName,            // Nombre de la colonia
               cp: form.colonyId,                   // ID del CP (mismo que colonia)
               id_cp: form.colonyId,                // ID del CP
               municipio: form.municipality,
@@ -372,7 +372,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               conocidoDomicilio: form.emergAddress,
               conocidoCp: form.emergColonyId,      // ID de la colonia de emergencia
               conocidoIdCp: form.emergColonyId,    // ID del CP
-              conocidoColonia: form.emergColonyId, // ID de la colonia
+              conocidoColonia: form.emergColonyName, // Nombre de la colonia
               conocidoMunicipio: form.emergMunicipality,
               conocidoLocalidad: form.emergLocality, // Texto libre
               conocidoTelefono: `${form.emergPhoneLada} ${form.emergPhone}`

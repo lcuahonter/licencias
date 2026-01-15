@@ -55,65 +55,75 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       try {
           const decoded = jwtDecode<DecodedToken>(tokenString);
 
-          // Priorizar rol cuando venga en el token (ahora es ID: 3=Operador, 2=Usuario, 1=Admin)
-          let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard' | 'AdminDashboard' = 'Dashboard';
-          const rolId = decoded.rol;
+          // Validar datos críticos del token
+          if (!decoded.aData || !decoded.rol) {
+              throw new Error("Token inválido: faltan datos de usuario o rol.");
+          }
 
-          if (rolId === 3) {
-              // Operador
-              destino = 'OperatorDashboard';
-          } else if (rolId === 1) {
-              // Admin
-              destino = 'AdminDashboard';
-          } else if (rolId === 2) {
-              // Usuario normal: consultar estado de perfil y documentos
-              let userFresh: any = null;
-              try {
-                const u = await userService.getUsuarioById(decoded.aData, tokenString);
-                userFresh = u?.data?.usuario ?? u?.data ?? null;
-              } catch (e) {
-                console.warn('No fue posible recuperar usuario al login:', e);
-              }
+          // Validar que el ID de usuario sea un número positivo
+          const idUsuario = Number(decoded.aData);
+          if (isNaN(idUsuario) || idUsuario <= 0) {
+              throw new Error("Token inválido: ID de usuario no válido.");
+          }
 
-              // Consultar documentos del usuario (puede devolver code: '200' => tiene, '204' => no tiene)
-              let hasDocs = true;
-              try {
-                const docsResp = await documentService.getByUser(decoded.aData, tokenString);
-                const docsCode = docsResp?.code || docsResp?.data?.code;
-                hasDocs = docsCode === '200';
-              } catch (e) {
-                console.warn('Error consultando documentos del usuario:', e);
-                hasDocs = true;
-              }
-              
-              // Si perfil está incompleto O no tiene documentos, ir al Dashboard
-              // El Dashboard ya maneja el banner rojo para perfil incompleto
-              destino = 'Dashboard';
+          const rolId = Number(decoded.rol);
 
-              // Inyectamos información real del usuario al payload
-              onStart({ 
-                email: email,
-                idUsuario: decoded.aData, 
-                token: tokenString,
-                perfil: userFresh?.perfil,
-                firstName: userFresh?.nombres,
-                lastName: userFresh?.apellidopaterno ? `${userFresh.apellidopaterno} ${userFresh.apellidomaterno || ''}`.trim() : undefined,
-                idNumber: userFresh?.curp || undefined,
-                phone: userFresh?.telefono || undefined,
-              }, destino);
+          // Datos base sanitizados (solo lo necesario para la sesión)
+          const basePayload = {
+              email: email.toLowerCase().trim(),
+              idUsuario: idUsuario,
+              token: tokenString
+          };
 
+          // === ROL 1: ADMINISTRADOR ===
+          if (rolId === 1) {
+              console.log('[SECURITY] Login Admin - ID:', idUsuario);
+              onStart(basePayload, 'AdminDashboard');
               return;
           }
 
-          // Para roles no mapeados (por defecto ir a Dashboard)
-          onStart({ 
-            email: email,
-            idUsuario: decoded.aData, 
-            token: tokenString
-          }, destino);
+          // === ROL 3: OPERADOR ===
+          if (rolId === 3) {
+              console.log('[SECURITY] Login Operador - ID:', idUsuario);
+              onStart(basePayload, 'OperatorDashboard');
+              return;
+          }
+
+          // === ROL 2: USUARIO NORMAL ===
+          if (rolId === 2) {
+              console.log('[SECURITY] Login Usuario - ID:', idUsuario);
+              
+              // Obtener datos del usuario de forma segura
+              let userFresh: any = null;
+              try {
+                  const u = await userService.getUsuarioById(idUsuario, tokenString);
+                  userFresh = u?.data?.usuario ?? u?.data ?? null;
+              } catch (e) {
+                  console.warn('[SECURITY] No se pudo obtener perfil de usuario:', e);
+              }
+
+              // Construir payload con datos sanitizados
+              const userPayload = {
+                  ...basePayload,
+                  perfil: userFresh?.perfil || 'Incompleto',
+                  firstName: userFresh?.nombres?.trim() || undefined,
+                  lastName: userFresh?.apellidopaterno 
+                      ? `${userFresh.apellidopaterno} ${userFresh.apellidomaterno || ''}`.trim() 
+                      : undefined,
+                  idNumber: userFresh?.curp?.trim() || undefined,
+                  phone: userFresh?.telefono?.trim() || undefined
+              };
+
+              onStart(userPayload, 'Dashboard');
+              return;
+          }
+
+          // === ROL NO RECONOCIDO ===
+          console.error('[SECURITY] Rol no reconocido:', rolId);
+          throw new Error("Acceso denegado: rol de usuario no válido.");
 
       } catch (decodeError) {
-          console.error("Error al leer el token", decodeError);
+          console.error("[SECURITY] Error al procesar token:", decodeError);
           throw new Error("Error al procesar la sesión del usuario.");
       }
 

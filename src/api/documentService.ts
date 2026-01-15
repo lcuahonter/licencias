@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, apiBlobRequest } from './apiClient';
 import { API_ENDPOINTS } from './endpoints';
 
 export const documentService = {
@@ -18,8 +18,8 @@ export const documentService = {
     });
   },
 
-  downloadDocumento: async (id: number, token?: string) => {
-    return await apiRequest<any>(API_ENDPOINTS.DOCUMENTOS.DOWNLOAD, {
+  downloadDocumento: async (id: number, token?: string): Promise<{ blob: Blob; filename?: string; contentType?: string }> => {
+    return await apiBlobRequest(API_ENDPOINTS.DOCUMENTOS.DOWNLOAD, {
       method: 'POST',
       body: { id },
       token

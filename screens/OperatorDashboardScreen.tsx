@@ -21,7 +21,23 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   // Estados Validación
   const [docStatus, setDocStatus] = useState<Record<number, 'accepted' | 'rejected' | null>>({});
   const [docReasons, setDocReasons] = useState<Record<number, string>>({});
-  const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string; isBlob?: boolean; filename?: string; contentType?: string } | null>(null);
+
+  // Limpiar blob URLs cuando el componente se desmonte o cambie el preview
+  React.useEffect(() => {
+    return () => {
+      if (previewDoc?.isBlob && previewDoc?.url.startsWith('blob:')) {
+        URL.revokeObjectURL(previewDoc.url);
+      }
+    };
+  }, [previewDoc]);
+
+  const closePreview = () => {
+    if (previewDoc?.isBlob && previewDoc?.url.startsWith('blob:')) {
+      URL.revokeObjectURL(previewDoc.url);
+    }
+    setPreviewDoc(null);
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- CARGAR SOLICITUDES ---
@@ -92,23 +108,42 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
 
   const handleViewDocument = async (doc: any) => {
     try {
-      const resp = await documentService.downloadDocumento(doc.id, token);
+      // Descargar el archivo binario (blob) desde el backend con metadatos
+      const { blob, filename, contentType } = await documentService.downloadDocumento(doc.id, token);
       
-      // Si la URL viene en la respuesta
-      if (doc.urlarchivo) {
-        setPreviewDoc({ url: doc.urlarchivo, title: doc.tipodocumento });
-      } else if (resp?.data?.url) {
-        setPreviewDoc({ url: resp.data.url, title: doc.tipodocumento });
-      } else {
-        // Fallback: abrir en nueva pestaña
-        window.open(doc.urlarchivo, '_blank');
+      // Crear un nuevo blob con el content-type correcto
+      const typedBlob = contentType ? new Blob([blob], { type: contentType }) : blob;
+      
+      // Crear una URL temporal del blob
+      const blobUrl = URL.createObjectURL(typedBlob);
+      
+      // Determinar la extensión correcta si no viene filename
+      let finalFilename = filename;
+      if (!finalFilename) {
+        // Determinar extensión por content-type
+        let extension = '.bin';
+        if (contentType) {
+          if (contentType.includes('pdf')) extension = '.pdf';
+          else if (contentType.includes('jpeg') || contentType.includes('jpg')) extension = '.jpg';
+          else if (contentType.includes('png')) extension = '.png';
+          else if (contentType.includes('gif')) extension = '.gif';
+          else if (contentType.includes('webp')) extension = '.webp';
+        }
+        finalFilename = `${doc.tipodocumento}${extension}`;
       }
-    } catch (error) {
+      
+      // Mostrar en el modal preview con el nombre del archivo
+      setPreviewDoc({ 
+        url: blobUrl, 
+        title: doc.tipodocumento, 
+        isBlob: true,
+        filename: finalFilename,
+        contentType: contentType
+      });
+      
+    } catch (error: any) {
       console.error('Error al descargar documento:', error);
-      // Intentar abrir directamente la URL
-      if (doc.urlarchivo) {
-        window.open(doc.urlarchivo, '_blank');
-      }
+      alert(error.message || 'Error al cargar el documento. El archivo puede no estar disponible.');
     }
   };
 
@@ -169,7 +204,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
           </div>
           <div>
             <h1 className="font-bold text-base leading-tight">Panel de Operador</h1>
-            <p className="text-[9px] opacity-70 uppercase tracking-wider">Secretaría de Seguridad Pública</p>
+            <p className="text-[9px] opacity-70 uppercase tracking-wider">Licencias Durango.</p>
           </div>
         </div>
         <button onClick={onLogout} className="bg-red-500/20 hover:bg-red-600 hover:text-white text-red-200 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
@@ -366,20 +401,19 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col animate-in fade-in">
           <div className="flex justify-between items-center p-4 text-white">
             <h3 className="font-bold text-base">{previewDoc.title}</h3>
-            <button onClick={() => setPreviewDoc(null)} className="bg-white/10 p-2 rounded-full hover:bg-white/20">
+            <button onClick={closePreview} className="bg-white/10 p-2 rounded-full hover:bg-white/20">
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
           <div className="flex-1 bg-gray-800 flex items-center justify-center p-4 overflow-hidden relative">
-            {previewDoc.url.toLowerCase().endsWith('.pdf') ? (
+            {previewDoc.contentType?.includes('pdf') || previewDoc.contentType === 'application/pdf' ? (
               <iframe src={previewDoc.url} className="w-full h-full rounded-lg bg-white" title="PDF" />
             ) : (
               <img src={previewDoc.url} alt="Doc" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
             )}
             <a 
               href={previewDoc.url} 
-              target="_blank" 
-              rel="noopener noreferrer" 
+              download={previewDoc.filename}
               className="absolute bottom-6 right-6 bg-primary text-white px-4 py-2 rounded-full font-bold shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform text-sm"
             >
               <span className="material-symbols-outlined text-sm">download</span> Descargar

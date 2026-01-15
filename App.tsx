@@ -99,6 +99,10 @@ const App: React.FC = () => {
                     // Revisor -> panel del operador
                     setCurrentStep(AppStep.OPERATOR_DASHBOARD);
                     return;
+                } else if (nextScreen === 'AdminDashboard') {
+                    // Administrador -> panel admin
+                    setCurrentStep(AppStep.ADMIN_DASHBOARD);
+                    return;
                 }
 
                 // --- MOCKS PARA PRUEBAS (Si no vino nextScreen, usamos la lógica anterior) ---
