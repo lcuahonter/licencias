@@ -94,6 +94,42 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     
     return () => { mounted = false; };
   }, [idUsuario, token]);
+
+  // --- CARGAR SOLICITUDES AL INICIAR ---
+  useEffect(() => {
+    if (!idUsuario || !token) return;
+    let mounted = true;
+
+    const loadSolicitudes = async () => {
+      try {
+        const resp = await solicitudService.getByUser(idUsuario, token);
+        const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
+        
+        if (mounted && solicitudes.length > 0 && (window as any).tempAddRequest) {
+          solicitudes.forEach((sol: any) => {
+            const request: LicenseRequest = {
+              id: String(sol.id),
+              type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
+                    sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
+              process: 'Primera Vez',
+              cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
+              date: new Date(sol.creacion).toLocaleDateString('es-MX'),
+              status: sol.numerolicencia ? 'completed' : 'paid_pending_docs',
+              folio: sol.folio || `DGO-${sol.id}`,
+              rejectedDocuments: [],
+              rawData: sol
+            };
+            (window as any).tempAddRequest(request);
+          });
+        }
+      } catch (error) {
+        console.warn('Error cargando solicitudes:', error);
+      }
+    };
+
+    loadSolicitudes();
+    return () => { mounted = false; };
+  }, [idUsuario, token]);
   
   // --- LICENCIAS Y TRÁMITES ---
   const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];

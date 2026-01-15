@@ -16,5 +16,13 @@ export const documentService = {
       body: { idusuario },
       token
     });
+  },
+
+  downloadDocumento: async (id: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.DOCUMENTOS.DOWNLOAD, {
+      method: 'POST',
+      body: { id },
+      token
+    });
   }
 };

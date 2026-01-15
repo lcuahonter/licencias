@@ -16,5 +16,12 @@ export const solicitudService = {
       body: { idUsuario },
       token
     });
+  },
+
+  getAllSolicitudes: async (token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.SOLICITUDES.GET_ALL, {
+      method: 'GET',
+      token
+    });
   }
 };

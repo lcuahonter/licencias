@@ -14,10 +14,15 @@ export const API_ENDPOINTS = {
   },
   DOCUMENTOS: {
     CREATE: '/api/documentos/createDocumento',
-    BY_USER: '/api/documentos/documentosByUsuario'
+    BY_USER: '/api/documentos/documentosByUsuario',
+    DOWNLOAD: '/api/documentos/downloadDocumento'
   },
   SOLICITUDES: {
     CREATE: '/api/solicitudes/createSolicitud',
-    BY_USER: '/api/solicitudes/solicitudesByIdUsuario'
+    BY_USER: '/api/solicitudes/solicitudesByIdUsuario',
+    GET_ALL: '/api/solicitudes/solicitudes'
+  },
+  REVISION: {
+    CREATE: '/createRevisionDocumentos'
   }
 };
