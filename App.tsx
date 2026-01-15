@@ -32,7 +32,7 @@ const App: React.FC = () => {
         await StatusBar.setBackgroundColor({ color: '#FFFFFF' }); 
         await StatusBar.setOverlaysWebView({ overlay: false }); 
       } catch (e) {
-        console.log("No estamos en móvil", e);
+        // No estamos en móvil
       }
     };
     configStatusBar();
@@ -79,7 +79,6 @@ const App: React.FC = () => {
                 
                 // 1. Guardar el ID si viene del login real
                 if (loginData.idUsuario) {
-                    console.log("🔑 ID Guardado en App:", loginData.idUsuario);
                     setUserId(loginData.idUsuario);
                 }
 
@@ -92,11 +91,8 @@ const App: React.FC = () => {
                 }
 
                 // 3. Decidir navegación basada en el token (Prioridad Alta)
-                if (nextScreen === 'DocumentUploadScreen') {
-                    // Si el token indica perfil incompleto o usuario, mandamos a cargar documentos
-                    setCurrentStep(AppStep.DOCUMENTS); 
-                    return;
-                } else if (nextScreen === 'Dashboard') {
+                if (nextScreen === 'Dashboard') {
+                    // Usuario con rol 2 va directo a Dashboard
                     setCurrentStep(AppStep.DASHBOARD);
                     return;
                 } else if (nextScreen === 'OperatorDashboard') {

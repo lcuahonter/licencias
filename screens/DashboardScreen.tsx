@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
+import DocumentUploadScreen from './DocumentUploadScreen';
 
 interface DashboardScreenProps {
   userData: UserData;
@@ -41,13 +42,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   // --- ESTADOS ---
   const [showNewReqModal, setShowNewReqModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   
   const [paymentStep, setPaymentStep] = useState<'select' | 'card' | 'cash'>('select');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'ventanilla' | null>(null);
   const [cardData, setCardData] = useState({ number: '', name: '', exp: '', cvv: '' });
   const [cardErrors, setCardErrors] = useState<{name?: string, exp?: string}>({});
   
   const [fixingRequest, setFixingRequest] = useState<LicenseRequest | null>(null);
-  const [fixedDocs, setFixedDocs] = useState<Record<string, boolean>>({}); 
+  const [fixedDocs, setFixedDocs] = useState<Record<string, boolean>>({});
   const [activeDocKey, setActiveDocKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -162,18 +165,43 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     setPaymentStep('select');
     setCardData({ number: '', name: '', exp: '', cvv: '' });
     setCardErrors({});
+    setSelectedPaymentMethod(null);
     setShowPaymentModal(true);
+  };
+
+  // Nueva función: Proceder a subir documentos después de seleccionar método de pago
+  const handleProceedToDocuments = (method: 'card' | 'ventanilla') => {
+      // Validaciones previas si es tarjeta
+      if (method === 'card') {
+          if (detectCardType(cardData.number) === 'unknown') { 
+              alert("Tarjeta no válida."); 
+              return; 
+          }
+          if (cardErrors.exp || cardData.exp.length < 5) { 
+              alert("Fecha incorrecta."); 
+              return; 
+          }
+      }
+
+      // Guardamos el método de pago seleccionado
+      setSelectedPaymentMethod(method);
+      
+      // Cerramos el modal de pago y abrimos el de documentos
+      setShowPaymentModal(false);
+      setShowDocumentsModal(true);
   };
 
   // =========================================================================
   // LOGICA PRINCIPAL: CREAR SOLICITUD + POLLING + SUBIR DOCUMENTOS
+  // Ahora recibe los documentos como parámetro desde el modal
   // =========================================================================
-  const finalizeRequest = async (method: 'card' | 'ventanilla') => {
-      // 1. Validaciones previas
-      if (method === 'card') {
-          if (detectCardType(cardData.number) === 'unknown') { alert("Tarjeta no válida."); return; }
-          if (cardErrors.exp || cardData.exp.length < 5) { alert("Fecha incorrecta."); return; }
+  const finalizeRequest = async (documentsData: any) => {
+      if (!selectedPaymentMethod) {
+          alert('No se seleccionó método de pago.');
+          return;
       }
+
+      const method = selectedPaymentMethod;
 
       if (!idUsuario) { alert('Usuario no identificado.'); return; }
 
@@ -193,7 +221,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         // PASO 1: CREAR LA SOLICITUD
         // -------------------------------------------------------------------
         await solicitudService.createSolicitud(payload, token);
-        console.log("1. Solicitud enviada a crear exitosamente.");
 
         // -------------------------------------------------------------------
         // PASO 2: RECUPERAR ID CON POLLING (EVITAR ERROR 204)
@@ -203,29 +230,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         
         let intentos = 0;
         const maxIntentos = 3;
-        const delayMs = 1500; // 1.5 segundos de espera entre intentos
+        const delayMs = 1500;
 
         while (intentos < maxIntentos && !idSolicitudReal) {
             intentos++;
-            console.log(`Intento ${intentos} de recuperar la solicitud... esperando DB.`);
             
-            // Espera obligatoria para dar tiempo a la BD
             await wait(delayMs);
 
             try {
                 const solicResp = await solicitudService.getByUser(idUsuario, token);
                 
-                // Mapeo defensivo de la respuesta
                 const listaRaw = solicResp?.data?.solicitudesData || solicResp?.data?.solicitudes;
                 
                 if (Array.isArray(listaRaw) && listaRaw.length > 0) {
-                    // Ordenamos descendente por ID (el más alto es el nuevo)
                     const sortedList = listaRaw.sort((a: any, b: any) => b.id - a.id);
                     const ultimaSolicitud = sortedList[0];
                     
                     idSolicitudReal = ultimaSolicitud.id;
                     solicitudDataCompleta = ultimaSolicitud;
-                    console.log(`> Solicitud encontrada en intento ${intentos}. ID: ${idSolicitudReal}`);
                 } else {
                     console.warn(`> Intento ${intentos}: Respuesta vacía o 204.`);
                 }
@@ -234,12 +256,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             }
         }
 
-        // Si después de 3 intentos no aparece, alertamos pero no bloqueamos la app
         if (!idSolicitudReal) {
             alert("La solicitud se creó, pero el sistema está tardando en procesarla. Verifica tu historial en unos minutos.");
             setIsSubmittingRequest(false);
-            setShowPaymentModal(false);
-            setShowNewReqModal(false);
+            setShowDocumentsModal(false);
             return;
         }
 
@@ -257,57 +277,50 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             rejectedDocuments: [],
             rawData: solicitudDataCompleta
         };
-        // Método temporal para actualizar la vista sin recargar
         (window as any).tempAddRequest(newRequest);
-        
-        setShowPaymentModal(false);
-        setShowNewReqModal(false);
 
         // -------------------------------------------------------------------
         // PASO 4: SUBIR DOCUMENTOS
         // -------------------------------------------------------------------
-        // Verificamos si hay documentos en memoria cargados desde DocumentUploadScreen
-        if ((userData as any).documents && Array.isArray((userData as any).documents)) {
-            console.log(`Iniciando carga automática de documentos al ID ${idSolicitudReal}...`);
-            const userDocs = (userData as any).documents;
-            
-            // Contador para feedback simple
-            let docsOk = 0;
+        const userDocs = documentsData?.documents || [];
+        
+        let docsOk = 0;
 
-            for (const doc of userDocs) {
-                if (!doc.archivoBase64) continue;
+        for (const doc of userDocs) {
+            if (!doc.archivoBase64) continue;
 
-                const payloadDoc = {
-                    idusuario: idUsuario,
-                    idsolicitud: idSolicitudReal, // Usamos el ID recuperado
-                    idtipodocumento: doc.idtipodocumento,
-                    formato: doc.formato || 'jpg',
-                    nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}`,
-                    tamanio: doc.tamanio || 0,
-                    archivoBase64: doc.archivoBase64
-                };
+            const payloadDoc = {
+                idusuario: idUsuario,
+                idsolicitud: idSolicitudReal,
+                idtipodocumento: doc.idtipodocumento,
+                formato: doc.formato || 'jpg',
+                nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}`,
+                tamanio: doc.tamanio || 0,
+                archivoBase64: doc.archivoBase64
+            };
 
-                try {
-                    await documentService.createDocumento(payloadDoc, token);
-                    docsOk++;
-                } catch (derr: any) {
-                    console.error(`Error subiendo doc ${doc.idtipodocumento}`, derr);
-                    if (derr.isAuthError) {
-                        alert('Sesión expirada durante la carga de documentos.');
-                        onLogout();
-                        return;
-                    }
+            try {
+                await documentService.createDocumento(payloadDoc, token);
+                docsOk++;
+            } catch (derr: any) {
+                console.error(`Error subiendo doc ${doc.idtipodocumento}`, derr);
+                if (derr.isAuthError) {
+                    alert('Sesión expirada durante la carga de documentos.');
+                    onLogout();
+                    return;
                 }
             }
-            
-            if (docsOk > 0) {
-                alert(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
-            } else {
-                alert("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
-            }
-        } else {
-            console.log("No hay documentos en memoria para subir automáticamente.");
         }
+        
+        if (docsOk > 0) {
+            alert(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
+        } else {
+            alert("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
+        }
+
+        // Cerrar modal y limpiar estados
+        setShowDocumentsModal(false);
+        setSelectedPaymentMethod(null);
 
       } catch (err: any) {
         console.error('Error Crítico al Finalizar:', err);
@@ -323,23 +336,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   // --- DEMO HELPERS (Mocks para UI) ---
-  const handleDemoApprove = (reqId: string) => {
-    if(window.confirm("DEMO: ¿Aprobar?")) {
-        const req = activeProcessList.find(r => r.id === reqId);
-        if (req) {
-            const oldLicenses = activeLicenses.filter(l => l.type === req.type);
-            oldLicenses.forEach(old => (window as any).tempUpdateRequestData(old.id, { status: 'replaced' }));
-            setTimeout(() => (window as any).tempUpdateRequestData(reqId, { status: 'completed' }), 100);
-        }
-    }
-  };
-  
-  const handleDemoRejection = (reqId: string) => {
-      if(!window.confirm("DEMO: ¿Rechazar?")) return;
-      (window as any).tempUpdateRequestData(reqId, { status: 'rejected', rejectedDocuments: ['photo'] });
-  };
-  
-  const generatePaymentSlip = () => { finalizeRequest('ventanilla'); };
   
   const handleOpenFixModal = (req: LicenseRequest) => { setFixingRequest(req); setFixedDocs({}); };
   
@@ -357,7 +353,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
                 {userData.photo ? <img src={userData.photo} className="w-full h-full object-cover" alt="User" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><span className="material-symbols-outlined">person</span></div>}
             </div>
-            <div><h1 className="text-lg font-black text-gray-900 dark:text-white">Mi Billetera</h1><p className="text-xs text-gray-500">Licencias Digitales Durango</p></div>
+            <div><h1 className="text-lg font-black text-gray-900 dark:text-white">Mis Licencias</h1><p className="text-xs text-gray-500">Licencias Digitales Durango</p></div>
         </div>
         <button onClick={onLogout} className="text-gray-400 hover:text-red-500 bg-gray-100 p-2 rounded-full"><span className="material-symbols-outlined">logout</span></button>
       </header>
@@ -418,13 +414,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
                             </div>
                             {req.status === 'rejected' && req.rejectedDocuments && (<div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100"><div className="font-bold flex items-center gap-1 mb-1"><span className="material-symbols-outlined text-sm">error</span> Acción Requerida:</div><ul className="list-disc list-inside font-bold">{req.rejectedDocuments.map(doc => <li key={doc}>{DOC_LABELS[doc] || doc}</li>)}</ul></div>)}
-                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                                {req.status === 'rejected' ? (
-                                    <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
-                                ) : (
-                                    <><button onClick={() => handleDemoRejection(req.id)} className="text-xs font-bold text-red-500 px-3 py-1.5 flex items-center gap-1"><span className="material-symbols-outlined text-sm">thumb_down</span> Rechazar</button><button onClick={() => handleDemoApprove(req.id)} className="text-xs font-bold text-green-600 px-3 py-1.5 flex items-center gap-1"><span className="material-symbols-outlined text-sm">check_circle</span> Aceptar</button></>
-                                )}
-                            </div>
+                            {req.status === 'rejected' && (
+                              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
+                                  <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
+                              </div>
+                            )}
                         </div>
                       );
                     })}
@@ -532,8 +526,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400 ml-1">CVV</label><input type="password" maxLength={3} value={cardData.cvv} onChange={(e) => setCardData({...cardData, cvv: e.target.value.replace(/\D/g,'')})} placeholder="123" className="w-full h-11 px-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 outline-none focus:border-primary text-center font-mono text-sm" /></div>
                                 </div>
                             </div>
-                            <button onClick={() => finalizeRequest('card')} disabled={!cardData.number || !cardData.cvv || !!cardErrors.exp || isSubmittingRequest} className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isSubmittingRequest ? 'Procesando...' : 'Pagar Ahora'} <span className="material-symbols-outlined text-sm">lock</span>
+                            <button onClick={() => handleProceedToDocuments('card')} disabled={!cardData.number || !cardData.cvv || !!cardErrors.exp || isSubmittingRequest} className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-sm shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSubmittingRequest ? 'Procesando...' : 'Continuar a Documentos'} <span className="material-symbols-outlined text-sm">arrow_forward</span>
                             </button>
                         </div>
                     )}
@@ -542,7 +536,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto text-primary mb-2"><span className="material-symbols-outlined text-4xl">print</span></div>
                             <div><h3 className="text-lg font-black text-gray-900 dark:text-white">Ficha de Pago</h3><p className="text-gray-500 text-xs leading-relaxed px-4">Descarga e imprime tu ficha para pagar en cualquier banco o tienda de conveniencia.</p></div>
                             <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-600"><p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Referencia Única</p><p className="text-xl font-mono font-bold text-gray-900 dark:text-white tracking-widest">DGO-{Math.floor(Math.random() * 10000)}</p></div>
-                            <button onClick={generatePaymentSlip} disabled={isSubmittingRequest} className="w-full h-12 bg-primary text-white rounded-xl font-bold text-sm shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"><span className="material-symbols-outlined">download</span> {isSubmittingRequest ? 'Generando...' : 'Descargar PDF'}</button>
+                            <button onClick={() => handleProceedToDocuments('ventanilla')} disabled={isSubmittingRequest} className="w-full h-12 bg-primary text-white rounded-xl font-bold text-sm shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2">Continuar a Documentos <span className="material-symbols-outlined">arrow_forward</span></button>
                         </div>
                     )}
                 </div>
@@ -570,6 +564,41 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
       )}
       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" style={{ display: 'none' }} accept="application/pdf,image/*" />
+
+      {/* MODAL SUBIR DOCUMENTOS */}
+      {showDocumentsModal && (
+        <div className="absolute inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-surface-dark w-full max-w-4xl h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                {/* Header */}
+                <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                    <div>
+                        <h2 className="text-xl font-black text-gray-900 dark:text-white">Documentación Requerida</h2>
+                        <p className="text-xs text-gray-500 mt-1">Sube los documentos necesarios para tu solicitud</p>
+                    </div>
+                    <button onClick={() => setShowDocumentsModal(false)} className="bg-gray-200 dark:bg-gray-800 p-2 rounded-full text-gray-500 hover:text-gray-900">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                {/* Body - DocumentUploadScreen integrado */}
+                <div className="flex-1 overflow-hidden">
+                    <DocumentUploadScreen
+                        idUsuario={idUsuario}
+                        token={token}
+                        onSessionExpired={onLogout}
+                        onBack={() => {
+                            setShowDocumentsModal(false);
+                            setShowPaymentModal(true);
+                        }}
+                        onContinue={(documentsData) => {
+                            // Cuando el usuario confirma los documentos, finalizamos la solicitud
+                            finalizeRequest(documentsData);
+                        }}
+                    />
+                </div>
+            </div>
+        </div>
+      )}
 
     </div>
   );

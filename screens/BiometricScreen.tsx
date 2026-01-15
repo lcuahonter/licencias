@@ -7,22 +7,16 @@ import Webcam from 'react-webcam';
 
 const sendLivenessVideo = async (videoBlob: Blob) => {
     try {
-        console.log("1. Preparando envio de video...");
-      
         // NOTA: Idealmente esto va a tu Backend intermedio, no directo a Azure desde el cliente
         const BACKEND_URL = "https://dgofacerecognition.cognitiveservices.azure.com/face/v1.0/liveness/detect"; 
         
         const formData = new FormData();
-        formData.append('video', videoBlob, 'liveness_check.webm'); 
-
-        console.log(`Tamano del video: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
+        formData.append('video', videoBlob, 'liveness_check.webm');
 
         const response = await fetch(BACKEND_URL, {
             method: 'POST',
             body: formData
         });
-
-        console.log("2. Estatus HTTP:", response.status);
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -101,7 +95,6 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
 
             mediaRecorderRef.current = recorder;
             recorder.start();
-            console.log("Grabando...");
 
         } catch (err: any) {
             console.error("Error iniciando grabadora:", err);
@@ -116,7 +109,6 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
-        console.log("Grabacion detenida");
     }
   }, []);
 
@@ -142,7 +134,6 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
       if (isScanning) stopRecording();
       
       // Simular exito enviando una imagen dummy
-      console.log("Omitiendo prueba de vida...");
       onComplete("https://via.placeholder.com/400x400?text=Prueba+Omitida");
   };
 

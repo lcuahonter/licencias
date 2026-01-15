@@ -12,12 +12,11 @@ interface DocumentUploadScreenProps {
 }
 
 // Tipos de identificación disponibles
-type IdType = 'ine' | 'passport' | 'cedula';
+type IdType = 'ine' | 'passport';
 
 const ID_OPTIONS: { id: IdType; label: string; icon: string }[] = [
   { id: 'ine', label: 'INE / IFE', icon: 'id_card' },
   { id: 'passport', label: 'Pasaporte', icon: 'book_2' },
-  { id: 'cedula', label: 'Cédula Prof.', icon: 'badge' },
 ];
 
 import { catalogService } from '../src/api/catalogService';
@@ -51,7 +50,6 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
         // El servicio puede devolver varias formas: { data: { catDocumentos: [...] } } o { data: [...] }
         const arr = resp?.data?.catDocumentos ?? resp?.data ?? resp?.catDocumentos ?? resp;
         if (mounted && Array.isArray(arr)) {
-          console.log('Catálogo de documentos recibido:', arr);
           setDocsCatalog(arr);
         }
       })
@@ -122,14 +120,22 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       <div key={fieldKey} className="animate-in fade-in zoom-in duration-300"> 
         {/* Título y descripción - solo si showHeader es true */}
         {showHeader && (
-          <div className="mb-2 flex flex-col sm:flex-row items-start justify-between gap-2">
+          <div className="mb-2 flex items-start gap-2">
             <div className="flex-1 min-w-0">
-              <h4 className={`text-xs font-bold uppercase ${isError ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>{titulo}</h4>
-              {descripcion && <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 break-words">{descripcion}</p>}
+              <h4 className={`text-xs font-bold uppercase ${isError ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>
+                {titulo}
+                {isMandatory && <span className="text-red-500 ml-1">*</span>}
+              </h4>
             </div>
-            {/* Badge de Obligatorio solo para obligatorios */}
-            {isMandatory && (
-              <div className={`text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap bg-red-50 text-red-700 flex-shrink-0`}>Obligatorio</div>
+            {/* Icono de ayuda con tooltip para descripción */}
+            {descripcion && (
+              <div className="group relative flex-shrink-0">
+                <span className="material-symbols-outlined text-sm text-gray-400 cursor-help">help</span>
+                <div className="invisible group-hover:visible absolute right-0 top-6 z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl">
+                  {descripcion}
+                  <div className="absolute -top-1 right-2 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -250,7 +256,6 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     switch (idType) {
       case 'ine': return [8, 9]; // INE Frente y Reverso
       case 'passport': return [11]; // Pasaporte
-      case 'cedula': return [12]; // Cédula Profesional
       default: return [];
     }
   };
@@ -312,7 +317,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
            {/* SELECTOR DE TIPO DE ID */}
            <div className="mb-8">
               <p className="text-xs font-bold uppercase text-gray-400 mb-3">Tipo de Identificación</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {ID_OPTIONS.map((opt) => {
                   const isSelected = selectedIdType === opt.id;
                   return (
@@ -372,13 +377,23 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                          
                          return (
                            <div key={fieldKey} className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 transition-all flex flex-col h-full">
-                             <div className="flex flex-col sm:flex-row items-start justify-between gap-3 flex-1">
+                             <div className="flex items-start gap-3 flex-1">
                                <div className="flex-1 min-w-0">
                                  <h4 className="font-bold text-sm">{titulo}</h4>
-                                 <p className="text-xs text-gray-500 mt-1 break-words">{descripcion}</p>
                                </div>
                                
-                               <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-2 sm:mt-0">
+                               {/* Icono de ayuda con tooltip para descripción */}
+                               {descripcion && (
+                                 <div className="group relative flex-shrink-0">
+                                   <span className="material-symbols-outlined text-sm text-gray-400 cursor-help">help</span>
+                                   <div className="invisible group-hover:visible absolute right-0 top-6 z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl">
+                                     {descripcion}
+                                     <div className="absolute -top-1 right-2 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+                                   </div>
+                                 </div>
+                               )}
+                               
+                               <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                                   <input 
                                     type="checkbox" 
                                     className="sr-only peer" 
@@ -407,13 +422,21 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
              {/* DISCAPACIDAD */}
              <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 transition-all mt-4">
-               <div className="flex items-center justify-between mb-4">
-                 <div>
+               <div className="flex items-start gap-3 mb-4">
+                 <div className="flex-1">
                    <h3 className="font-bold text-sm">¿Tienes alguna discapacidad?</h3>
-                   <p className="text-xs text-gray-500">Habilita para adjuntar certificado.</p>
                  </div>
                  
-                 <label className="relative inline-flex items-center cursor-pointer">
+                 {/* Icono de ayuda con tooltip */}
+                 <div className="group relative flex-shrink-0">
+                   <span className="material-symbols-outlined text-sm text-gray-400 cursor-help">help</span>
+                   <div className="invisible group-hover:visible absolute right-0 top-6 z-50 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl">
+                     Habilita para adjuntar certificado médico de discapacidad.
+                     <div className="absolute -top-1 right-2 w-2 h-2 bg-gray-900 transform rotate-45"></div>
+                   </div>
+                 </div>
+                 
+                 <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                     <input 
                       type="checkbox" 
                       className="sr-only peer" 

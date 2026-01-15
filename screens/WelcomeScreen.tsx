@@ -37,16 +37,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       // 1. Encriptar password a MD5
       const md5Password = MD5(password).toString();
 
-      console.log("Enviando credenciales...");
-
       // 2. Usar el servicio de autenticación
       // El apiClient se encarga de lanzar excepciones si hay error (codes != 200)
       const data = await authService.login({
         username: email,
         password: md5Password 
       });
-
-      console.log("Respuesta Backend:", data);
 
       // 3. Procesar Token
       const tokenString = data.token || data.data?.token; 
@@ -58,7 +54,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       // 4. Decodificar Token para obtener ID y Perfil
       try {
           const decoded = jwtDecode<DecodedToken>(tokenString);
-          console.log("Token decodificado:", decoded);
 
           // Priorizar rol cuando venga en el token (ahora es ID: 3=Operador, 2=Usuario, 1=Admin)
           let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard' | 'AdminDashboard' = 'Dashboard';
@@ -75,9 +70,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
               let userFresh: any = null;
               try {
                 const u = await userService.getUsuarioById(decoded.aData, tokenString);
-                console.log("Respuesta getUsuarioById:", u);
                 userFresh = u?.data?.usuario ?? u?.data ?? null;
-                console.log("UserFresh extraído:", userFresh);
               } catch (e) {
                 console.warn('No fue posible recuperar usuario al login:', e);
               }
@@ -86,20 +79,16 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
               let hasDocs = true;
               try {
                 const docsResp = await documentService.getByUser(decoded.aData, tokenString);
-                console.log("Respuesta getByUser documentos:", docsResp);
                 const docsCode = docsResp?.code || docsResp?.data?.code;
                 hasDocs = docsCode === '200';
               } catch (e) {
                 console.warn('Error consultando documentos del usuario:', e);
                 hasDocs = true;
               }
-
-              console.log(`Perfil: ${userFresh?.perfil}, tieneDocs: ${hasDocs}`);
-              if (userFresh?.perfil === 'Incompleto') {
-                destino = 'DocumentUploadScreen';
-              } else {
-                destino = hasDocs ? 'Dashboard' : 'DocumentUploadScreen';
-              }
+              
+              // Si perfil está incompleto O no tiene documentos, ir al Dashboard
+              // El Dashboard ya maneja el banner rojo para perfil incompleto
+              destino = 'Dashboard';
 
               // Inyectamos información real del usuario al payload
               onStart({ 
@@ -113,7 +102,6 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
                 phone: userFresh?.telefono || undefined,
               }, destino);
 
-              console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData}, rolId: ${rolId}, perfil: ${userFresh?.perfil}, tieneDocs: ${hasDocs})`);
               return;
           }
 
