@@ -23,5 +23,13 @@ export const solicitudService = {
       method: 'GET',
       token
     });
+  },
+
+  createRevision: async (payload: any, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.CREATE, {
+      method: 'POST',
+      body: payload,
+      token
+    });
   }
 };
