@@ -26,6 +26,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   const [docReasons, setDocReasons] = useState<Record<number, string>>({});
   const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [documentosRevisados, setDocumentosRevisados] = useState<Record<number, any>>({});
 
   // --- CARGAR SOLICITUDES Y VALIDAR ESTADO ---
   useEffect(() => {
@@ -98,6 +99,20 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         const revisionData = revResp?.data?.revisionesData?.[0] || revResp?.data?.revisiones?.[0];
         setRevisionActual(revisionData);
         console.log('📋 Datos de revisión obtenidos:', revisionData);
+
+        // Obtener documentos ya revisados para esta revisión
+        if (revisionData?.id) {
+          const docsRevResp = await revisionService.revisionesDocumentosByRevision(revisionData.id, token);
+          const docsRevisados = docsRevResp?.data?.revisionesDocumentosData || docsRevResp?.data?.documentos || [];
+          
+          // Crear un mapa de documentos revisados por iddocumento
+          const revisadosMap: Record<number, any> = {};
+          docsRevisados.forEach((doc: any) => {
+            revisadosMap[doc.iddocumento] = doc;
+          });
+          setDocumentosRevisados(revisadosMap);
+          console.log('📄 Documentos revisados obtenidos:', revisadosMap);
+        }
       }
 
       const resp = await documentService.getByUser(solicitud.idusuario, token);
@@ -122,6 +137,11 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   };
 
   const handleSetDocStatus = (docId: number, status: 'accepted' | 'rejected') => {
+    // No permitir cambiar el estado si el documento ya fue revisado
+    if (documentosRevisados[docId]?.idestatus === 14 || documentosRevisados[docId]?.idestatus === 15) {
+      return;
+    }
+    
     setDocStatus(prev => ({ ...prev, [docId]: status }));
     if (status === 'accepted') {
       setDocReasons(prev => ({ ...prev, [docId]: '' }));
@@ -377,8 +397,26 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                 <div className="space-y-3">
                   {documentos.map((doc) => {
                     const status = docStatus[doc.id];
+                    const docRevisado = documentosRevisados[doc.id];
+                    const yaRevisado = docRevisado && (docRevisado.idestatus === 14 || docRevisado.idestatus === 15 || docRevisado.idestatus === 13);
+                    
+                    // Determinar el color y leyenda según el estado
+                    let estatusLeyenda = '';
+                    let estatusColor = '';
+                    if (docRevisado?.idestatus === 14) {
+                      estatusLeyenda = 'Aprobado';
+                      estatusColor = 'text-red-600 bg-red-50 border-red-200';
+                    } else if (docRevisado?.idestatus === 15) {
+                      estatusLeyenda = 'Rechazado';
+                      estatusColor = 'text-green-600 bg-green-50 border-green-200';
+                    } else if (docRevisado?.idestatus === 13) {
+                      estatusLeyenda = 'Reemplazado';
+                      estatusColor = 'text-blue-600 bg-blue-50 border-blue-200';
+                    }
+
                     return (
                       <div key={doc.id} className={`p-3 rounded-lg border-2 transition-all ${
+                        yaRevisado ? estatusColor :
                         status === 'rejected' ? 'border-red-200 bg-red-50/50' : 
                         status === 'accepted' ? 'border-green-200 bg-green-50/50' : 
                         'border-gray-200 bg-white'
@@ -398,30 +436,36 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                               </button>
                             </div>
                           </div>
-                          <div className="flex gap-1">
-                            <button 
-                              onClick={() => handleSetDocStatus(doc.id, 'rejected')} 
-                              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                                status === 'rejected' 
-                                  ? 'bg-red-600 text-white shadow-lg scale-110' 
-                                  : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500'
-                              }`}
-                            >
-                              <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                            <button 
-                              onClick={() => handleSetDocStatus(doc.id, 'accepted')} 
-                              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                                status === 'accepted' 
-                                  ? 'bg-green-600 text-white shadow-lg scale-110' 
-                                  : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-500'
-                              }`}
-                            >
-                              <span className="material-symbols-outlined text-sm">check</span>
-                            </button>
-                          </div>
+                          {yaRevisado ? (
+                            <div className="px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+                              {estatusLeyenda}
+                            </div>
+                          ) : (
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => handleSetDocStatus(doc.id, 'rejected')} 
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                                  status === 'rejected' 
+                                    ? 'bg-red-600 text-white shadow-lg scale-110' 
+                                    : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-sm">close</span>
+                              </button>
+                              <button 
+                                onClick={() => handleSetDocStatus(doc.id, 'accepted')} 
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                                  status === 'accepted' 
+                                    ? 'bg-green-600 text-white shadow-lg scale-110' 
+                                    : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-500'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-sm">check</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        {status === 'rejected' && (
+                        {status === 'rejected' && !yaRevisado && (
                           <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[9px] font-bold uppercase text-red-600 mb-1 block">
                               Motivo de Rechazo (Obligatorio)

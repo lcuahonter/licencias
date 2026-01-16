@@ -31,5 +31,13 @@ export const revisionService = {
       body: payload,
       token
     });
+  },
+
+  revisionesDocumentosByRevision: async (idrevision: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.DOCUMENTOS_BY_REVISION, {
+      method: 'POST',
+      body: { idrevision },
+      token
+    });
   }
 };
