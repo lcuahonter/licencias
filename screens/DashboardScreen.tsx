@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
 import DocumentUploadScreen from './DocumentUploadScreen';
+import ExamScreen from './ExamScreen';
 
 interface DashboardScreenProps {
   userData: UserData;
@@ -44,6 +45,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [showNewReqModal, setShowNewReqModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
+  const [showExamModal, setShowExamModal] = useState(false);
+  const [selectedExamSolicitudId, setSelectedExamSolicitudId] = useState<number | null>(null);
   
   const [paymentStep, setPaymentStep] = useState<'select' | 'card' | 'cash'>('select');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'ventanilla' | null>(null);
@@ -103,6 +106,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     const loadSolicitudes = async () => {
       try {
+        // Limpiar solicitudes anteriores antes de cargar nuevas
+        if ((window as any).tempClearRequests) {
+          (window as any).tempClearRequests();
+        }
+        
         const resp = await solicitudService.getByUser(idUsuario, token);
         const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
         
@@ -689,6 +697,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                   <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
                               </div>
                             )}
+                            
+                            {/* Botón para examen teórico */}
+                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+                              <button 
+                                onClick={() => {
+                                  setSelectedExamSolicitudId(Number(req.id));
+                                  setShowExamModal(true);
+                                }}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-sm">quiz</span> 
+                                Realizar Examen Teórico
+                              </button>
+                            </div>
                         </div>
                       );
                     })}
@@ -871,6 +893,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
             </div>
         </div>
+      )}
+
+      {/* MODAL EXAMEN TEÓRICO */}
+      {showExamModal && selectedExamSolicitudId && (
+        <ExamScreen
+          solicitudId={selectedExamSolicitudId}
+          onClose={() => {
+            setShowExamModal(false);
+            setSelectedExamSolicitudId(null);
+          }}
+        />
       )}
 
     </div>

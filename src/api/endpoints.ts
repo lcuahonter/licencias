@@ -28,5 +28,10 @@ export const API_ENDPOINTS = {
     BY_SOLICITUD: '/api/revisiones/revisionesBySolicitud',
     CREATE_DOCUMENTOS: '/createRevisionDocumentos',
     DOCUMENTOS_BY_REVISION: '/revisionesDocumentosByRevision'
+  },
+  EXAM: {
+    OBTENER_PREGUNTAS: '/api/pruebas/examen-teorico/obtener-preguntas',
+    ENVIAR_RESPUESTAS: '/api/pruebas/examen-teorico/enviar-respuestas',
+    VERIFICAR_RESULTADO: '/api/pruebas/examen-teorico/verificar-resultado'
   }
 };
