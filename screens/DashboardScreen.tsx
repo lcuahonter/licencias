@@ -107,7 +107,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
         
         if (mounted && solicitudes.length > 0 && (window as any).tempAddRequest) {
-          // Procesar cada solicitud y determinar su estado
+          // Procesar cada solicitud y determinar su estado REAL consultando los documentos
           for (const sol of solicitudes) {
             const idestatus = sol.idestatus;
             
@@ -115,14 +115,76 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             if (![22, 23, 24, 25].includes(idestatus)) continue;
             
             let status: any = 'pending';
-            let rejectedDocuments: string[] = [];
+            let rejectedDocuments: any[] = [];
             
-            // Determinar status visual
-            if (idestatus === 24) {
-              status = 'completed'; // Aprobada - mostrar licencia
+            // Para TODAS las solicitudes, verificar el estado REAL de los documentos usando los endpoints
+            try {
+              console.log(`📋 Verificando documentos para solicitud ${sol.id} (estado solicitud: ${idestatus})`);
               
-              // Agregar a las solicitudes con status completed
-              // Automáticamente aparecerá en activeLicenses
+              // 1. Obtener revisiones usando /api/revisiones/revisionesBySolicitud
+              const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+              console.log(`📄 Respuesta revisionesBySolicitud:`, revResp);
+              
+              const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
+              const revision = revisionesData[0];
+              
+              if (revision?.id) {
+                console.log(`🔍 Revisión encontrada ID: ${revision.id}`);
+                
+                // 2. Obtener documentos de revisión usando /revisionesDocumentosByRevision
+                const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+                console.log(`📎 Respuesta revisionesDocumentosByRevision:`, docsResp);
+                
+                const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
+                console.log(`📑 Total documentos: ${docs.length}`);
+                
+                // 3. Analizar estado REAL de cada documento (idestatus: 13=Actualizado, 14=Aprobado, 15=Rechazado)
+                const aprobados = docs.filter((d: any) => d.idestatus === 14);
+                const rechazados = docs.filter((d: any) => d.idestatus === 15);
+                const actualizados = docs.filter((d: any) => d.idestatus === 13);
+                
+                console.log(`✅ Aprobados: ${aprobados.length}, ❌ Rechazados: ${rechazados.length}, 🔄 Actualizados: ${actualizados.length}`);
+                
+                // 4. Determinar estado REAL basado en documentos (esto sobrescribe el estado de la solicitud)
+                if (rechazados.length > 0) {
+                  // HAY documentos rechazados - FORZAR estado rechazado
+                  status = 'rejected';
+                  rejectedDocuments = rechazados.map((d: any) => ({
+                    iddocumento: d.iddocumento,
+                    tipodocumento: d.tipodocumento || d.documento || 'Documento',
+                    comentarios: d.comentarios || 'Sin comentarios'
+                  }));
+                  console.log(`🔴 ESTADO REAL: RECHAZADA (${rechazados.length} docs rechazados)`);
+                } else if (aprobados.length > 0 && docs.length === aprobados.length) {
+                  // TODOS aprobados - FORZAR estado completado
+                  status = 'completed';
+                  console.log(`🟢 ESTADO REAL: APROBADA (todos los docs aprobados)`);
+                } else if (actualizados.length > 0) {
+                  // Hay documentos actualizados pendientes de revisión
+                  status = 'paid_pending_docs';
+                  console.log(`🟡 ESTADO REAL: EN REVISIÓN (docs actualizados)`);
+                } else {
+                  // Sin documentos o en proceso
+                  status = 'paid_pending_docs';
+                  console.log(`🟡 ESTADO REAL: EN REVISIÓN`);
+                }
+              } else {
+                // No hay revisión - usar estado de solicitud como fallback
+                console.log(`⚠️ Sin revisión - usando estado solicitud: ${idestatus}`);
+                if (idestatus === 24) status = 'completed';
+                else if (idestatus === 25) status = 'rejected';
+                else status = 'paid_pending_docs';
+              }
+            } catch (err) {
+              console.warn(`❌ Error verificando docs solicitud ${sol.id}:`, err);
+              // Fallback al estado de la solicitud si falla la consulta
+              if (idestatus === 24) status = 'completed';
+              else if (idestatus === 25) status = 'rejected';
+              else status = 'paid_pending_docs';
+            }
+            
+            // Si status final es completed, agregar como licencia
+            if (status === 'completed') {
               const licenseData: LicenseRequest = {
                 id: String(sol.id),
                 type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
@@ -135,39 +197,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 rejectedDocuments: [],
                 rawData: sol
               };
-              
               (window as any).tempAddRequest(licenseData);
-              
-              // No mostrar en procesos activos
-              continue;
-            } else if (idestatus === 25) {
-              status = 'rejected'; // Rechazada - mostrar en rojo
-              
-              // Obtener documentos rechazados
-              try {
-                const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
-                const revision = revResp?.data?.revisionesData?.[0];
-                
-                if (revision?.id) {
-                  const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
-                  const docs = docsResp?.data?.revisionesDocumentosData || [];
-                  
-                  // Filtrar documentos rechazados (idestatus 15)
-                  rejectedDocuments = docs
-                    .filter((d: any) => d.idestatus === 15)
-                    .map((d: any) => ({
-                      iddocumento: d.iddocumento,
-                      tipodocumento: d.tipodocumento,
-                      comentarios: d.comentarios
-                    }));
-                }
-              } catch (err) {
-                console.warn('Error obteniendo documentos rechazados:', err);
-              }
-            } else if (idestatus === 22 || idestatus === 23) {
-              status = 'paid_pending_docs'; // Pendiente - mostrar en amarillo
+              continue; // No mostrar en procesos activos
             }
             
+            // Para estados no completados, agregar como proceso activo
             const request: LicenseRequest = {
               id: String(sol.id),
               type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
