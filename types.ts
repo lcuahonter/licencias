@@ -28,9 +28,9 @@ export interface LicenseRequest {
   status: RequestStatus;
   folio: string;
   
-  // NUEVO: Lista de documentos rechazados (ej: ['ineFront', 'photo'])
-  // Esto es necesario para el modal de corrección
-  rejectedDocuments?: string[]; 
+  // NUEVO: Lista de documentos rechazados
+  // Puede ser un array de strings (para compatibilidad) o un array de objetos con detalles
+  rejectedDocuments?: (string | { iddocumento: number; tipodocumento: string; comentarios?: string })[]; 
   
   // NUEVO: Datos crudos del endpoint /api/solicitudes/solicitudesByIdUsuario
   rawData?: any;

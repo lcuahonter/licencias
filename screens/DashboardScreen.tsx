@@ -28,6 +28,7 @@ const DOC_LABELS: Record<string, string> = {
 import { solicitudService } from '../src/api/solicitudService';
 import { documentService } from '../src/api/documentService';
 import { userService } from '../src/api/userService';
+import { revisionService } from '../src/api/revisionService';
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ 
   userData, 
@@ -50,7 +51,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [cardErrors, setCardErrors] = useState<{name?: string, exp?: string}>({});
   
   const [fixingRequest, setFixingRequest] = useState<LicenseRequest | null>(null);
-  const [fixedDocs, setFixedDocs] = useState<Record<string, boolean>>({});
+  const [fixedDocs, setFixedDocs] = useState<Record<string, any>>({});
   const [activeDocKey, setActiveDocKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,7 +107,67 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
         
         if (mounted && solicitudes.length > 0 && (window as any).tempAddRequest) {
-          solicitudes.forEach((sol: any) => {
+          // Procesar cada solicitud y determinar su estado
+          for (const sol of solicitudes) {
+            const idestatus = sol.idestatus;
+            
+            // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Aprobada), 25 (Rechazada)
+            if (![22, 23, 24, 25].includes(idestatus)) continue;
+            
+            let status: any = 'pending';
+            let rejectedDocuments: string[] = [];
+            
+            // Determinar status visual
+            if (idestatus === 24) {
+              status = 'completed'; // Aprobada - mostrar licencia
+              
+              // Agregar a las solicitudes con status completed
+              // Automáticamente aparecerá en activeLicenses
+              const licenseData: LicenseRequest = {
+                id: String(sol.id),
+                type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
+                      sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
+                process: 'Primera Vez',
+                cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
+                date: new Date(sol.creacion).toLocaleDateString('es-MX'),
+                status: 'completed',
+                folio: sol.numerolicencia || sol.folio || `DGO-${sol.id}`,
+                rejectedDocuments: [],
+                rawData: sol
+              };
+              
+              (window as any).tempAddRequest(licenseData);
+              
+              // No mostrar en procesos activos
+              continue;
+            } else if (idestatus === 25) {
+              status = 'rejected'; // Rechazada - mostrar en rojo
+              
+              // Obtener documentos rechazados
+              try {
+                const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+                const revision = revResp?.data?.revisionesData?.[0];
+                
+                if (revision?.id) {
+                  const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+                  const docs = docsResp?.data?.revisionesDocumentosData || [];
+                  
+                  // Filtrar documentos rechazados (idestatus 15)
+                  rejectedDocuments = docs
+                    .filter((d: any) => d.idestatus === 15)
+                    .map((d: any) => ({
+                      iddocumento: d.iddocumento,
+                      tipodocumento: d.tipodocumento,
+                      comentarios: d.comentarios
+                    }));
+                }
+              } catch (err) {
+                console.warn('Error obteniendo documentos rechazados:', err);
+              }
+            } else if (idestatus === 22 || idestatus === 23) {
+              status = 'paid_pending_docs'; // Pendiente - mostrar en amarillo
+            }
+            
             const request: LicenseRequest = {
               id: String(sol.id),
               type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
@@ -114,13 +175,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               process: 'Primera Vez',
               cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
               date: new Date(sol.creacion).toLocaleDateString('es-MX'),
-              status: sol.numerolicencia ? 'completed' : 'paid_pending_docs',
+              status: status,
               folio: sol.folio || `DGO-${sol.id}`,
-              rejectedDocuments: [],
+              rejectedDocuments: rejectedDocuments,
               rawData: sol
             };
             (window as any).tempAddRequest(request);
-          });
+          }
         }
       } catch (error) {
         console.warn('Error cargando solicitudes:', error);
@@ -377,9 +438,50 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   
   const triggerFileUpload = (docKey: string) => { setActiveDocKey(docKey); setTimeout(() => fileInputRef.current?.click(), 50); };
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0] && activeDocKey) { setFixedDocs(p => ({...p, [activeDocKey]: true})); e.target.value = ''; }};
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+    if (e.target.files?.[0] && activeDocKey) { 
+      const file = e.target.files[0];
+      setFixedDocs(p => ({...p, [activeDocKey]: file})); 
+      e.target.value = ''; 
+    }
+  };
   
-  const handleSubmitCorrections = () => { if (!fixingRequest) return; setTimeout(() => { (window as any).tempUpdateRequestData(fixingRequest.id, { status: 'paid_pending_docs', rejectedDocuments: [] }); setFixingRequest(null); alert("Enviado a revisión."); }, 1000); };
+  const handleSubmitCorrections = async () => { 
+    if (!fixingRequest || !token) return;
+    
+    try {
+      // Convertir archivos a base64 y enviar updateDocumento para cada documento rechazado
+      for (const docData of fixingRequest.rejectedDocuments || []) {
+        const file = fixedDocs[docData.iddocumento];
+        if (!file) continue;
+        
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        
+        await documentService.updateDocumento(
+          docData.iddocumento,
+          {
+            nombre: file.name,
+            contenido: base64.split(',')[1], // Solo la parte base64
+            tipo: file.type,
+            idestatus: 13 // Actualizado
+          },
+          token
+        );
+      }
+      
+      // Recargar solicitudes
+      (window as any).tempUpdateRequestData(fixingRequest.id, { status: 'paid_pending_docs', rejectedDocuments: [] });
+      setFixingRequest(null);
+      alert("Documentos enviados a revisión correctamente.");
+    } catch (error) {
+      console.error('Error actualizando documentos:', error);
+      alert('Error al enviar los documentos. Intenta nuevamente.');
+    }
+  };
 
   // --- RENDER ---
   return (
@@ -408,7 +510,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center"><p className="text-xs text-gray-400 font-medium">No tienes licencias activas.</p></div>
             ) : (
                 <div className="space-y-4">
-                    {activeLicenses.map((lic) => (
+                    {activeLicenses.map((lic) => {
+                      const rawData = lic.rawData;
+                      const nombres = rawData?.nombres || userDataFresh?.nombres || '';
+                      const apellidoPaterno = rawData?.apellidopaterno || userDataFresh?.apellidopaterno || '';
+                      const apellidoMaterno = rawData?.apellidomaterno || userDataFresh?.apellidomaterno || '';
+                      const nombreCompleto = `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim();
+                      const numeroLicencia = rawData?.numerolicencia || lic.folio;
+                      const vigencia = rawData?.vigencia || '2025 - 2028';
+                      const descripcion = rawData?.descripcion || `Licencia ${lic.type}`;
+                      
+                      return (
                         <div key={lic.id} className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden group">
                             <div className="absolute -right-4 -top-4 text-white opacity-10"><span className="material-symbols-outlined text-9xl">verified</span></div>
                             <div className="relative z-10">
@@ -416,11 +528,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     <div className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg"><p className="text-[10px] font-bold uppercase tracking-widest">Licencia Digital</p></div>
                                     <span className="material-symbols-outlined">qr_code_2</span>
                                 </div>
-                                <div className="mt-4"><h3 className="text-2xl font-black tracking-tight">{lic.type.toUpperCase()}</h3><p className="text-xs opacity-80 font-mono mt-1">FOLIO: {lic.folio}</p></div>
-                                <div className="mt-4 pt-4 border-t border-white/20 flex justify-between items-end"><div><p className="text-[8px] uppercase opacity-70">Vigencia</p><p className="text-sm font-bold">2025 - 2028</p></div></div>
+                                <div className="mt-4">
+                                  <h3 className="text-2xl font-black tracking-tight">{lic.type.toUpperCase()}</h3>
+                                  <p className="text-xs opacity-80 mt-1">{descripcion}</p>
+                                  <p className="text-sm font-bold mt-2">{nombreCompleto}</p>
+                                  <p className="text-xs opacity-80 font-mono mt-1">No. {numeroLicencia}</p>
+                                </div>
+                                <div className="mt-4 pt-4 border-t border-white/20 flex justify-between items-end">
+                                  <div>
+                                    <p className="text-[8px] uppercase opacity-70">Vigencia</p>
+                                    <p className="text-sm font-bold">{vigencia}</p>
+                                  </div>
+                                </div>
                             </div>
                         </div>
-                    ))}
+                      );
+                    })}
                 </div>
             )}
         </section>
@@ -449,7 +572,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 </div>
                                 <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
                             </div>
-                            {req.status === 'rejected' && req.rejectedDocuments && (<div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100"><div className="font-bold flex items-center gap-1 mb-1"><span className="material-symbols-outlined text-sm">error</span> Acción Requerida:</div><ul className="list-disc list-inside font-bold">{req.rejectedDocuments.map(doc => <li key={doc}>{DOC_LABELS[doc] || doc}</li>)}</ul></div>)}
+                            {req.status === 'rejected' && req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                              <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
+                                <div className="font-bold flex items-center gap-1 mb-1">
+                                  <span className="material-symbols-outlined text-sm">error</span> Acción Requerida:
+                                </div>
+                                <ul className="list-disc list-inside font-bold space-y-1">
+                                  {req.rejectedDocuments.map(docData => (
+                                    <li key={docData.iddocumento}>
+                                      {docData.tipodocumento}
+                                      {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                             {req.status === 'rejected' && (
                               <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
                                   <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
@@ -586,11 +723,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in slide-in-from-bottom-10 flex flex-col max-h-[80vh]">
                 <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4"><div><h2 className="text-lg font-black text-red-600">Corregir Documentos</h2><p className="text-xs text-gray-500">Sube nuevamente los archivos</p></div><button onClick={() => setFixingRequest(null)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
                 <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                    {fixingRequest.rejectedDocuments?.map(doc => (
-                        <div key={doc} className="space-y-1">
-                            <label className="text-xs font-bold uppercase text-gray-500">{DOC_LABELS[doc] || doc}</label>
-                            <div onClick={() => triggerFileUpload(doc)} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[doc] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
-                                {fixedDocs[doc] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
+                    {fixingRequest.rejectedDocuments?.map(docData => (
+                        <div key={docData.iddocumento} className="space-y-1">
+                            <label className="text-xs font-bold uppercase text-gray-500">{docData.tipodocumento || 'Documento'}</label>
+                            {docData.comentarios && (
+                              <p className="text-[10px] text-red-600 mb-1 italic">Motivo: {docData.comentarios}</p>
+                            )}
+                            <div onClick={() => triggerFileUpload(docData.iddocumento)} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[docData.iddocumento] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+                                {fixedDocs[docData.iddocumento] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
                             </div>
                         </div>
                     ))}

@@ -15,7 +15,8 @@ export const API_ENDPOINTS = {
   DOCUMENTOS: {
     CREATE: '/api/documentos/createDocumento',
     BY_USER: '/api/documentos/documentosByUsuario',
-    DOWNLOAD: '/api/documentos/downloadDocumento'
+    DOWNLOAD: '/api/documentos/downloadDocumento',
+    UPDATE: '/api/documentos/updateDocumento'
   },
   SOLICITUDES: {
     CREATE: '/api/solicitudes/createSolicitud',
@@ -23,6 +24,8 @@ export const API_ENDPOINTS = {
     GET_ALL: '/api/solicitudes/solicitudes'
   },
   REVISION: {
-    CREATE: '/createRevisionDocumentos'
+    CREATE: '/createRevisionDocumentos',
+    BY_SOLICITUD: '/api/revisiones/revisionesBySolicitud',
+    DOCUMENTOS_BY_REVISION: '/revisionesDocumentosByRevision'
   }
 };

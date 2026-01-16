@@ -24,5 +24,13 @@ export const documentService = {
       body: { id },
       token
     });
+  },
+
+  updateDocumento: async (payload: any, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.DOCUMENTOS.UPDATE, {
+      method: 'POST',
+      body: payload,
+      token
+    });
   }
 };
