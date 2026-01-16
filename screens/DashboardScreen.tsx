@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
 import DocumentUploadScreen from './DocumentUploadScreen';
-import ExamScreen from './ExamScreen';
 
 interface DashboardScreenProps {
   userData: UserData;
@@ -30,6 +29,7 @@ import { solicitudService } from '../src/api/solicitudService';
 import { documentService } from '../src/api/documentService';
 import { userService } from '../src/api/userService';
 import { revisionService } from '../src/api/revisionService';
+import examService from '../src/api/examService';
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ 
   userData, 
@@ -46,7 +46,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
-  const [selectedExamSolicitudId, setSelectedExamSolicitudId] = useState<number | null>(null);
+  const [selectedSolicitudId, setSelectedSolicitudId] = useState<number | null>(null);
+  const [examPreguntas, setExamPreguntas] = useState<any[]>([]);
+  const [loadingExam, setLoadingExam] = useState(false);
+  const [examStarted, setExamStarted] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(60); // PRUEBA: 1 minuto = 60 segundos
+  const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [idIntento, setIdIntento] = useState<number | null>(null);
+  const [respuestas, setRespuestas] = useState<Record<number, string>>({}); // {idpregunta: respuesta}
+  const [tiemposRespuesta, setTiemposRespuesta] = useState<Record<number, number>>({}); // {idpregunta: segundos}
+  const [tiempoInicioPreguntas, setTiempoInicioPreguntas] = useState<number>(0);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultMessage, setResultMessage] = useState('');
+  const [resultType, setResultType] = useState<'success' | 'error'>('success');
+  const [enviandoExamen, setEnviandoExamen] = useState(false);
+  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const [showVerResultButton, setShowVerResultButton] = useState(false);
+  const [verificandoResultado, setVerificandoResultado] = useState(false);
+  const [idIntentoGuardado, setIdIntentoGuardado] = useState<number | null>(null);
   
   const [paymentStep, setPaymentStep] = useState<'select' | 'card' | 'cash'>('select');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'ventanilla' | null>(null);
@@ -218,6 +235,27 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     loadSolicitudes();
     return () => { mounted = false; };
   }, [idUsuario, token]);
+
+  // --- TIMER DEL EXAMEN ---
+  useEffect(() => {
+    let interval: any;
+    if (examStarted && timeRemaining > 0) {
+      interval = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            // Solo mostrar modal, NO enviar
+            setShowTimeoutModal(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [examStarted, timeRemaining]); // Remover dependencias innecesarias
   
   // --- LICENCIAS Y TRÁMITES ---
   const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];
@@ -698,19 +736,26 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               </div>
                             )}
                             
-                            {/* Botón para examen teórico */}
-                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                              <button 
-                                onClick={() => {
-                                  setSelectedExamSolicitudId(Number(req.id));
-                                  setShowExamModal(true);
-                                }}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-colors"
-                              >
-                                <span className="material-symbols-outlined text-sm">quiz</span> 
-                                Realizar Examen Teórico
-                              </button>
-                            </div>
+                            {/* Botón examen teórico - Solo en solicitudes NO rechazadas */}
+                            {req.status !== 'rejected' && (
+                              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                <button 
+                                  onClick={() => {
+                                    setSelectedSolicitudId(Number(req.id));
+                                    setShowExamModal(true);
+                                    setExamStarted(false);
+                                    setTimeRemaining(60);
+                                    setRespuestas({});
+                                    setTiemposRespuesta({});
+                                    setEnviandoExamen(false);
+                                  }}
+                                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                                >
+                                  <span className="material-symbols-outlined text-sm">quiz</span> 
+                                  Realizar Examen Teórico
+                                </button>
+                              </div>
+                            )}
                         </div>
                       );
                     })}
@@ -896,14 +941,507 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       )}
 
       {/* MODAL EXAMEN TEÓRICO */}
-      {showExamModal && selectedExamSolicitudId && (
-        <ExamScreen
-          solicitudId={selectedExamSolicitudId}
-          onClose={() => {
-            setShowExamModal(false);
-            setSelectedExamSolicitudId(null);
+      {showExamModal && (
+        <div 
+          className="absolute inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Solo permitir cerrar si NO ha iniciado el examen
+            if (!examStarted && e.target === e.currentTarget) {
+              setShowExamModal(false);
+              setSelectedSolicitudId(null);
+              setExamPreguntas([]);
+            }
           }}
-        />
+        >
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Examen Teórico de Manejo</h2>
+                {examStarted && (
+                  <div className="flex items-center gap-2 bg-orange-100 text-orange-800 px-3 py-1 rounded-lg">
+                    <span className="material-symbols-outlined text-sm">schedule</span>
+                    <span className="font-mono font-bold">
+                      {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {!examStarted && (
+                <button 
+                  onClick={() => {
+                    setShowExamModal(false);
+                    setSelectedSolicitudId(null);
+                    setExamPreguntas([]);
+                  }}
+                  className="bg-gray-100 p-2 rounded-full hover:bg-gray-200"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              )}
+            </div>
+            
+            {!examStarted ? (
+              /* PANTALLA DE INSTRUCCIONES */
+              <div className="space-y-6">
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-yellow-600 text-3xl">warning</span>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-yellow-800 mb-2">Instrucciones Importantes</h3>
+                      <ul className="space-y-2 text-sm text-yellow-700">
+                        <li className="flex items-start gap-2">
+                          <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
+                          <span>Tienes <strong>1 minuto</strong> para completar el examen (PRUEBA)</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
+                          <span>Una vez iniciado, <strong>no podrás cerrar</strong> la ventana hasta finalizar</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
+                          <span>Si cancelas ahora, <strong>NO contará</strong> como intento</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
+                          <span>Si inicias y abandonas, <strong>SÍ contará</strong> como intento fallido</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
+                          <span>Si se agota el tiempo, tus respuestas se <strong>enviarán automáticamente</strong></span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Datos del Usuario y Solicitud */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+                  <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-600">badge</span>
+                    Información del Usuario y Solicitud
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-gray-500 text-xs mb-1">Usuario</p>
+                      <p className="font-bold text-gray-900">
+                        {userDataFresh?.nombre || userDataFresh?.nombres || ''} {userDataFresh?.apellidopaterno || userDataFresh?.apellidoPaterno || ''} {userDataFresh?.apellidomaterno || userDataFresh?.apellidoMaterno || ''}
+                      </p>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-gray-500 text-xs mb-1">CURP</p>
+                      <p className="font-mono font-bold text-gray-900 text-xs">{userDataFresh?.curp || ''}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-gray-500 text-xs mb-1">Solicitud ID</p>
+                      <p className="font-bold text-blue-600">#{selectedSolicitudId}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg">
+                      <p className="text-gray-500 text-xs mb-1">Tipo de Licencia</p>
+                      <p className="font-bold text-gray-900">{userData.requests?.find((r: any) => r.id === selectedSolicitudId?.toString())?.licenseType || 'Automovilista'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowExamModal(false);
+                      setSelectedSolicitudId(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setLoadingExam(true);
+                      try {
+                        const data = await examService.obtenerPreguntas(selectedSolicitudId!, token || '');
+                        console.log('Preguntas obtenidas:', data);
+                        setExamPreguntas(data.preguntas);
+                        setIdIntento(data.idintento);
+                        setExamStarted(true);
+                        setTimeRemaining(60); // PRUEBA: 60 segundos
+                        setTiempoInicioPreguntas(Date.now());
+                      } catch (error: any) {
+                        console.error('Error al cargar examen:', error);
+                        alert('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
+                        setShowExamModal(false);
+                      } finally {
+                        setLoadingExam(false);
+                      }
+                    }}
+                    className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined">play_arrow</span>
+                    Aceptar e Iniciar Examen
+                  </button>
+                </div>
+              </div>
+            ) : loadingExam ? (
+              /* CARGANDO EXAMEN */
+              <div className="text-center py-12">
+                <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-600">Cargando examen...</p>
+              </div>
+            ) : examPreguntas.length > 0 ? (
+              /* MOSTRANDO PREGUNTAS */
+              <div className="space-y-4">
+                <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded">
+                  <p className="text-green-700 font-bold text-sm">Examen cargado correctamente</p>
+                  <p className="text-green-600 text-xs">Responde las {examPreguntas.length} preguntas. Intento ID: {idIntento}</p>
+                </div>
+                
+                {/* Mostrar las preguntas con opciones seleccionables */}
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {examPreguntas.map((pregunta, index) => {
+                    const respuestaSeleccionada = respuestas[pregunta.id];
+                    
+                    return (
+                      <div key={pregunta.id} className={`border-2 rounded-lg p-4 ${
+                        respuestaSeleccionada ? 'border-green-500 bg-green-50' : 'border-gray-200'
+                      }`}>
+                        <div className="flex items-start gap-2 mb-3">
+                          <span className="font-bold text-blue-600 text-lg">{index + 1}.</span>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">{pregunta.pregunta}</p>
+                            <span className="inline-block mt-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                              {pregunta.categoria}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Opciones */}
+                        <div className="space-y-2 ml-8">
+                          {['A', 'B', 'C', 'D'].map(opcion => {
+                            const textoOpcion = pregunta[`opcion${opcion}`];
+                            const isSelected = respuestaSeleccionada === opcion;
+                            
+                            return (
+                              <button
+                                key={opcion}
+                                onClick={() => {
+                                  // Guardar respuesta
+                                  setRespuestas(prev => ({ ...prev, [pregunta.id]: opcion }));
+                                  // Si es la primera vez que responde esta pregunta, guardar tiempo
+                                  if (!tiemposRespuesta[pregunta.id]) {
+                                    const tiempoTranscurrido = Math.floor((Date.now() - tiempoInicioPreguntas) / 1000);
+                                    setTiemposRespuesta(prev => ({ ...prev, [pregunta.id]: tiempoTranscurrido }));
+                                  }
+                                }}
+                                className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                                  isSelected 
+                                    ? 'border-green-500 bg-green-100 font-bold'
+                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                                }`}
+                              >
+                                <span className="font-bold mr-2">{opcion})</span>
+                                <span>{textoOpcion}</span>
+                                {isSelected && (
+                                  <span className="material-symbols-outlined text-green-600 float-right">check_circle</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Botón Enviar Examen */}
+                <div className="mt-6 pt-4 border-t">
+                  <div className="mb-3 text-center">
+                    <p className="text-sm text-gray-600">
+                      Respondidas: <span className="font-bold text-blue-600">{Object.keys(respuestas).length}</span> / {examPreguntas.length}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (Object.keys(respuestas).length < examPreguntas.length) {
+                        if (!confirm(`Solo has respondido ${Object.keys(respuestas).length} de ${examPreguntas.length} preguntas. ¿Deseas enviar de todas formas?`)) {
+                          return;
+                        }
+                      }
+                      setShowConfirmSubmit(true);
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined">send</span>
+                    Enviar Examen
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">📝</div>
+                <p className="text-gray-400">No se cargaron preguntas</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMACIÓN DE ENVÍO */}
+      {showConfirmSubmit && (
+        <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-6 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-yellow-600 text-4xl">help</span>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                ¿Estás seguro de enviar el examen?
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
+                Una vez enviado, no podrás modificar tus respuestas. Asegúrate de haber respondido todas las preguntas.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmSubmit(false)}
+                className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  setShowConfirmSubmit(false);
+                  
+                  // DETENER EL TIMER inmediatamente
+                  setExamStarted(false);
+                  
+                  try {
+                    // Construir el array de respuestas
+                    const respuestasArray = Object.entries(respuestas).map(([idpregunta, respuesta]) => ({
+                      idpregunta: Number(idpregunta),
+                      respuesta: respuesta as string,
+                      tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 30
+                    }));
+                    
+                    console.log('Enviando respuestas con idintento:', idIntento, 'respuestas:', respuestasArray);
+                    
+                    // Llamar al servicio con los parámetros separados
+                    await examService.enviarRespuestas(idIntento!, respuestasArray, token || '');
+                    console.log('Respuestas enviadas exitosamente');
+                    
+                    // Guardar idIntento para verificar después
+                    setIdIntentoGuardado(idIntento);
+                    
+                    // Mostrar modal con botón "Ver Resultado"
+                    setResultMessage('Examen enviado correctamente.');
+                    setResultType('success');
+                    setShowVerResultButton(true);
+                    setShowResultModal(true);
+                  } catch (error: any) {
+                    console.error('Error al enviar examen (mostrando botón de verificar):', error);
+                    
+                    // Guardar idIntento para verificar después
+                    setIdIntentoGuardado(idIntento);
+                    
+                    // Aunque haya error, mostrar botón para verificar
+                    setResultMessage('Respuestas procesadas. Verifica el resultado.');
+                    setResultType('success');
+                    setShowVerResultButton(true);
+                    setShowResultModal(true);
+                  }
+                  
+                  // Cerrar todo
+                  setShowExamModal(false);
+                  setExamPreguntas([]);
+                  setSelectedSolicitudId(null);
+                  setRespuestas({});
+                  setTiemposRespuesta({});
+                  setIdIntento(null);
+                }}
+                className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined">check_circle</span>
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RESULTADOS */}
+      {showResultModal && (
+        <div className="absolute inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 ${
+                resultType === 'success' ? 'bg-green-100' : 
+                resultType === 'error' ? 'bg-red-100' : 'bg-blue-100'
+              } rounded-full flex items-center justify-center mx-auto mb-4`}>
+                <span className={`material-symbols-outlined ${
+                  resultType === 'success' ? 'text-green-600' : 
+                  resultType === 'error' ? 'text-red-600' : 'text-blue-600'
+                } text-5xl`}>
+                  {resultType === 'success' ? 'check_circle' : resultType === 'error' ? 'error' : 'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {resultType === 'success' ? '¡Examen Enviado!' : resultType === 'error' ? 'Reprobado' : 'Resultado Pendiente'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                {resultMessage}
+              </p>
+              
+              {showVerResultButton ? (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowResultModal(false);
+                      setShowVerResultButton(false);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (verificandoResultado) return;
+                      setVerificandoResultado(true);
+                      
+                      try {
+                        // Esperar 1 segundo antes de verificar
+                        await wait(1000);
+                        
+                        const resultadoExamen = await examService.verificarResultado(idIntentoGuardado!, token || '');
+                        console.log('Resultado del examen:', resultadoExamen);
+                        
+                        // Determinar el tipo según el resultado
+                        // Asumiendo que resultadoExamen tiene una propiedad 'aprobado' o similar
+                        const aprobado = resultadoExamen.aprobado || resultadoExamen.data?.aprobado;
+                        
+                        setResultMessage(resultadoExamen.message || `Calificación: ${resultadoExamen.calificacion || 'N/A'}`);
+                        setResultType(aprobado ? 'success' : 'error');
+                        setShowVerResultButton(false);
+                      } catch (error: any) {
+                        console.log('Error al verificar resultado:', error);
+                        const mensaje = error.response?.data?.message || error.message || 'El examen está siendo procesado';
+                        setResultMessage(mensaje);
+                        setResultType('info' as any); // Azul para pendiente
+                        setShowVerResultButton(false);
+                      } finally {
+                        setVerificandoResultado(false);
+                      }
+                    }}
+                    disabled={verificandoResultado}
+                    className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {verificandoResultado ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                        Verificando...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined">visibility</span>
+                        Ver Resultado
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowResultModal(false);
+                    setShowVerResultButton(false);
+                    setIdIntentoGuardado(null);
+                  }}
+                  className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold"
+                >
+                  Cerrar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE TIEMPO AGOTADO */}
+      {showTimeoutModal && (
+        <div className="absolute inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-orange-600 text-5xl">
+                  schedule
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                ¡Tiempo Agotado!
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                El tiempo del examen ha terminado. Se enviarán tus respuestas automáticamente. Las preguntas sin responder se marcarán con la opción "A".
+              </p>
+              <button
+                onClick={async () => {
+                  setShowTimeoutModal(false);
+                  
+                  if (enviandoExamen) return;
+                  setEnviandoExamen(true);
+                  
+                  try {
+                    // Completar respuestas faltantes con "A"
+                    const respuestasCompletas = { ...respuestas };
+                    examPreguntas.forEach(pregunta => {
+                      if (!respuestasCompletas[pregunta.id]) {
+                        respuestasCompletas[pregunta.id] = 'A';
+                      }
+                    });
+                    
+                    // Enviar respuestas
+                    const respuestasArray = Object.entries(respuestasCompletas).map(([idpregunta, respuesta]) => ({
+                      idpregunta: Number(idpregunta),
+                      respuesta: respuesta as string,
+                      tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 60
+                    }));
+                    
+                    console.log('ENVÍO POR TIMEOUT - Payload:', { idintento: idIntento, respuestas: respuestasArray });
+                    
+                    try {
+                      await examService.enviarRespuestas(idIntento!, respuestasArray, token || '');
+                      console.log('Respuestas enviadas exitosamente');
+                    } catch (errorEnviar: any) {
+                      console.error('Error al enviar (mostrando botón de verificar):', errorEnviar);
+                    }
+                    
+                    // Guardar idIntento para verificar después
+                    setIdIntentoGuardado(idIntento);
+                    
+                    // Mostrar modal con botón "Ver Resultado"
+                    setResultMessage('Tiempo agotado. Examen enviado.');
+                    setResultType('success');
+                    setShowVerResultButton(true);
+                    setShowResultModal(true);
+                    
+                    // Cerrar todo
+                    setShowExamModal(false);
+                    setExamStarted(false);
+                    setExamPreguntas([]);
+                    setSelectedSolicitudId(null);
+                    setRespuestas({});
+                    setTiemposRespuesta({});
+                    setIdIntento(null);
+                  } catch (error: any) {
+                    console.error('Error en envío:', error);
+                    setResultMessage('Error al enviar el examen: ' + (error.response?.data?.message || error.message));
+                    setResultType('error');
+                    setShowResultModal(true);
+                  } finally {
+                    setEnviandoExamen(false);
+                  }
+                }}
+                className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold"
+              >
+                Aceptar y Enviar Respuestas
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

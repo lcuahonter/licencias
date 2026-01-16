@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import { apiRequest } from './apiClient';
 import { API_ENDPOINTS } from './endpoints';
 
 export interface Pregunta {
@@ -33,16 +33,15 @@ export interface VerificarResultadoResponse {
 
 const examService = {
   async obtenerPreguntas(idsolicitud: number, token: string): Promise<ObtenerPreguntasResponse> {
-    const response = await apiClient.post(
+    const response = await apiRequest<{ data: ObtenerPreguntasResponse }>(
       API_ENDPOINTS.EXAM.OBTENER_PREGUNTAS,
-      { idsolicitud },
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        method: 'POST',
+        body: { idsolicitud },
+        token
       }
     );
-    return response.data.data;
+    return response.data;
   },
 
   async enviarRespuestas(
@@ -50,29 +49,26 @@ const examService = {
     respuestas: RespuestaExamen[],
     token: string
   ): Promise<any> {
-    const response = await apiClient.post(
+    return await apiRequest<any>(
       API_ENDPOINTS.EXAM.ENVIAR_RESPUESTAS,
-      { idintento, respuestas },
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        method: 'POST',
+        body: { idintento, respuestas },
+        token
       }
     );
-    return response.data;
   },
 
   async verificarResultado(idintento: number, token: string): Promise<VerificarResultadoResponse> {
-    const response = await apiClient.post(
+    const response = await apiRequest<{ data: VerificarResultadoResponse }>(
       API_ENDPOINTS.EXAM.VERIFICAR_RESULTADO,
-      { idintento },
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        method: 'POST',
+        body: { idintento },
+        token
       }
     );
-    return response.data.data;
+    return response.data;
   },
 };
 
