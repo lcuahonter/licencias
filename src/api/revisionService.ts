@@ -17,10 +17,28 @@ export const revisionService = {
     });
   },
 
+  // Alias para compatibilidad con código existente de Equipo2
+  revisionesBySolicitud: async (idsolicitud: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.BY_SOLICITUD, {
+      method: 'POST',
+      body: { idsolicitud },
+      token
+    });
+  },
+
+  // Método mejorado de Equipo1 - mismo comportamiento pero nombre más claro
   getRevisionesBySolicitud: async (idsolicitud: number, token?: string) => {
     return await apiRequest<any>(API_ENDPOINTS.REVISION.BY_SOLICITUD, {
       method: 'POST',
       body: { idsolicitud },
+      token
+    });
+  },
+
+  createRevisionDocumentos: async (payload: any, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.CREATE_DOCUMENTOS, {
+      method: 'POST',
+      body: payload,
       token
     });
   },

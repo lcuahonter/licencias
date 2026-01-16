@@ -17,6 +17,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   const [selectedSolicitud, setSelectedSolicitud] = useState<any | null>(null);
   const [documentos, setDocumentos] = useState<any[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const [solicitudesEnProceso, setSolicitudesEnProceso] = useState<Map<number, boolean>>(new Map());
+  const [isTakingRequest, setIsTakingRequest] = useState(false);
+  const [revisionActual, setRevisionActual] = useState<any | null>(null);
   
   // Estados Validación
   const [docStatus, setDocStatus] = useState<Record<number, 'accepted' | 'rejected' | null>>({});
@@ -40,10 +43,41 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   };
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- CARGAR SOLICITUDES ---
+  // --- CARGAR SOLICITUDES Y VALIDAR ESTADO ---
   useEffect(() => {
     fetchSolicitudes();
   }, []);
+
+  useEffect(() => {
+    // Una vez que se cargan las solicitudes, validar estado de cada una
+    if (solicitudes.length > 0) {
+      validarEstadoSolicitudes();
+    }
+  }, [solicitudes]);
+
+  const validarEstadoSolicitudes = async () => {
+    try {
+      const estadoMap = new Map<number, boolean>();
+      
+      for (const sol of solicitudes) {
+        try {
+          const resp = await revisionService.revisionesBySolicitud(sol.id, token);
+          console.log(`✅ Revisión para solicitud ${sol.id}:`, resp);
+          
+          // Si el code es "200", la solicitud está en proceso (mostrar Validar)
+          const enProceso = resp?.code === '200' || resp?.data?.code === '200';
+          estadoMap.set(sol.id, enProceso);
+        } catch (error) {
+          console.error(`Error validando solicitud ${sol.id}:`, error);
+          estadoMap.set(sol.id, false);
+        }
+      }
+      
+      setSolicitudesEnProceso(estadoMap);
+    } catch (error) {
+      console.error('Error validando estado de solicitudes:', error);
+    }
+  };
 
   const fetchSolicitudes = async () => {
     try {
@@ -74,6 +108,14 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     setIsLoadingDocs(true);
     
     try {
+      // Obtener datos de la revisión si existe
+      if (solicitudesEnProceso.get(solicitud.id)) {
+        const revResp = await revisionService.revisionesBySolicitud(solicitud.id, token);
+        const revisionData = revResp?.data?.revisionesData?.[0] || revResp?.data?.revisiones?.[0];
+        setRevisionActual(revisionData);
+        console.log('📋 Datos de revisión obtenidos:', revisionData);
+      }
+
       const resp = await documentService.getByUser(solicitud.idusuario, token);
       const docs = resp?.data?.documentosData || resp?.data?.documentos || [];
       setDocumentos(docs);
@@ -147,41 +189,94 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     }
   };
 
+  // --- TOMAR SOLICITUD (Crear Revisión) ---
+  const handleTakeSolicitud = async (solicitud: any) => {
+    try {
+      setIsTakingRequest(true);
+
+      // Decodificar token para obtener idrevisor
+      const tokenParts = token?.split('.') || [];
+      if (tokenParts.length !== 3) {
+        alert('Token inválido');
+        return;
+      }
+
+      const decodedPayload = JSON.parse(atob(tokenParts[1]));
+      const idrevisor = decodedPayload.aData || decodedPayload.idUsuario || 1;
+
+      // Preparar payload para createRevision
+      const payload = {
+        idsolicitud: solicitud.id,
+        idrevisor: idrevisor,
+        comentarios: 'Documento en Proceso',
+        idestatus: 1
+      };
+
+      console.log('📤 Enviando createRevision:', payload);
+
+      // Llamar al servicio
+      await solicitudService.createRevision(payload, token);
+
+      // Marcar solicitud como "En Proceso"
+      setSolicitudesEnProceso(prev => {
+        const newMap = new Map(prev);
+        newMap.set(solicitud.id, true);
+        return newMap;
+      });
+
+      alert('Solicitud tomada. Estado: En Proceso');
+      setSelectedSolicitud(null);
+    } catch (error: any) {
+      console.error('❌ Error al tomar solicitud:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setIsTakingRequest(false);
+    }
+  };
+
   const handleSubmitReview = async () => {
     if (!selectedSolicitud) return;
 
-    // Validar que todos los documentos estén revisados
-    const pendingDocs = documentos.filter(doc => docStatus[doc.id] === null);
-    if (pendingDocs.length > 0) {
-      alert(`Falta revisar ${pendingDocs.length} documento(s)`);
+    // Validar que la revisión actual existe
+    if (!revisionActual || !revisionActual.id) {
+      alert('Error: No se encontró la información de la revisión');
+      return;
+    }
+
+    // Filtrar solo los documentos que han sido seleccionados (aceptados o rechazados)
+    const selectedDocs = documentos.filter(doc => docStatus[doc.id] !== null);
+    
+    // Validar que al menos un documento haya sido revisado
+    if (selectedDocs.length === 0) {
+      alert('Debes seleccionar y revisar al menos un documento');
       return;
     }
 
     // Validar que los rechazados tengan comentarios
-    const rejectedDocs = documentos.filter(doc => docStatus[doc.id] === 'rejected');
+    const rejectedDocs = selectedDocs.filter(doc => docStatus[doc.id] === 'rejected');
     const missingReasons = rejectedDocs.filter(doc => !docReasons[doc.id] || docReasons[doc.id].trim() === '');
     if (missingReasons.length > 0) {
       alert('Debes ingresar el motivo para todos los documentos rechazados');
       return;
     }
 
-    // Construir payload
-    const documentosPayload = documentos.map(doc => ({
+    // Construir payload solo con documentos seleccionados
+    const documentosPayload = selectedDocs.map(doc => ({
       iddocumento: doc.id,
       comentarios: docStatus[doc.id] === 'accepted' 
         ? `${doc.tipodocumento} aprobado`
         : docReasons[doc.id],
-      idestatus: docStatus[doc.id] === 'accepted' ? 1 : 2
+      idestatus: docStatus[doc.id] === 'accepted' ? 14 : 15
     }));
 
     const payload = {
-      idrevision: selectedSolicitud.id,
+      idrevision: revisionActual.id,
       documentos: documentosPayload
     };
 
     try {
       setIsSubmitting(true);
-      await revisionService.createRevision(payload, token);
+      await revisionService.createRevisionDocumentos(payload, token);
       alert('Revisión guardada exitosamente');
       setSelectedSolicitud(null);
       fetchSolicitudes(); // Recargar lista
@@ -260,11 +355,25 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                     <p className="text-xs text-gray-500 mt-1">{sol.descripcion}</p>
                   </div>
                   <button 
-                    onClick={() => handleOpenValidation(sol)} 
-                    className="bg-primary text-white px-3 py-2 rounded-lg text-xs font-bold shadow hover:bg-blue-700 transition-colors flex items-center gap-1 shrink-0"
+                    onClick={() => {
+                      const enProceso = solicitudesEnProceso.get(sol.id);
+                      if (enProceso) {
+                        handleOpenValidation(sol);
+                      } else {
+                        handleTakeSolicitud(sol);
+                      }
+                    }}
+                    disabled={isTakingRequest}
+                    className={`${
+                      solicitudesEnProceso.get(sol.id)
+                        ? 'bg-primary hover:bg-blue-700'
+                        : 'bg-orange-500 hover:bg-orange-600'
+                    } text-white px-3 py-2 rounded-lg text-xs font-bold shadow transition-colors flex items-center gap-1 shrink-0 disabled:opacity-50`}
                   >
-                    <span className="material-symbols-outlined text-sm">rate_review</span>
-                    Validar
+                    <span className="material-symbols-outlined text-sm">
+                      {solicitudesEnProceso.get(sol.id) ? 'rate_review' : 'hourglass_top'}
+                    </span>
+                    {solicitudesEnProceso.get(sol.id) ? 'Validar' : 'En Proceso'}
                   </button>
                 </div>
               </div>
