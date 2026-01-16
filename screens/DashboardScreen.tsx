@@ -91,7 +91,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           setUserDataFresh(userFresh);
         }
       })
-      .catch(err => console.warn('Error consultando usuario en Dashboard:', err));
+      .catch(err => {});
     
     return () => { mounted = false; };
   }, [idUsuario, token]);
@@ -119,31 +119,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             
             // Para TODAS las solicitudes, verificar el estado REAL de los documentos usando los endpoints
             try {
-              console.log(`📋 Verificando documentos para solicitud ${sol.id} (estado solicitud: ${idestatus})`);
-              
               // 1. Obtener revisiones usando /api/revisiones/revisionesBySolicitud
               const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
-              console.log(`📄 Respuesta revisionesBySolicitud:`, revResp);
               
               const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
               const revision = revisionesData[0];
               
               if (revision?.id) {
-                console.log(`🔍 Revisión encontrada ID: ${revision.id}`);
-                
                 // 2. Obtener documentos de revisión usando /revisionesDocumentosByRevision
                 const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
-                console.log(`📎 Respuesta revisionesDocumentosByRevision:`, docsResp);
                 
                 const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
-                console.log(`📑 Total documentos: ${docs.length}`);
                 
                 // 3. Analizar estado REAL de cada documento (idestatus: 13=Actualizado, 14=Aprobado, 15=Rechazado)
                 const aprobados = docs.filter((d: any) => d.idestatus === 14);
                 const rechazados = docs.filter((d: any) => d.idestatus === 15);
                 const actualizados = docs.filter((d: any) => d.idestatus === 13);
-                
-                console.log(`✅ Aprobados: ${aprobados.length}, ❌ Rechazados: ${rechazados.length}, 🔄 Actualizados: ${actualizados.length}`);
                 
                 // 4. Determinar estado REAL basado en documentos (esto sobrescribe el estado de la solicitud)
                 if (rechazados.length > 0) {
@@ -154,29 +145,23 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     tipodocumento: d.tipodocumento || d.documento || 'Documento',
                     comentarios: d.comentarios || 'Sin comentarios'
                   }));
-                  console.log(`🔴 ESTADO REAL: RECHAZADA (${rechazados.length} docs rechazados)`);
                 } else if (aprobados.length > 0 && docs.length === aprobados.length) {
                   // TODOS aprobados - FORZAR estado completado
                   status = 'completed';
-                  console.log(`🟢 ESTADO REAL: APROBADA (todos los docs aprobados)`);
                 } else if (actualizados.length > 0) {
                   // Hay documentos actualizados pendientes de revisión
                   status = 'paid_pending_docs';
-                  console.log(`🟡 ESTADO REAL: EN REVISIÓN (docs actualizados)`);
                 } else {
                   // Sin documentos o en proceso
                   status = 'paid_pending_docs';
-                  console.log(`🟡 ESTADO REAL: EN REVISIÓN`);
                 }
               } else {
                 // No hay revisión - usar estado de solicitud como fallback
-                console.log(`⚠️ Sin revisión - usando estado solicitud: ${idestatus}`);
                 if (idestatus === 24) status = 'completed';
                 else if (idestatus === 25) status = 'rejected';
                 else status = 'paid_pending_docs';
               }
             } catch (err) {
-              console.warn(`❌ Error verificando docs solicitud ${sol.id}:`, err);
               // Fallback al estado de la solicitud si falla la consulta
               if (idestatus === 24) status = 'completed';
               else if (idestatus === 25) status = 'rejected';
@@ -218,7 +203,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           }
         }
       } catch (error) {
-        console.warn('Error cargando solicitudes:', error);
+        // Error al cargar solicitudes
       }
     };
 
@@ -379,11 +364,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     
                     idSolicitudReal = ultimaSolicitud.id;
                     solicitudDataCompleta = ultimaSolicitud;
-                } else {
-                    console.warn(`> Intento ${intentos}: Respuesta vacía o 204.`);
                 }
             } catch (fetchErr) {
-                console.warn(`> Intento ${intentos} fallido por red:`, fetchErr);
+                // Reintentar
             }
         }
 
@@ -495,25 +478,105 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           reader.readAsDataURL(file);
         });
         
-        await documentService.updateDocumento(
-          docData.iddocumento,
-          {
-            nombre: file.name,
-            contenido: base64.split(',')[1], // Solo la parte base64
-            tipo: file.type,
-            idestatus: 13 // Actualizado
-          },
-          token
-        );
+        // Extraer formato del archivo (pdf, jpg, png, etc)
+        const formato = file.type.includes('pdf') ? 'pdf' : 
+                       file.type.includes('jpeg') || file.type.includes('jpg') ? 'jpg' :
+                       file.type.includes('png') ? 'png' : 'pdf';
+        
+        const payload = {
+          id: docData.iddocumento,
+          formato: formato,
+          nombreoriginal: file.name,
+          tamanio: file.size,
+          archivoBase64: base64.split(',')[1], // Solo la parte base64, sin el prefijo data:
+          validacion: "pendiente",
+          validacioncomentarios: "Documento actualizado por el usuario",
+          validacionusuario: idUsuario || 0,
+          idestatus: 13 // 13 = Actualizado (pendiente de revisión)
+        };
+        
+        await documentService.updateDocumento(payload, token);
       }
       
-      // Recargar solicitudes
-      (window as any).tempUpdateRequestData(fixingRequest.id, { status: 'paid_pending_docs', rejectedDocuments: [] });
+      // Recargar solicitudes usando la misma lógica del useEffect
+      const resp = await solicitudService.getByUser(idUsuario!, token);
+      const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
+      
+      // Limpiar requests actuales
+      if ((window as any).tempClearRequests) {
+        (window as any).tempClearRequests();
+      }
+      
+      // Recargar todas las solicitudes con el estado actualizado
+      for (const sol of solicitudes) {
+        if (![22, 23, 24, 25].includes(sol.idestatus)) continue;
+        
+        let status: any = 'paid_pending_docs';
+        let rejectedDocuments: any[] = [];
+        
+        try {
+          const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+          const revision = revResp?.data?.revisionesData?.[0];
+          
+          if (revision?.id) {
+            const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+            const docs = docsResp?.data?.revisionesDocumentosData || [];
+            
+            const aprobados = docs.filter((d: any) => d.idestatus === 14);
+            const rechazados = docs.filter((d: any) => d.idestatus === 15);
+            const actualizados = docs.filter((d: any) => d.idestatus === 13);
+            
+            if (rechazados.length > 0) {
+              status = 'rejected';
+              rejectedDocuments = rechazados.map((d: any) => ({
+                iddocumento: d.iddocumento,
+                tipodocumento: d.tipodocumento || 'Documento',
+                comentarios: d.comentarios || 'Sin comentarios'
+              }));
+            } else if (aprobados.length > 0 && docs.length === aprobados.length) {
+              status = 'completed';
+            } else {
+              status = 'paid_pending_docs'; // Actualizados o en proceso
+            }
+          }
+        } catch (err) {
+          // Error al recargar
+        }
+        
+        if (status === 'completed') {
+          (window as any).tempAddRequest({
+            id: String(sol.id),
+            type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
+                  sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
+            process: 'Primera Vez',
+            cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
+            date: new Date(sol.creacion).toLocaleDateString('es-MX'),
+            status: 'completed',
+            folio: sol.numerolicencia || sol.folio || `DGO-${sol.id}`,
+            rejectedDocuments: [],
+            rawData: sol
+          });
+        } else {
+          (window as any).tempAddRequest({
+            id: String(sol.id),
+            type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
+                  sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
+            process: 'Primera Vez',
+            cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
+            date: new Date(sol.creacion).toLocaleDateString('es-MX'),
+            status: status,
+            folio: sol.folio || `DGO-${sol.id}`,
+            rejectedDocuments: rejectedDocuments,
+            rawData: sol
+          });
+        }
+      }
+      
       setFixingRequest(null);
-      alert("Documentos enviados a revisión correctamente.");
-    } catch (error) {
-      console.error('Error actualizando documentos:', error);
-      alert('Error al enviar los documentos. Intenta nuevamente.');
+      alert("✅ Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN (amarillo) esperando que el operador valide los nuevos documentos.");
+    } catch (error: any) {
+      console.error('❌ Error actualizando documentos:', error);
+      alert(`Error al enviar los documentos: ${error?.data?.message || error?.message || 'Error desconocido'}`);
     }
   };
 

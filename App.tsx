@@ -62,9 +62,13 @@ const App: React.FC = () => {
   const updateRequestData = (id: string, updates: Partial<LicenseRequest>) => {
       setUserData(prev => ({ ...prev, requests: prev.requests?.map(req => req.id === id ? { ...req, ...updates } : req) }));
   };
+  const clearRequests = () => {
+      setUserData(prev => ({ ...prev, requests: [] }));
+  };
 
   (window as any).tempAddRequest = addRequest;
   (window as any).tempUpdateRequestData = updateRequestData;
+  (window as any).tempClearRequests = clearRequests;
 
   // --- RENDERIZADO DE PANTALLAS ---
   const renderScreen = () => {
