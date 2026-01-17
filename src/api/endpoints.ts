@@ -15,19 +15,25 @@ export const API_ENDPOINTS = {
   DOCUMENTOS: {
     CREATE: '/api/documentos/createDocumento',
     BY_USER: '/api/documentos/documentosByUsuario',
+    BY_SOLICITUD: '/api/documentos/documentosBySolicitud',
     DOWNLOAD: '/api/documentos/downloadDocumento',
     UPDATE: '/api/documentos/updateDocumento'
   },
   SOLICITUDES: {
     CREATE: '/api/solicitudes/createSolicitud',
     BY_USER: '/api/solicitudes/solicitudesByIdUsuario',
-    GET_ALL: '/api/solicitudes/solicitudes'
+    GET_ALL: '/api/solicitudes/solicitudes',
+    BY_ESTATUS: '/api/solicitudes/solicitudesByIdEstatus',
+    UPDATE: '/api/solicitudes/updateSolicitud'
   },
   REVISION: {
     CREATE: '/api/revisiones/createRevision',
     BY_SOLICITUD: '/api/revisiones/revisionesBySolicitud',
+    BY_REVISOR: '/api/revisiones/revisionesByRevisor',
     CREATE_DOCUMENTOS: '/createRevisionDocumentos',
-    DOCUMENTOS_BY_REVISION: '/revisionesDocumentosByRevision'
+    UPDATE_DOCUMENTO: '/updateRevisionDocumento',
+    DOCUMENTOS_BY_REVISION: '/revisionesDocumentosByRevision',
+    DOCUMENTOS_BY_DOCUMENTO: '/revisionesDocumentosByDocumento'
   },
   EXAM: {
     OBTENER_PREGUNTAS: '/api/pruebas/examen-teorico/obtener-preguntas',

@@ -18,6 +18,14 @@ export const documentService = {
     });
   },
 
+  getBySolicitud: async (idsolicitud: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.DOCUMENTOS.BY_SOLICITUD, {
+      method: 'POST',
+      body: { idsolicitud },
+      token
+    });
+  },
+
   downloadDocumento: async (id: number, token?: string): Promise<{ blob: Blob; filename?: string; contentType?: string }> => {
     return await apiBlobRequest(API_ENDPOINTS.DOCUMENTOS.DOWNLOAD, {
       method: 'POST',

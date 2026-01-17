@@ -132,66 +132,68 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
         
         if (mounted && solicitudes.length > 0 && (window as any).tempAddRequest) {
-          // Procesar cada solicitud y determinar su estado REAL consultando los documentos
+          // Procesar cada solicitud usando su idestatus como fuente de verdad
           for (const sol of solicitudes) {
             const idestatus = sol.idestatus;
             
-            // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Aprobada), 25 (Rechazada)
-            if (![22, 23, 24, 25].includes(idestatus)) continue;
+            // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Aprobada), 25 (Rechazada), 32 (Asignada a operador)
+            if (![22, 23, 24, 25, 32].includes(idestatus)) continue;
             
             let status: any = 'pending';
             let rejectedDocuments: any[] = [];
             
-            // Para TODAS las solicitudes, verificar el estado REAL de los documentos usando los endpoints
-            try {
-              // 1. Obtener revisiones usando /api/revisiones/revisionesBySolicitud
-              const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+            // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
+            // 24 = Aprobada/Completada
+            // 25 = Rechazada (pero consultar documentos para ver cuáles rechazaron)
+            // 22, 23, 32 = En proceso
+            
+            if (idestatus === 24) {
+              // Solicitud APROBADA por el backend
+              status = 'completed';
+            } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
+              // Para solicitudes rechazadas o en proceso, consultar documentos
+              // IMPORTANTE: NUNCA marcar como completed si idestatus no es 24
+              status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
               
-              const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
-              const revision = revisionesData[0];
-              
-              if (revision?.id) {
-                // 2. Obtener documentos de revisión usando /revisionesDocumentosByRevision
-                const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+              try {
+                const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+                const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
+                const revision = revisionesData[0];
                 
-                const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
+                console.log(`🔍 Solicitud ${sol.id} (idestatus: ${idestatus}): Revisión encontrada:`, revision?.id);
                 
-                // 3. Analizar estado REAL de cada documento (idestatus: 13=Actualizado, 14=Aprobado, 15=Rechazado)
-                const aprobados = docs.filter((d: any) => d.idestatus === 14);
-                const rechazados = docs.filter((d: any) => d.idestatus === 15);
-                const actualizados = docs.filter((d: any) => d.idestatus === 13);
-                
-                // 4. Determinar estado REAL basado en documentos (esto sobrescribe el estado de la solicitud)
-                if (rechazados.length > 0) {
-                  // HAY documentos rechazados - FORZAR estado rechazado
-                  status = 'rejected';
-                  rejectedDocuments = rechazados.map((d: any) => ({
-                    iddocumento: d.iddocumento,
-                    tipodocumento: d.tipodocumento || d.documento || 'Documento',
-                    comentarios: d.comentarios || 'Sin comentarios'
-                  }));
-                } else if (aprobados.length > 0 && docs.length === aprobados.length) {
-                  // TODOS aprobados - FORZAR estado completado
-                  status = 'completed';
-                } else if (actualizados.length > 0) {
-                  // Hay documentos actualizados pendientes de revisión
-                  status = 'paid_pending_docs';
-                } else {
-                  // Sin documentos o en proceso
-                  status = 'paid_pending_docs';
+                if (revision?.id) {
+                  const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+                  const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
+                  
+                  console.log(`📄 Documentos de revisión (${docs.length}):`, docs.map((d: any) => ({ iddocumento: d.iddocumento, tipo: d.tipodocumento, idestatus: d.idestatus })));
+                  
+                  // Buscar documentos rechazados (idestatus 15) para mostrar al usuario
+                  const rechazados = docs.filter((d: any) => d.idestatus === 15);
+                  const aprobados = docs.filter((d: any) => d.idestatus === 14);
+                  const actualizados = docs.filter((d: any) => d.idestatus === 13);
+                  
+                  console.log(`✅ Aprobados: ${aprobados.length}, ❌ Rechazados: ${rechazados.length}, 🔄 Actualizados: ${actualizados.length}`);
+                  
+                  if (rechazados.length > 0) {
+                    // Si hay documentos rechazados, cambiar status a rejected
+                    status = 'rejected';
+                    rejectedDocuments = rechazados.map((d: any) => ({
+                      iddocumento: d.iddocumento,
+                      tipodocumento: d.tipodocumento || d.documento || 'Documento',
+                      comentarios: d.comentarios || 'Sin comentarios'
+                    }));
+                  }
+                  // IMPORTANTE: Si idestatus es 32, SIEMPRE mantener como paid_pending_docs
+                  // NO importa si todos los documentos están aprobados (14)
+                  // Solo el backend puede cambiar la solicitud a idestatus 24
                 }
-              } else {
-                // No hay revisión - usar estado de solicitud como fallback
-                if (idestatus === 24) status = 'completed';
-                else if (idestatus === 25) status = 'rejected';
-                else status = 'paid_pending_docs';
+              } catch (err) {
+                // Error al consultar documentos - continuar con estado basado en idestatus
               }
-            } catch (err) {
-              // Fallback al estado de la solicitud si falla la consulta
-              if (idestatus === 24) status = 'completed';
-              else if (idestatus === 25) status = 'rejected';
-              else status = 'paid_pending_docs';
             }
+            
+            console.log(`📋 Solicitud ${sol.id}: idestatus=${idestatus}, status final=${status}`);
             
             // Si status final es completed, agregar como licencia
             if (status === 'completed') {
@@ -553,40 +555,45 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         (window as any).tempClearRequests();
       }
       
-      // Recargar todas las solicitudes con el estado actualizado
+      // Recargar todas las solicitudes con el estado actualizado usando LA MISMA LÓGICA del useEffect
       for (const sol of solicitudes) {
-        if (![22, 23, 24, 25].includes(sol.idestatus)) continue;
+        const idestatus = sol.idestatus;
         
-        let status: any = 'paid_pending_docs';
+        if (![22, 23, 24, 25, 32].includes(idestatus)) continue;
+        
+        let status: any = 'pending';
         let rejectedDocuments: any[] = [];
         
-        try {
-          const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
-          const revision = revResp?.data?.revisionesData?.[0];
+        // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
+        if (idestatus === 24) {
+          status = 'completed';
+        } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
+          // Para solicitudes rechazadas o en proceso, consultar documentos
+          status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
           
-          if (revision?.id) {
-            const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
-            const docs = docsResp?.data?.revisionesDocumentosData || [];
+          try {
+            const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+            const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
+            const revision = revisionesData[0];
             
-            const aprobados = docs.filter((d: any) => d.idestatus === 14);
-            const rechazados = docs.filter((d: any) => d.idestatus === 15);
-            const actualizados = docs.filter((d: any) => d.idestatus === 13);
-            
-            if (rechazados.length > 0) {
-              status = 'rejected';
-              rejectedDocuments = rechazados.map((d: any) => ({
-                iddocumento: d.iddocumento,
-                tipodocumento: d.tipodocumento || 'Documento',
-                comentarios: d.comentarios || 'Sin comentarios'
-              }));
-            } else if (aprobados.length > 0 && docs.length === aprobados.length) {
-              status = 'completed';
-            } else {
-              status = 'paid_pending_docs'; // Actualizados o en proceso
+            if (revision?.id) {
+              const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+              const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
+              
+              const rechazados = docs.filter((d: any) => d.idestatus === 15);
+              
+              if (rechazados.length > 0) {
+                status = 'rejected';
+                rejectedDocuments = rechazados.map((d: any) => ({
+                  iddocumento: d.iddocumento,
+                  tipodocumento: d.tipodocumento || d.documento || 'Documento',
+                  comentarios: d.comentarios || 'Sin comentarios'
+                }));
+              }
             }
+          } catch (err) {
+            // Error al consultar documentos
           }
-        } catch (err) {
-          // Error al recargar
         }
         
         if (status === 'completed') {

@@ -25,6 +25,22 @@ export const solicitudService = {
     });
   },
 
+  getByEstatus: async (idEstatus: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.SOLICITUDES.BY_ESTATUS, {
+      method: 'POST',
+      body: { idEstatus },
+      token
+    });
+  },
+
+  updateSolicitud: async (idsolicitud: number, idestatus: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.SOLICITUDES.UPDATE, {
+      method: 'POST',
+      body: { idsolicitud, idestatus },
+      token
+    });
+  },
+
   createRevision: async (payload: any, token?: string) => {
     return await apiRequest<any>(API_ENDPOINTS.REVISION.CREATE, {
       method: 'POST',
