@@ -68,7 +68,39 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     try {
       setIsLoading(true);
       const resp = await solicitudService.getAllSolicitudes(token);
-      const lista = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
+      let lista = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
+
+      // Obtener idrevisor del token
+      let idrevisor = 1; // Default
+      if (token) {
+        try {
+          const tokenParts = token.split('.');
+          if (tokenParts.length === 3) {
+            const decodedPayload = JSON.parse(atob(tokenParts[1]));
+            idrevisor = decodedPayload.aData || decodedPayload.idUsuario || 1;
+          }
+        } catch (error) {
+          console.error('Error decodificando token:', error);
+        }
+      }
+
+      // Obtener revisiones del revisor actual
+      const revisionsResp = await revisionService.revisionesByRevisor(idrevisor, token);
+      const revisionesData = revisionsResp?.data?.revisionesData || [];
+      const solicitudesEnRevision = new Set(revisionesData.map((r: any) => r.idsolicitud));
+
+      // Filtrar solicitudes
+      lista = lista.filter(sol => {
+        // Si idestatus = 20, mostrar siempre
+        if (sol.idestatus === 20) return true;
+        
+        // Si idsolicitud está en revisiones del revisor actual, mostrar
+        if (solicitudesEnRevision.has(sol.id)) return true;
+        
+        // No mostrar si no cumple con las condiciones
+        return false;
+      });
+
       setSolicitudes(lista);
     } catch (error) {
       console.error('Error al cargar solicitudes:', error);
@@ -245,23 +277,45 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       return;
     }
 
-    // Construir payload solo con documentos seleccionados
-    const documentosPayload = selectedDocs.map(doc => ({
-      iddocumento: doc.id,
-      comentarios: docStatus[doc.id] === 'accepted' 
-        ? `${doc.tipodocumento} aprobado`
-        : docReasons[doc.id],
-      idestatus: docStatus[doc.id] === 'accepted' ? 14 : 15
-    }));
-
-    const payload = {
-      idrevision: revisionActual.id,
-      documentos: documentosPayload
-    };
-
     try {
       setIsSubmitting(true);
-      await revisionService.createRevisionDocumentos(payload, token);
+
+      // Separar documentos reemplazados (idestatus = 13) de los demás
+      const docsReemplazados = selectedDocs.filter(doc => documentosRevisados[doc.id]?.idestatus === 13);
+      const docsNuevos = selectedDocs.filter(doc => documentosRevisados[doc.id]?.idestatus !== 13);
+
+      // Procesar documentos reemplazados con updateRevisionDocumento
+      for (const doc of docsReemplazados) {
+        const docRevisadoData = documentosRevisados[doc.id];
+        const payload = {
+          id: docRevisadoData.id,
+          comentarios: docStatus[doc.id] === 'accepted' 
+            ? `${doc.tipodocumento} aceptado despues de reemplazo`
+            : docReasons[doc.id],
+          idestatus: docStatus[doc.id] === 'accepted' ? 14 : 15
+        };
+        console.log('📤 Enviando updateRevisionDocumento:', payload);
+        await revisionService.updateRevisionDocumento(payload, token);
+      }
+
+      // Procesar documentos nuevos con createRevisionDocumentos
+      if (docsNuevos.length > 0) {
+        const documentosPayload = docsNuevos.map(doc => ({
+          iddocumento: doc.id,
+          comentarios: docStatus[doc.id] === 'accepted' 
+            ? `${doc.tipodocumento} aprobado`
+            : docReasons[doc.id],
+          idestatus: docStatus[doc.id] === 'accepted' ? 14 : 15
+        }));
+
+        const payload = {
+          idrevision: revisionActual.id,
+          documentos: documentosPayload
+        };
+        console.log('📤 Enviando createRevisionDocumentos:', payload);
+        await revisionService.createRevisionDocumentos(payload, token);
+      }
+
       alert('Revisión guardada exitosamente');
       setSelectedSolicitud(null);
       fetchSolicitudes(); // Recargar lista
@@ -398,17 +452,18 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                   {documentos.map((doc) => {
                     const status = docStatus[doc.id];
                     const docRevisado = documentosRevisados[doc.id];
-                    const yaRevisado = docRevisado && (docRevisado.idestatus === 14 || docRevisado.idestatus === 15 || docRevisado.idestatus === 13);
+                    const yaRevisadoFinal = docRevisado && (docRevisado.idestatus === 14 || docRevisado.idestatus === 15);
+                    const esReemplazado = docRevisado?.idestatus === 13;
                     
                     // Determinar el color y leyenda según el estado
                     let estatusLeyenda = '';
                     let estatusColor = '';
                     if (docRevisado?.idestatus === 14) {
                       estatusLeyenda = 'Aprobado';
-                      estatusColor = 'text-red-600 bg-red-50 border-red-200';
+                      estatusColor = 'text-green-600 bg-green-50 border-green-200';
                     } else if (docRevisado?.idestatus === 15) {
                       estatusLeyenda = 'Rechazado';
-                      estatusColor = 'text-green-600 bg-green-50 border-green-200';
+                      estatusColor = 'text-red-600 bg-red-50 border-red-200';
                     } else if (docRevisado?.idestatus === 13) {
                       estatusLeyenda = 'Reemplazado';
                       estatusColor = 'text-blue-600 bg-blue-50 border-blue-200';
@@ -416,7 +471,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
 
                     return (
                       <div key={doc.id} className={`p-3 rounded-lg border-2 transition-all ${
-                        yaRevisado ? estatusColor :
+                        yaRevisadoFinal || esReemplazado ? estatusColor :
                         status === 'rejected' ? 'border-red-200 bg-red-50/50' : 
                         status === 'accepted' ? 'border-green-200 bg-green-50/50' : 
                         'border-gray-200 bg-white'
@@ -436,36 +491,39 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                               </button>
                             </div>
                           </div>
-                          {yaRevisado ? (
-                            <div className="px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
-                              {estatusLeyenda}
-                            </div>
-                          ) : (
-                            <div className="flex gap-1">
-                              <button 
-                                onClick={() => handleSetDocStatus(doc.id, 'rejected')} 
-                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                                  status === 'rejected' 
-                                    ? 'bg-red-600 text-white shadow-lg scale-110' 
-                                    : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500'
-                                }`}
-                              >
-                                <span className="material-symbols-outlined text-sm">close</span>
-                              </button>
-                              <button 
-                                onClick={() => handleSetDocStatus(doc.id, 'accepted')} 
-                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                                  status === 'accepted' 
-                                    ? 'bg-green-600 text-white shadow-lg scale-110' 
-                                    : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-500'
-                                }`}
-                              >
-                                <span className="material-symbols-outlined text-sm">check</span>
-                              </button>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {(yaRevisadoFinal || esReemplazado) && (
+                              <div className="px-3 py-1.5 rounded-full font-bold text-xs whitespace-nowrap">
+                                {estatusLeyenda}
+                              </div>
+                            )}
+                            {!yaRevisadoFinal && (
+                              <div className="flex gap-1">
+                                <button 
+                                  onClick={() => handleSetDocStatus(doc.id, 'rejected')} 
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                                    status === 'rejected' 
+                                      ? 'bg-red-600 text-white shadow-lg scale-110' 
+                                      : 'bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500'
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-sm">close</span>
+                                </button>
+                                <button 
+                                  onClick={() => handleSetDocStatus(doc.id, 'accepted')} 
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                                    status === 'accepted' 
+                                      ? 'bg-green-600 text-white shadow-lg scale-110' 
+                                      : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-500'
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-sm">check</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {status === 'rejected' && !yaRevisado && (
+                        {status === 'rejected' && !yaRevisadoFinal && (
                           <div className="animate-in fade-in slide-in-from-top-2">
                             <label className="text-[9px] font-bold uppercase text-red-600 mb-1 block">
                               Motivo de Rechazo (Obligatorio)

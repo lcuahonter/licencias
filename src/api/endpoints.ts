@@ -25,7 +25,9 @@ export const API_ENDPOINTS = {
   REVISION: {
     CREATE: '/api/revisiones/createRevision',
     BY_SOLICITUD: '/api/revisiones/revisionesBySolicitud',
-    CREATE_DOCUMENTOS: '/api/revisiones/createRevisionDocumentos',
-    DOCUMENTOS_BY_REVISION: '/api/revisiones/revisionesDocumentosByRevision'
+    BY_REVISOR: '/api/revisiones/revisionesByRevisor',
+    CREATE_DOCUMENTOS: '/createRevisionDocumentos',
+    DOCUMENTOS_BY_REVISION: '/revisionesDocumentosByRevision',
+    UPDATE_DOCUMENTO: '/updateRevisionDocumento'
   }
 };

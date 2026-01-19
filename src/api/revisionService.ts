@@ -25,6 +25,14 @@ export const revisionService = {
     });
   },
 
+  revisionesByRevisor: async (idrevisor: number, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.BY_REVISOR, {
+      method: 'POST',
+      body: { idrevisor },
+      token
+    });
+  },
+
   createRevisionDocumentos: async (payload: any, token?: string) => {
     return await apiRequest<any>(API_ENDPOINTS.REVISION.CREATE_DOCUMENTOS, {
       method: 'POST',
@@ -37,6 +45,18 @@ export const revisionService = {
     return await apiRequest<any>(API_ENDPOINTS.REVISION.DOCUMENTOS_BY_REVISION, {
       method: 'POST',
       body: { idrevision },
+      token
+    });
+  },
+
+  updateRevisionDocumento: async (payload: {
+    id: number;
+    comentarios: string;
+    idestatus: number;
+  }, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.UPDATE_DOCUMENTO, {
+      method: 'POST',
+      body: payload,
       token
     });
   }
