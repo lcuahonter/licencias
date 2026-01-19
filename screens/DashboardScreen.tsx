@@ -50,7 +50,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [examPreguntas, setExamPreguntas] = useState<any[]>([]);
   const [loadingExam, setLoadingExam] = useState(false);
   const [examStarted, setExamStarted] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState(60); // PRUEBA: 1 minuto = 60 segundos
+  const [timeRemaining, setTimeRemaining] = useState(900); // 15 minutos = 900 segundos
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [idIntento, setIdIntento] = useState<number | null>(null);
   const [respuestas, setRespuestas] = useState<Record<number, string>>({}); // {idpregunta: respuesta}
@@ -148,7 +148,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             // 22, 23, 32 = En proceso
             
             if (idestatus === 24) {
-              // Solicitud APROBADA por el backend
+              // Solicitud APROBADA por el backend - Mostrar como completada
+              // TODO: Implementar validación de examen cuando el backend tenga endpoint por idusuario
               status = 'completed';
             } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
               // Para solicitudes rechazadas o en proceso, consultar documentos
@@ -566,6 +567,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         
         // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
         if (idestatus === 24) {
+          // Solicitud APROBADA - Mostrar como completada
           status = 'completed';
         } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
           // Para solicitudes rechazadas o en proceso, consultar documentos
@@ -709,7 +711,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
                       const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
                       const estatus = rawData?.estatus || 'En revisión';
-                      const statusDisplay = req.status === 'rejected' ? 'RECHAZADO' : req.status === 'pending_payment' ? 'PENDIENTE PAGO' : (estatus || 'EN REVISIÓN');
+                      
+                      // Determinar el texto del estado
+                      const statusDisplay = req.status === 'rejected' ? 'RECHAZADO' : 
+                                          req.status === 'pending_payment' ? 'PENDIENTE PAGO' : 
+                                          (estatus || 'EN REVISIÓN');
                       
                       return (
                         <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden ${req.status === 'rejected' ? 'border-red-500' : 'border-yellow-400'}`}>
@@ -751,7 +757,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     setSelectedSolicitudId(Number(req.id));
                                     setShowExamModal(true);
                                     setExamStarted(false);
-                                    setTimeRemaining(60);
+                                    setTimeRemaining(900);
                                     setRespuestas({});
                                     setTiemposRespuesta({});
                                     setEnviandoExamen(false);
@@ -998,7 +1004,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       <ul className="space-y-2 text-sm text-yellow-700">
                         <li className="flex items-start gap-2">
                           <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
-                          <span>Tienes <strong>1 minuto</strong> para completar el examen (PRUEBA)</span>
+                          <span>Tienes <strong>15 minutos</strong> para completar el examen</span>
                         </li>
                         <li className="flex items-start gap-2">
                           <span className="material-symbols-outlined text-xs mt-0.5">check_circle</span>
@@ -1068,7 +1074,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setExamPreguntas(data.preguntas);
                         setIdIntento(data.idintento);
                         setExamStarted(true);
-                        setTimeRemaining(60); // PRUEBA: 60 segundos
+                        setTimeRemaining(900); // 15 minutos = 900 segundos
                         setTiempoInicioPreguntas(Date.now());
                       } catch (error: any) {
                         console.error('Error al cargar examen:', error);
@@ -1321,6 +1327,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         // Determinar el tipo según el resultado
                         // Asumiendo que resultadoExamen tiene una propiedad 'aprobado' o similar
                         const aprobado = resultadoExamen.aprobado || resultadoExamen.data?.aprobado;
+                        
+                        // Si aprobó, guardar el idintento en localStorage
+                        if (aprobado && idIntentoGuardado) {
+                          // Obtener userId del token
+                          const tokenParts = (token || '').split('.');
+                          if (tokenParts.length === 3) {
+                            const decodedPayload = JSON.parse(atob(tokenParts[1]));
+                            const userId = decodedPayload.aData || decodedPayload.idUsuario;
+                            localStorage.setItem(`examen_aprobado_${userId}`, idIntentoGuardado.toString());
+                            console.log(`✅ Examen aprobado guardado en localStorage: idintento=${idIntentoGuardado} para usuario=${userId}`);
+                          }
+                        }
                         
                         setResultMessage(resultadoExamen.message || `Calificación: ${resultadoExamen.calificacion || 'N/A'}`);
                         setResultType(aprobado ? 'success' : 'error');

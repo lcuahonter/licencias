@@ -72,16 +72,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       
       console.log('📋 Solicitudes sin asignar (estatus 22):', solicitudesSinAsignar.length);
       
-      // Obtener también solicitudes con idestatus 32 (asignadas)
-      const respSolicitudes32 = await solicitudService.getByEstatus(32, token);
-      const solicitudesAsignadas32 = respSolicitudes32?.data?.solicitudesData || [];
-      
-      console.log('📋 Solicitudes asignadas (estatus 32):', solicitudesAsignadas32.length);
-      
-      // Combinar ambos conjuntos de solicitudes
-      const todasLasSolicitudes = [...solicitudesSinAsignar, ...solicitudesAsignadas32];
-      
-      // Obtener revisiones asignadas al operador
+      // Obtener revisiones asignadas al operador actual
       let revisionesDelOperador: any[] = [];
       if (revisorId) {
         console.log('🔄 Obteniendo revisiones para revisor:', revisorId);
@@ -92,11 +83,17 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         console.log('✅ Revisiones asignadas:', revisionesDelOperador.length);
       }
       
-      // Combinar solicitudes sin asignar con las revisiones asignadas
-      // Para las revisiones, buscar las solicitudes completas en todas las solicitudes
+      // Para obtener datos completos de las solicitudes en revisión, consultar idestatus 23
+      const respSolicitudes23 = await solicitudService.getByEstatus(23, token);
+      const solicitudesEnRevision = respSolicitudes23?.data?.solicitudesData || [];
+      
+      console.log('📋 Solicitudes en revisión (estatus 23):', solicitudesEnRevision.length);
+      
+      // Combinar solicitudes sin asignar con las revisiones asignadas a este operador
+      // Para las revisiones, buscar las solicitudes completas
       const solicitudesConRevision = revisionesDelOperador.map(rev => {
-        // Buscar la solicitud completa en todas las solicitudes (22 y 32)
-        const solicitudCompleta = todasLasSolicitudes.find(s => s.id === rev.idsolicitud);
+        // Buscar la solicitud completa en las solicitudes en revisión (idestatus 23)
+        const solicitudCompleta = solicitudesEnRevision.find(s => s.id === rev.idsolicitud);
         
         if (solicitudCompleta) {
           // Si existe, usar esos datos pero marcar como asignada
@@ -134,14 +131,15 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       
       console.log('🔗 Solicitudes con revisión mapeadas:', solicitudesConRevision.length);
       
-      // Filtrar de todasLasSolicitudes solo las que NO tienen revisión del operador actual
-      const solicitudesSinRevision = todasLasSolicitudes.filter(sol => {
+      // Las solicitudes sin asignar (idestatus 22) se muestran a todos los operadores
+      // Solo filtramos duplicados si el operador ya tiene una revisión de esa solicitud
+      const solicitudesSinRevision = solicitudesSinAsignar.filter(sol => {
         return !revisionesDelOperador.some(rev => rev.idsolicitud === sol.id);
       });
       
-      console.log('📋 Solicitudes sin revisión:', solicitudesSinRevision.length);
+      console.log('📋 Solicitudes sin revisión del operador:', solicitudesSinRevision.length);
       
-      // Combinar: solicitudes sin revisión + solicitudes con revisión
+      // Combinar: solicitudes sin revisión + solicitudes con revisión del operador
       const solicitudesFinales = [...solicitudesSinRevision, ...solicitudesConRevision];
       console.log('📊 Total de solicitudes a mostrar:', solicitudesFinales.length);
       setSolicitudes(solicitudesFinales);
@@ -269,16 +267,16 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         return;
       }
 
-      // Primero actualizar el idestatus de la solicitud a 32
-      console.log('📝 Actualizando solicitud:', solicitud.id, 'a estatus 32');
-      await solicitudService.updateSolicitud(solicitud.id, 32, token);
+      // Primero actualizar el idestatus de la solicitud a 23
+      console.log('📝 Actualizando solicitud:', solicitud.id, 'a estatus 23');
+      await solicitudService.updateSolicitud(solicitud.id, 23, token);
 
       // Preparar payload para createRevision
       const payload = {
         idsolicitud: solicitud.id,
         idrevisor: idRevisor,
         comentarios: 'Asignado',
-        idestatus: 32 // Asignada
+        idestatus: 23 // En revisión
       };
 
       console.log('📤 Enviando createRevision:', payload);
@@ -361,70 +359,22 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     try {
       setIsSubmitting(true);
       
-      console.log('📤 Procesando cada documento individualmente...');
-      
-      // Procesar cada documento con su propio try-catch
-      for (const doc of selectedDocs) {
-        const comentario = docStatus[doc.id] === 'accepted' 
+      // Preparar todos los documentos para crear
+      const documentosParaCrear = selectedDocs.map(doc => ({
+        iddocumento: doc.id,
+        comentarios: docStatus[doc.id] === 'accepted' 
           ? `${doc.tipodocumento} aprobado`
-          : docReasons[doc.id];
-        const idestatus = docStatus[doc.id] === 'accepted' ? 14 : 15;
-        
-        console.log(`📄 Procesando documento ${doc.id} (${doc.tipodocumento})...`);
-        
-        try {
-          // Primero intentar crear este documento
-          const payloadCreate = {
-            idrevision: revisionActual.id,
-            documentos: [{
-              iddocumento: doc.id,
-              comentarios: comentario,
-              idestatus: idestatus
-            }]
-          };
-          
-          await revisionService.createRevisionDocumentos(payloadCreate, token);
-          console.log(`✅ Documento ${doc.id} creado exitosamente`);
-        } catch (createError: any) {
-          console.log(`⚠️ Error al crear documento ${doc.id}:`, createError);
-          console.log(`⚠️ Mensaje del error:`, createError?.message);
-          console.log(`⚠️ Response completo:`, createError?.response);
-          console.log(`🔍 Buscando ID de revisión existente para documento ${doc.id}...`);
-          
-          // Buscar el ID del registro de RevisionDocumento usando el iddocumento
-          try {
-            const respRevDoc = await revisionService.getDocumentosByDocumento(doc.id, token);
-            console.log(`📋 Respuesta de búsqueda para doc ${doc.id}:`, respRevDoc);
-            
-            const revisionesDoc = respRevDoc?.data?.revisionesDocumentosData || [];
-            console.log(`📊 Revisiones encontradas para doc ${doc.id}:`, revisionesDoc.length);
-            
-            if (revisionesDoc.length === 0) {
-              console.error(`❌ No se encontró registro de revisión para documento ${doc.id}`);
-              throw new Error(`No se encontró registro de revisión para el documento ${doc.id}`);
-            }
-            
-            // Tomar el registro más reciente (el primero)
-            const revisionDoc = revisionesDoc[0];
-            console.log(`🔍 Encontrado registro de revisión: ID ${revisionDoc.id} para documento ${doc.id}`);
-            
-            // Actualizar usando el ID del registro de RevisionDocumento
-            const payloadUpdate = {
-              id: revisionDoc.id, // ID del registro (ej: 140)
-              comentarios: comentario,
-              idestatus: idestatus
-            };
-            
-            console.log(`🔄 Actualizando con payload:`, payloadUpdate);
-            await revisionService.updateRevisionDocumento(payloadUpdate, token);
-            console.log(`✅ Documento ${doc.id} actualizado exitosamente (registro ${revisionDoc.id})`);
-          } catch (searchError) {
-            console.error(`❌ Error al buscar/actualizar documento ${doc.id}:`, searchError);
-            throw searchError;
-          }
-        }
-      }
+          : docReasons[doc.id],
+        idestatus: docStatus[doc.id] === 'accepted' ? 14 : 15
+      }));
+
+      const payloadCreate = {
+        idrevision: revisionActual.id,
+        documentos: documentosParaCrear
+      };
       
+      console.log('📤 Creando revisión de documentos:', payloadCreate);
+      await revisionService.createRevisionDocumentos(payloadCreate, token);
       console.log('✅ Todos los documentos procesados correctamente');
       alert('Revisión guardada exitosamente');
       
