@@ -146,7 +146,7 @@ const App: React.FC = () => {
         />;
       
       case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
-      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
+      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
       case AppStep.PAYMENT: return <PaymentScreen userData={userData} onBack={() => setCurrentStep(AppStep.APPOINTMENT)} onPaymentSuccess={(paymentData) => { updateUserData({ payment: paymentData }); setCurrentStep(AppStep.DASHBOARD); }} />;
       case AppStep.SUCCESS: return <SuccessScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} />;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { UserData } from '../types';
 // Corregimos los imports para que sean relativos estándar
 import { userService } from '../src/api/userService';
@@ -292,7 +292,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       if (errorKeys.length === 0) return;
 
       const fieldOrder = [
-          'rfc', 'workplace', 
+          'rfc', 
           'address', 'zipCode', 'colony', 'locality', 'phone',
           'emergFirstName', 'emergPaternal', 'emergAddress', 'emergZipCode', 'emergColony', 'emergLocality', 'emergPhone'
       ];
@@ -318,7 +318,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       if (step === 1) {
           const rfcError = validateRFC(form.rfc);
           if (rfcError) newErrors.rfc = rfcError;
-          if (!form.workplace.trim()) newErrors.workplace = 'Requerido';
       }
       
       if (step === 2) {
@@ -493,7 +492,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                         <span className="text-xs font-bold text-gray-600">Donador de Órganos</span>
                     </label>
                 </div>
-                <InputField innerRef={inputRefs.workplace} label="Lugar de Trabajo" value={form.workplace} onChange={(val: string) => handleSafeInput('workplace', val, 'alphanumeric')} placeholder="Empresa o Institución" error={errors.workplace} />
+                <InputField innerRef={inputRefs.workplace} label="Lugar de Trabajo (Opcional)" value={form.workplace} onChange={(val: string) => handleSafeInput('workplace', val, 'alphanumeric')} placeholder="Empresa o Institución" error={errors.workplace} />
                 <InputField label="Restricciones" value={form.restrictions} onChange={(val: string) => handleSafeInput('restrictions', val, 'text')} placeholder="USA LENTES" />
                 <div className="col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Observaciones Médicas</label><textarea value={form.medicalNotes} onChange={(e) => handleSafeInput('medicalNotes', e.target.value, 'alphanumeric')} className="w-full h-20 p-3 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 outline-none font-bold uppercase resize-none" /></div>
             </div>

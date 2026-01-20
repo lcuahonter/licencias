@@ -1,6 +1,3 @@
-// Endpoints configurables desde variables de entorno
-// Permite cambiar fácilmente entre diferentes versiones del API
-
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: import.meta.env.VITE_AUTH_LOGIN || '/auth/login',
@@ -44,5 +41,10 @@ export const API_ENDPOINTS = {
     VERIFICAR_RESULTADO: import.meta.env.VITE_EXAM_VERIFICAR_RESULTADO || '/api/pruebas/examen-teorico/verificar-resultado',
     VERIFICAR_APROBACION: import.meta.env.VITE_EXAM_VERIFICAR_APROBACION || '/api/pruebas/examen-teorico/verificar-aprobacion',
     OBTENER_POR_SOLICITUD: import.meta.env.VITE_EXAM_OBTENER_POR_SOLICITUD || '/api/pruebas/obtener-por-solicitud'
+  },
+  DASHBOARD: {
+    ADMIN_DATA: import.meta.env.VITE_DASHBOARD_ADMIN_DATA || '/api/dashboard/adminData',
+    MUNICIPIO_DATA: import.meta.env.VITE_DASHBOARD_MUNICIPIO_DATA || '/api/dashboard/municipioData'
   }
 };
+
