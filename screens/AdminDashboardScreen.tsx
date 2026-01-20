@@ -6,38 +6,24 @@ import { FileOpener } from '@capacitor-community/file-opener';
 import MD5 from 'crypto-js/md5';
 import { userService } from '../src/api/userService';
 import { fetchCurpData } from '../src/utils/curpHelpers';
-import dashboardService, { DashboardTramiteResponse } from '../src/api/dashboardService';
+import dashboardService, { DashboardTramiteResponse, OperadorData } from '../src/api/dashboardService';
 
 interface AdminDashboardScreenProps {
   onLogout: () => void;
   token?: string;
 }
 
-const DURANGO_MUNICIPIOS = [
-  'Canatlán', 'Canelas', 'Coneto de Comonfort', 'Cuencamé', 'Durango', 
-  'El Oro', 'General Simón Bolívar', 'Gómez Palacio', 'Guadalupe Victoria', 
-  'Guanaceví', 'Hidalgo', 'Indé', 'Lerdo', 'Mapimí', 'Mezquital', 'Nazas', 
-  'Nombre de Dios', 'Nuevo Ideal', 'Ocampo', 'Otáez', 'Pánuco de Coronado', 
-  'Peñón Blanco', 'Poanas', 'Pueblo Nuevo', 'Rodeo', 'San Bernardo', 'San Dimas', 
-  'San Juan de Guadalupe', 'San Juan del Río', 'San Luis del Cordero', 
-  'San Pedro del Gallo', 'Santa Clara', 'Santiago Papasquiaro', 'Súchil', 
-  'Tamazula', 'Tepehuanes', 'Tlahualilo', 'Topia', 'Vicente Guerrero'
-];
-
-const INITIAL_OPERATORS = [
-    { id: 1, name: 'Roberto Gómez', email: 'roberto@durango.gob.mx', role: 'Supervisor', status: 'active', rejections: 12, approvals: 140 },
-    { id: 2, name: 'Ana Martínez', email: 'ana@durango.gob.mx', role: 'Operador', status: 'active', rejections: 45, approvals: 80 },
-    { id: 3, name: 'Carlos Ruiz', email: 'carlos@durango.gob.mx', role: 'Operador', status: 'inactive', rejections: 2, approvals: 15 },
-    { id: 4, name: 'Daniela Soto', email: 'daniela@durango.gob.mx', role: 'Operador', status: 'active', rejections: 8, approvals: 95 },
-];
-
 const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, token }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'operators'>('overview');
-  const [operators, setOperators] = useState(INITIAL_OPERATORS);
+  const [operators, setOperators] = useState<any[]>([]);
   
   // Estado para datos del dashboard
   const [dashboardData, setDashboardData] = useState<DashboardTramiteResponse | null>(null);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  
+  // Estado para operadores del API
+  const [operadoresData, setOperadoresData] = useState<OperadorData[]>([]);
+  const [isLoadingOperadores, setIsLoadingOperadores] = useState(false);
   
   // FECHAS
   const todayDate = new Date();
@@ -78,6 +64,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  
+  // Modal de confirmación para cambio de estatus
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ idUsuario: number; idEstatus: number; actionName: string } | null>(null);
   
   const operatorInputRefs = {
     firstName: useRef<HTMLInputElement>(null),
@@ -128,6 +118,36 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
       setShowAlertModal(true);
     } finally {
       setIsLoadingDashboard(false);
+    }
+  };
+
+  // --- CARGAR OPERADORES ---
+  useEffect(() => {
+    if (activeTab === 'operators') {
+      fetchOperadores();
+    }
+  }, [activeTab, dateRange, token]);
+
+  const fetchOperadores = async () => {
+    if (!token) return;
+    
+    try {
+      setIsLoadingOperadores(true);
+      const data = await dashboardService.getDashboardRevisor(
+        {
+          FechaInicio: dateRange.start,
+          FechaFin: dateRange.end
+        },
+        token
+      );
+      setOperadoresData(data);
+    } catch (error) {
+      console.error('Error al cargar operadores:', error);
+      setAlertMessage('Error al cargar los operadores');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setIsLoadingOperadores(false);
     }
   };
 
@@ -193,15 +213,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
   // CÁLCULO TOTALES DINÁMICOS
   const globalStats = useMemo(() => {
       if (!dashboardData) {
-        // Fallback a cálculo manual
-        let totalTramites = 0;
-        let totalDinero = 0;
-        DURANGO_MUNICIPIOS.forEach(muni => {
-            const stats = getMuniStats(muni);
-            totalTramites += stats.total;
-            totalDinero += stats.total * 900; 
-        });
-        return { count: totalTramites, money: totalDinero };
+        // Sin datos del API, mostrar valores vacíos
+        return { count: 0, money: 0 };
       }
 
       // Usar datos reales del API
@@ -213,11 +226,38 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
 
   const currentMuniStats = selectedMuni ? getMuniStats(selectedMuni) : null;
 
-  const filteredOperators = operators.filter(op => {
-      const matchesSearch = op.name.toLowerCase().includes(searchOp.toLowerCase()) || op.email.toLowerCase().includes(searchOp.toLowerCase());
-      const matchesStatus = filterOpStatus === 'all' ? true : op.status === filterOpStatus;
-      return matchesSearch && matchesStatus;
-  });
+  const filteredOperators = useMemo(() => {
+      const sourceData = operadoresData.length > 0 ? operadoresData : operators;
+      
+      // Convertir OperadorData[] a formato compatible si viene del API
+      const normalizedOps = operadoresData.length > 0 
+        ? operadoresData.map((op, idx) => {
+            const totalSolicitudes = Object.values(op.solicitudes).reduce((sum, val) => sum + val, 0);
+            // Mapear estatus español a inglés
+            const statusMap: { [key: string]: 'active' | 'inactive' } = {
+              'Activo': 'active',
+              'Inactivo': 'inactive'
+            };
+            return {
+              id: idx + 1,
+              idUsuario: op.Id, // ID real del usuario del API
+              name: op.Nombre,
+              email: op.Correo,
+              role: 'Operador',
+              status: statusMap[op.estatus],
+              estatus: op.estatus, // Mantener el estatus original para comparación
+              solicitudes: op.solicitudes, // Mantener solicitudes originales del API
+              totalSolicitudes: totalSolicitudes
+            };
+          })
+        : operators;
+      
+      return normalizedOps.filter(op => {
+        const matchesSearch = op.name.toLowerCase().includes(searchOp.toLowerCase()) || op.email.toLowerCase().includes(searchOp.toLowerCase());
+        const matchesStatus = filterOpStatus === 'all' ? true : op.status === filterOpStatus;
+        return matchesSearch && matchesStatus;
+      });
+  }, [operadoresData, operators, searchOp, filterOpStatus]);
 
   // --- HTML ESTRUCTURA ---
   const generateHTMLStructure = (title: string, contentBody: string) => {
@@ -260,18 +300,25 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
   };
 
   const handlePreviewGlobalPDF = () => {
+    if (!dashboardData || !dashboardData.desglose) {
+      setAlertMessage('No hay datos disponibles para generar el reporte');
+      setAlertType('warning');
+      setShowAlertModal(true);
+      return;
+    }
+
     let grandTotal = 0;
     let grandPrimera = 0;
     let grandRenovacion = 0;
     let rowsHTML = '';
     
-    DURANGO_MUNICIPIOS.forEach(muni => {
-        const stats = getMuniStats(muni);
+    dashboardData.desglose.forEach(muniData => {
+        const stats = getMuniStats(muniData.municipio);
         const cash = stats.total * 900;
         grandTotal += stats.total;
         grandPrimera += stats.breakdown.primera.count;
         grandRenovacion += stats.breakdown.renovacion.count;
-        const shortName = muni.length > 15 ? muni.substring(0,13) + '..' : muni;
+        const shortName = muniData.municipio.length > 15 ? muniData.municipio.substring(0,13) + '..' : muniData.municipio;
         // COLUMNAS ACTUALIZADAS
         rowsHTML += `<tr><td>${shortName}</td><td><strong>${stats.total}</strong></td><td>${stats.breakdown.primera.count}</td><td>${stats.breakdown.renovacion.count}</td><td>$${(cash/1000).toFixed(1)}k</td></tr>`;
     });
@@ -315,12 +362,19 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
   };
 
   const downloadExcel = async () => {
+    if (!dashboardData || !dashboardData.desglose) {
+      setAlertMessage('No hay datos disponibles para exportar');
+      setAlertType('warning');
+      setShowAlertModal(true);
+      return;
+    }
+
     try {
-      let csvContent = "\uFEFFID,Municipio,Total Tramites,Primera Vez,Renovacion,Recaudacion Estimada\n"; 
-      DURANGO_MUNICIPIOS.forEach((muni, index) => {
-          const stats = getMuniStats(muni);
+      let csvContent = "\uFEFFID,Municipio,Total Tramites,Primera Vez,Renovacion,Recaudacion Estimada\n";
+      dashboardData.desglose.forEach((muniData, index) => {
+          const stats = getMuniStats(muniData.municipio);
           const cash = stats.total * 900;
-          csvContent += `${index + 1},"${muni}",${stats.total},${stats.breakdown.primera.count},${stats.breakdown.renovacion.count},"$${cash}"\n`;
+          csvContent += `${index + 1},"${muniData.municipio}",${stats.total},${stats.breakdown.primera.count},${stats.breakdown.renovacion.count},"$${cash}"\n`;
       });
       const fileName = `Reporte_Durango_${Date.now()}.csv`;
       if (Capacitor.isNativePlatform()) {
@@ -533,11 +587,60 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
     }
   };
 
-  const handleToggleStatus = (id: number) => { 
-      // @ts-ignore
-      setOperators(prev => prev.map(op => op.id === id ? { ...op, status: op.status === 'active' ? 'inactive' : 'active' } : op)); 
+  const handleToggleStatus = (opData: any) => {
+    if (!opData.idUsuario) {
+      console.warn('⚠️ idUsuario no disponible en la respuesta del API. El backend debe agregar este campo.');
+      setAlertMessage('Error: No se puede actualizar el operador. Falta el ID de usuario en la respuesta del API.');
+      setAlertType('error');
+      setShowAlertModal(true);
+      return;
+    }
+    const newStatus = opData.estatus === 'Activo' ? 2 : 1; // 1: Activo, 2: Inactivo
+    const actionName = opData.estatus === 'Activo' ? 'Desactivar' : 'Activar';
+    setConfirmAction({ idUsuario: opData.idUsuario, idEstatus: newStatus, actionName });
+    setShowConfirmModal(true);
   };
-  const handleDeleteOperator = (id: number) => { if(window.confirm('¿Estás seguro de eliminar este operador?')) setOperators(prev => prev.filter(op => op.id !== id)); };
+
+  const handleDeleteOperator = (opData: any) => {
+    if (!opData.idUsuario) {
+      console.warn('⚠️ idUsuario no disponible en la respuesta del API. El backend debe agregar este campo.');
+      setAlertMessage('Error: No se puede dar de baja el operador. Falta el ID de usuario en la respuesta del API.');
+      setAlertType('error');
+      setShowAlertModal(true);
+      return;
+    }
+    setConfirmAction({ idUsuario: opData.idUsuario, idEstatus: 4, actionName: 'Dar de Baja' }); // 4: Baja
+    setShowConfirmModal(true);
+  };
+
+  const confirmStatusChange = async () => {
+    if (!confirmAction || !token) return;
+    
+    try {
+      await userService.updateUsuario(
+        {
+          idUsuario: confirmAction.idUsuario,
+          idEstatus: confirmAction.idEstatus
+        },
+        token
+      );
+      
+      setAlertMessage(`Operador ${confirmAction.actionName.toLowerCase()} exitosamente`);
+      setAlertType('success');
+      setShowAlertModal(true);
+      
+      // Recargar operadores
+      fetchOperadores();
+    } catch (error) {
+      console.error('Error al actualizar estatus:', error);
+      setAlertMessage('Error al actualizar el estatus del operador');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setShowConfirmModal(false);
+      setConfirmAction(null);
+    }
+  };
   
   const handleQuickDate = (type: 'month' | 'quarter' | 'year') => {
       const end = new Date(); const start = new Date();
@@ -550,11 +653,11 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-      <header className="safe-top bg-indigo-900 text-white px-6 pb-5 shadow-lg sticky top-0 z-10 rounded-b-3xl">
+      <header className="safe-top text-white px-6 pb-5 shadow-lg sticky top-0 z-10 rounded-b-3xl" style={{ backgroundColor: '#003DA5' }}>
         <div className="flex justify-between items-center mb-4 pt-4"> 
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/30">
-                    <span className="material-symbols-outlined text-indigo-100">monitoring</span>
+                    <span className="material-symbols-outlined text-white">monitoring</span>
                 </div>
                 <div>
                     <h1 className="font-black text-lg leading-tight tracking-tight">Panel de Control</h1>
@@ -565,11 +668,11 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                 <span className="material-symbols-outlined text-sm">logout</span>
             </button>
         </div>
-        <div className="flex bg-indigo-950/50 p-1 rounded-xl">
-            <button onClick={() => setActiveTab('overview')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'overview' ? 'bg-white text-indigo-900 shadow-md' : 'text-indigo-200 hover:bg-white/5'}`}>
+        <div className="flex p-1 rounded-xl" style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
+            <button onClick={() => setActiveTab('overview')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'overview' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`} style={activeTab === 'overview' ? { color: '#003DA5' } : {}}>
                 <span className="material-symbols-outlined text-sm">analytics</span> Reportes
             </button>
-            <button onClick={() => setActiveTab('operators')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'operators' ? 'bg-white text-indigo-900 shadow-md' : 'text-indigo-200 hover:bg-white/5'}`}>
+            <button onClick={() => setActiveTab('operators')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'operators' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`} style={activeTab === 'operators' ? { color: '#003DA5' } : {}}>
                 <span className="material-symbols-outlined text-sm">group</span> Operadores
             </button>
         </div>
@@ -583,19 +686,19 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <p className="text-xs font-bold text-gray-400 uppercase mb-1">Trámites {filterLabel === 'Periodo Personalizado' ? 'en periodo' : filterLabel}</p>
                         <h2 className="text-2xl font-black text-gray-800 dark:text-white">{globalStats.count.toLocaleString()}</h2>
-                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="bg-indigo-500 h-1.5 rounded-full w-[70%]"></div></div>
+                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="h-1.5 rounded-full w-[70%]" style={{ backgroundColor: '#003DA5' }}></div></div>
                     </div>
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <p className="text-xs font-bold text-gray-400 uppercase mb-1">Recaudación Total</p>
-                        <h2 className="text-2xl font-black text-gray-800 dark:text-white">${(globalStats.money / 1000000).toFixed(1)}M</h2>
-                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="bg-green-500 h-1.5 rounded-full w-[85%]"></div></div>
+                        <h2 className="text-2xl font-black text-gray-800 dark:text-white">${globalStats.money.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="h-1.5 rounded-full w-[85%]" style={{ backgroundColor: '#6BA042' }}></div></div>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-lg border border-indigo-100 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-lg border dark:border-gray-700" style={{ borderColor: 'rgba(0, 61, 165, 0.2)' }}>
                     <div className="flex flex-col gap-4">
                         <div className="flex justify-between items-center">
-                            <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined text-indigo-500">filter_alt</span> Exportar Datos</h3>
+                            <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined" style={{ color: '#003DA5' }}>filter_alt</span> Exportar Datos</h3>
                             <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 rounded-lg p-1 border border-gray-100 dark:border-gray-700">
                                 <button onClick={handlePreviewGlobalPDF} className="p-2 text-gray-400 hover:text-red-500 hover:bg-white dark:hover:bg-gray-800 rounded-md transition-all"><span className="material-symbols-outlined text-xl">picture_as_pdf</span></button>
                                 <div className="w-px h-4 bg-gray-200 dark:bg-gray-700"></div>
@@ -636,19 +739,22 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                             <button 
                                 onClick={() => handleQuickDate('month')} 
-                                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeFilterBtn === 'month' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100'}`}
+                                className="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-md"
+                                style={activeFilterBtn === 'month' ? { backgroundColor: '#003DA5', color: '#fff', borderColor: '#003DA5' } : { backgroundColor: '#E3F2FD', color: '#003DA5', borderColor: '#BBDEFB' }}
                             >
                                 Mes Actual
                             </button>
                             <button 
                                 onClick={() => handleQuickDate('quarter')} 
-                                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeFilterBtn === 'quarter' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                                className="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-md"
+                                style={activeFilterBtn === 'quarter' ? { backgroundColor: '#003DA5', color: '#fff', borderColor: '#003DA5' } : { backgroundColor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }}
                             >
                                 3 Meses
                             </button>
                             <button 
                                 onClick={() => handleQuickDate('year')} 
-                                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeFilterBtn === 'year' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                                className="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-md"
+                                style={activeFilterBtn === 'year' ? { backgroundColor: '#003DA5', color: '#fff', borderColor: '#003DA5' } : { backgroundColor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }}
                             >
                                 Año Actual
                             </button>
@@ -658,17 +764,17 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
 
                 <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                     <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined text-orange-500">map</span> Desglose por Municipio</h3>
-                        <p className="text-[10px] text-gray-400 mt-1">Filtrado por: <span className="font-bold text-indigo-500">{filterLabel} ({getRangeText()})</span></p>
+                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined" style={{ color: '#003DA5' }}>map</span> Desglose por Municipio</h3>
+                        <p className="text-[10px] text-gray-400 mt-1">Filtrado por: <span className="font-bold" style={{ color: '#003DA5' }}>{filterLabel} ({getRangeText()})</span></p>
                     </div>
                     <div className="max-h-[300px] overflow-y-auto">
                         {dashboardData && dashboardData.desglose && dashboardData.desglose.length > 0 ? (
                             dashboardData.desglose.map((item, i) => (
-                                <div key={item.municipio} onClick={() => setSelectedMuni(item.municipio)} className="px-5 py-4 border-b border-gray-50 dark:border-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer transition-colors flex justify-between items-center group">
-                                    <div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-300 w-4">{i + 1}</span><span className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-indigo-600 transition-colors">{item.municipio}</span></div>
+                                <div key={item.municipio} onClick={() => setSelectedMuni(item.municipio)} className="px-5 py-4 border-b border-gray-50 dark:border-gray-700 cursor-pointer transition-colors flex justify-between items-center group" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#E3F2FD'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                    <div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-300 w-4">{i + 1}</span><span className="text-sm font-medium text-gray-700 dark:text-gray-200 transition-colors" style={{ color: '#374151' }}>{item.municipio}</span></div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold text-gray-500">{item.licenciaTotal}</span>
-                                        <span className="material-symbols-outlined text-gray-300 text-sm group-hover:text-indigo-400">bar_chart</span>
+                                        <span className="material-symbols-outlined text-gray-300 text-sm" style={{ color: '#9ca3af' }}>bar_chart</span>
                                     </div>
                                 </div>
                             ))
@@ -687,13 +793,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                  <div className="flex justify-between items-center">
                     <h3 className="font-bold text-gray-800 dark:text-white">Equipo Registrado</h3>
-                    <button onClick={() => setShowAddModal(true)} className="text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow hover:bg-indigo-700 flex items-center gap-1">
+                    <button onClick={() => setShowAddModal(true)} className="text-xs font-bold text-white px-3 py-1.5 rounded-lg shadow flex items-center gap-1" style={{ backgroundColor: '#003DA5' }}>
                         <span className="material-symbols-outlined text-sm">add</span> Nuevo
                     </button>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
                     <div className="relative">
-                        <input type="text" value={searchOp} onChange={(e) => setSearchOp(e.target.value)} placeholder="Buscar por Nombre o Correo..." className="w-full h-11 pl-10 pr-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-indigo-500 transition-colors" />
+                        <input type="text" value={searchOp} onChange={(e) => setSearchOp(e.target.value)} placeholder="Buscar por Nombre o Correo..." className="w-full h-11 pl-10 pr-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none transition-colors" style={{ focusBorderColor: '#003DA5' }} />
                         <span className="material-symbols-outlined absolute left-3 top-2.5 text-gray-400">search</span>
                     </div>
                     <div className="flex gap-2">
@@ -702,7 +808,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                          <button onClick={() => setFilterOpStatus('inactive')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${filterOpStatus === 'inactive' ? 'bg-gray-100 border-gray-300 text-gray-600' : 'bg-transparent border-gray-200 text-gray-500'}`}>Inactivos</button>
                     </div>
                 </div>
-                {filteredOperators.length > 0 ? (
+                {isLoadingOperadores ? (
+                    <div className="text-center py-10">
+                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mx-auto mb-4"></div>
+                        <p className="text-gray-400">Cargando operadores...</p>
+                    </div>
+                ) : filteredOperators.length > 0 ? (
                     filteredOperators.map(op => (
                         <div key={op.id} className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 relative overflow-hidden">
                             <div className="flex items-start gap-4 relative z-10">
@@ -717,17 +828,47 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-500">{op.email}</p>
-                                    <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                                        <div className="text-center"><p className="text-[10px] text-gray-400 font-bold uppercase">Aprobados</p><p className="text-sm font-black text-gray-700 dark:text-white">{op.approvals}</p></div>
-                                        <div className="text-center"><p className="text-[10px] text-gray-400 font-bold uppercase">Rechazos</p><p className="text-sm font-black text-red-500">{op.rejections}</p></div>
+                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                        {op.solicitudes && Object.keys(op.solicitudes).length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {Object.entries(op.solicitudes).map(([estado, cantidad]) => {
+                                                    // Mapeo de colores por estado
+                                                    const colorMap: { [key: string]: string } = {
+                                                        'Asignada': 'bg-blue-100 text-blue-700',
+                                                        'Activo': 'bg-green-100 text-green-700',
+                                                        'Pendiente de revisión': 'bg-yellow-100 text-yellow-700',
+                                                        'Completada': 'bg-green-100 text-green-700',
+                                                        'En revisión': 'bg-purple-100 text-purple-700'
+                                                    };
+                                                    // Mapeo de etiquetas para mostrar
+                                                    const labelMap: { [key: string]: string } = {
+                                                        'Activo': 'Completados',
+                                                        'Asignada': 'Asignadas',
+                                                        'Pendiente de revisión': 'Pendiente de revisión',
+                                                        'Completada': 'Completadas',
+                                                        'En revisión': 'En revisión'
+                                                    };
+                                                    const colorClass = colorMap[estado] || 'bg-gray-100 text-gray-700';
+                                                    const displayLabel = labelMap[estado] || estado;
+                                                    return (
+                                                        <div key={estado} className={`px-2 py-1 rounded-lg ${colorClass} text-[10px] font-bold flex items-center gap-1`}>
+                                                            <span>{displayLabel}:</span>
+                                                            <span>{cantidad}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-gray-400 italic">Sin solicitudes asignadas</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                             <div className="mt-4 flex gap-2 justify-end">
-                                <button onClick={() => handleToggleStatus(op.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-600 hover:bg-gray-200">
+                                <button onClick={() => handleToggleStatus(op)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-600 hover:bg-gray-200">
                                     {op.status === 'active' ? 'Desactivar' : 'Activar'}
                                 </button>
-                                <button onClick={() => handleDeleteOperator(op.id)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100">Baja</button>
+                                <button onClick={() => handleDeleteOperator(op)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100">Baja</button>
                             </div>
                         </div>
                     ))
@@ -1003,6 +1144,40 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                   </div>
               </div>
           </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN PARA CAMBIO DE ESTATUS */}
+      {showConfirmModal && confirmAction && (
+        <div className="absolute inset-0 z-[125] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 bg-yellow-100">
+                <span className="material-symbols-outlined text-5xl text-yellow-600">warning</span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Confirmar Acción</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                ¿Estás seguro de que deseas <strong>{confirmAction.actionName.toLowerCase()}</strong> este operador?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setConfirmAction(null);
+                  }}
+                  className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmStatusChange}
+                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL GENÉRICO DE ALERTAS */}

@@ -25,19 +25,25 @@ export interface DashboardTramiteResponse {
 }
 
 export interface DashboardRevisorRequest {
-  id: number;           // ID del revisor
   FechaInicio: string;  // Formato: "2026-01-01"
   FechaFin: string;     // Formato: "2026-01-31"
 }
 
-export interface DashboardRevisorResponse {
+export interface OperadorSolicitudes {
+  [key: string]: number; // "Activo": 8, "Asignada": 5, etc.
+}
+
+export interface OperadorData {
+  Id: number; // ID del usuario en la base de datos
   Nombre: string;
   Correo: string;
-  solicitudes: {
-    Activo: number;
-  };
+  solicitudes: OperadorSolicitudes;
   idEstatus: number;
   estatus: string; // "Activo" | "Inactivo"
+}
+
+export interface DashboardRevisorResponse {
+  data: OperadorData[];
 }
 
 const dashboardService = {
@@ -60,14 +66,14 @@ const dashboardService = {
   },
 
   /**
-   * Obtiene el dashboard de un revisor específico filtrado por fecha
+   * Obtiene la lista de todos los operadores con sus estadísticas filtrado por fecha
    */
   async getDashboardRevisor(
     payload: DashboardRevisorRequest,
     token?: string
-  ): Promise<DashboardRevisorResponse> {
-    const response = await apiRequest<{ data: DashboardRevisorResponse }>(
-      API_ENDPOINTS.DASHBOARD.MUNICIPIO_DATA,
+  ): Promise<OperadorData[]> {
+    const response = await apiRequest<{ data: OperadorData[] }>(
+      API_ENDPOINTS.DASHBOARD.OPERADORES_DATA,
       {
         method: 'POST',
         body: payload,

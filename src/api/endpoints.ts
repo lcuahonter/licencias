@@ -43,8 +43,8 @@ export const API_ENDPOINTS = {
     OBTENER_POR_SOLICITUD: import.meta.env.VITE_EXAM_OBTENER_POR_SOLICITUD || '/api/pruebas/obtener-por-solicitud'
   },
   DASHBOARD: {
-    ADMIN_DATA: import.meta.env.VITE_DASHBOARD_ADMIN_DATA || '/api/dashboard/adminData',
-    MUNICIPIO_DATA: import.meta.env.VITE_DASHBOARD_MUNICIPIO_DATA || '/api/dashboard/municipioData'
+    ADMIN_DATA: import.meta.env.VITE_DASHBOARD_ADMIN_DATA || '/api/dashboard/getDashboardTramite',
+    OPERADORES_DATA: import.meta.env.VITE_DASHBOARD_OPERADORES_DATA || '/api/dashboard/getDashboardRevisor'
   }
 };
 
