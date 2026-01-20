@@ -1,0 +1,19 @@
+# Excluir archivos innecesarios del deployment
+node_modules/
+.git/
+.github/
+android/
+ios/
+*.bak
+*.log
+.env
+.env.local
+src/
+components/
+screens/
+public/Photos/
+*.md
+tsconfig.json
+vite.config.ts
+capacitor.config.ts
+package-lock.json
