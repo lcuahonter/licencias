@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import html2pdf from 'html2pdf.js';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
@@ -6,9 +6,11 @@ import { FileOpener } from '@capacitor-community/file-opener';
 import MD5 from 'crypto-js/md5';
 import { userService } from '../src/api/userService';
 import { fetchCurpData } from '../src/utils/curpHelpers';
+import dashboardService, { DashboardTramiteResponse } from '../src/api/dashboardService';
 
 interface AdminDashboardScreenProps {
   onLogout: () => void;
+  token?: string;
 }
 
 const DURANGO_MUNICIPIOS = [
@@ -29,9 +31,13 @@ const INITIAL_OPERATORS = [
     { id: 4, name: 'Daniela Soto', email: 'daniela@durango.gob.mx', role: 'Operador', status: 'active', rejections: 8, approvals: 95 },
 ];
 
-const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout }) => {
+const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, token }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'operators'>('overview');
   const [operators, setOperators] = useState(INITIAL_OPERATORS);
+  
+  // Estado para datos del dashboard
+  const [dashboardData, setDashboardData] = useState<DashboardTramiteResponse | null>(null);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
   
   // FECHAS
   const todayDate = new Date();
@@ -97,46 +103,113 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
       return "Periodo Histórico";
   };
 
+  // --- CARGAR DATOS DEL DASHBOARD ---
+  useEffect(() => {
+    fetchDashboardData();
+  }, [dateRange, token]);
+
+  const fetchDashboardData = async () => {
+    if (!token) return;
+    
+    try {
+      setIsLoadingDashboard(true);
+      const data = await dashboardService.getDashboardTramite(
+        {
+          FechaInicio: dateRange.start,
+          FechaFin: dateRange.end
+        },
+        token
+      );
+      setDashboardData(data);
+    } catch (error) {
+      console.error('Error al cargar dashboard:', error);
+      setAlertMessage('Error al cargar los datos del dashboard');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setIsLoadingDashboard(false);
+    }
+  };
+
   // --- LÓGICA DE DATOS PRINCIPAL ---
   const getMuniStats = (muniName: string) => {
-      const dateFactor = parseInt(dateRange.start.replace(/-/g, '').substring(6)) || 1; 
-      const seed = (muniName.length * 5) + dateFactor; 
-      
-      // 1. Calculamos valores base
-      const primera = Math.floor(Math.random() * 80) + seed;
-      const renovacion = Math.floor(Math.random() * 120) + seed;
-      
-      // 2. Total real
-      const total = primera + renovacion;
+      if (!dashboardData) {
+        // Fallback a datos simulados si no hay datos del API
+        const dateFactor = parseInt(dateRange.start.replace(/-/g, '').substring(6)) || 1; 
+        const seed = (muniName.length * 5) + dateFactor; 
+        const primera = Math.floor(Math.random() * 80) + seed;
+        const renovacion = Math.floor(Math.random() * 120) + seed;
+        const total = primera + renovacion;
+        const primeraPct = Math.round((primera / total) * 100);
+        const renovacionPct = 100 - primeraPct;
+        
+        return {
+            name: muniName,
+            total,
+            tipos: [],
+            breakdown: {
+                primera: { count: primera, pct: primeraPct },
+                renovacion: { count: renovacion, pct: renovacionPct }
+            }
+        };
+      }
 
-      // 3. Calculamos porcentajes REALES para el gráfico
-      const primeraPct = Math.round((primera / total) * 100);
-      const renovacionPct = 100 - primeraPct; // Para asegurar que sumen 100% exacto
+      // Buscar datos reales del municipio
+      const muniData = dashboardData.desglose.find(d => d.municipio === muniName);
+      
+      if (!muniData) {
+        return {
+          name: muniName,
+          total: 0,
+          tipos: [],
+          breakdown: {
+            primera: { count: 0, pct: 0 },
+            renovacion: { count: 0, pct: 0 }
+          }
+        };
+      }
+
+      // Calcular porcentajes reales de los tipos
+      const tipos = muniData.tipos;
+      const total = muniData.licenciaTotal;
       
       return {
-          name: muniName,
-          total, 
-          // Breakdown con datos y porcentajes reales
-          breakdown: {
-              primera: { count: primera, pct: primeraPct },
-              renovacion: { count: renovacion, pct: renovacionPct }
+        name: muniName,
+        total,
+        tipos: tipos || [],
+        breakdown: {
+          primera: { 
+            count: tipos[0]?.cantidad || 0, 
+            pct: tipos[0]?.porcentaje || 0 
+          },
+          renovacion: { 
+            count: tipos[1]?.cantidad || 0, 
+            pct: tipos[1]?.porcentaje || 0 
           }
+        }
       };
   };
 
   // CÁLCULO TOTALES DINÁMICOS
   const globalStats = useMemo(() => {
-      let totalTramites = 0;
-      let totalDinero = 0;
+      if (!dashboardData) {
+        // Fallback a cálculo manual
+        let totalTramites = 0;
+        let totalDinero = 0;
+        DURANGO_MUNICIPIOS.forEach(muni => {
+            const stats = getMuniStats(muni);
+            totalTramites += stats.total;
+            totalDinero += stats.total * 900; 
+        });
+        return { count: totalTramites, money: totalDinero };
+      }
 
-      DURANGO_MUNICIPIOS.forEach(muni => {
-          const stats = getMuniStats(muni);
-          totalTramites += stats.total;
-          totalDinero += stats.total * 900; 
-      });
-
-      return { count: totalTramites, money: totalDinero };
-  }, [dateRange]);
+      // Usar datos reales del API
+      return { 
+        count: dashboardData.tramitesCreados, 
+        money: dashboardData.recaudacionTotal 
+      };
+  }, [dateRange, dashboardData]);
 
   const currentMuniStats = selectedMuni ? getMuniStats(selectedMuni) : null;
 
@@ -589,15 +662,21 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
                         <p className="text-[10px] text-gray-400 mt-1">Filtrado por: <span className="font-bold text-indigo-500">{filterLabel} ({getRangeText()})</span></p>
                     </div>
                     <div className="max-h-[300px] overflow-y-auto">
-                        {DURANGO_MUNICIPIOS.map((muni, i) => (
-                            <div key={muni} onClick={() => setSelectedMuni(muni)} className="px-5 py-4 border-b border-gray-50 dark:border-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer transition-colors flex justify-between items-center group">
-                                <div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-300 w-4">{i + 1}</span><span className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-indigo-600 transition-colors">{muni}</span></div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-gray-500">{getMuniStats(muni).total}</span>
-                                    <span className="material-symbols-outlined text-gray-300 text-sm group-hover:text-indigo-400">bar_chart</span>
+                        {dashboardData && dashboardData.desglose && dashboardData.desglose.length > 0 ? (
+                            dashboardData.desglose.map((item, i) => (
+                                <div key={item.municipio} onClick={() => setSelectedMuni(item.municipio)} className="px-5 py-4 border-b border-gray-50 dark:border-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer transition-colors flex justify-between items-center group">
+                                    <div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-300 w-4">{i + 1}</span><span className="text-sm font-medium text-gray-700 dark:text-gray-200 group-hover:text-indigo-600 transition-colors">{item.municipio}</span></div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-gray-500">{item.licenciaTotal}</span>
+                                        <span className="material-symbols-outlined text-gray-300 text-sm group-hover:text-indigo-400">bar_chart</span>
+                                    </div>
                                 </div>
+                            ))
+                        ) : (
+                            <div className="px-5 py-8 text-center text-sm text-gray-400">
+                                {isLoadingDashboard ? 'Cargando municipios...' : 'No hay datos disponibles'}
                             </div>
-                        ))}
+                        )}
                     </div>
                 </div>
             </div>
@@ -679,20 +758,29 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
                   <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
                       <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-indigo-500">pie_chart</span> Distribución de Trámites</h4>
                       <div className="flex items-center justify-around">
-                          {/* Pie Chart: Azul (Primera) y Naranja (Renovación) */}
-                          <div className="relative w-28 h-28 rounded-full shadow-lg" style={{ background: `conic-gradient(#3b82f6 0% ${currentMuniStats.breakdown.primera.pct}%, #fb923c ${currentMuniStats.breakdown.primera.pct}% 100%)` }}>
+                          {/* Pie Chart Dinámico */}
+                          <div className="relative w-28 h-28 rounded-full shadow-lg" style={{ 
+                              background: currentMuniStats.breakdown.primera?.pct !== undefined
+                                  ? `conic-gradient(#3b82f6 0% ${currentMuniStats.breakdown.primera.pct}%, #fb923c ${currentMuniStats.breakdown.primera.pct}% 100%)`
+                                  : '#d1d5db'
+                          }}>
                                <div className="absolute inset-3 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center flex-col"><span className="text-xs text-gray-400">Total</span><span className="text-xl font-black text-gray-800 dark:text-white">{currentMuniStats.total}</span></div>
                           </div>
-                          <div className="space-y-2 text-sm">
-                              {/* Leyendas con colores coincidentes */}
-                              <div className="flex items-center gap-2">
-                                  <div className="w-3 h-3 rounded bg-blue-500"></div>
-                                  <span className="text-gray-500">Primera Vez ({currentMuniStats.breakdown.primera.pct}%)</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                  <div className="w-3 h-3 rounded bg-orange-400"></div>
-                                  <span className="text-gray-500">Renovación ({currentMuniStats.breakdown.renovacion.pct}%)</span>
-                              </div>
+                          <div className="space-y-2 text-sm max-h-28 overflow-y-auto pr-2">
+                              {/* Leyendas dinámicas desde tipos */}
+                              {currentMuniStats.tipos && currentMuniStats.tipos.length > 0 ? (
+                                  currentMuniStats.tipos.map((tipo, idx) => (
+                                      <div key={idx} className="flex items-center gap-2">
+                                          <div className={`w-3 h-3 rounded ${idx === 0 ? 'bg-blue-500' : 'bg-orange-400'}`}></div>
+                                          <span className="text-gray-500 text-xs">{tipo.nombre} ({tipo.porcentaje}%)</span>
+                                      </div>
+                                  ))
+                              ) : (
+                                  <div className="flex items-center gap-2">
+                                      <div className="w-3 h-3 rounded bg-blue-500"></div>
+                                      <span className="text-gray-500">Primera Vez ({currentMuniStats.breakdown.primera?.pct || 0}%)</span>
+                                  </div>
+                              )}
                           </div>
                       </div>
                   </div>
@@ -700,17 +788,28 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
                   {/* BARRAS DE PROGRESO (Coinciden con el Pie Chart) */}
                   <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
                       <h4 className="font-bold text-sm text-gray-700 dark:text-gray-200 mb-4 flex items-center gap-2"><span className="material-symbols-outlined text-orange-500">bar_chart</span> Desglose Numérico</h4>
-                      <div className="space-y-4">
-                          <div>
-                              <div className="flex justify-between text-xs mb-1 font-medium"><span>Primera Vez</span><span>{currentMuniStats.breakdown.primera.count}</span></div>
-                              {/* Barra Azul */}
-                              <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: `${currentMuniStats.breakdown.primera.pct}%` }}></div></div>
-                          </div>
-                          <div>
-                              <div className="flex justify-between text-xs mb-1 font-medium"><span>Renovación</span><span>{currentMuniStats.breakdown.renovacion.count}</span></div>
-                              {/* Barra Naranja */}
-                              <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-orange-400 h-2 rounded-full" style={{ width: `${currentMuniStats.breakdown.renovacion.pct}%` }}></div></div>
-                          </div>
+                      <div className="space-y-4 max-h-32 overflow-y-auto pr-2">
+                          {currentMuniStats.tipos && currentMuniStats.tipos.length > 0 ? (
+                              currentMuniStats.tipos.map((tipo, idx) => (
+                                  <div key={idx}>
+                                      <div className="flex justify-between text-xs mb-1 font-medium"><span>{tipo.nombre}</span><span>{tipo.cantidad}</span></div>
+                                      <div className="w-full bg-gray-200 rounded-full h-2">
+                                          <div className={`h-2 rounded-full ${idx === 0 ? 'bg-blue-500' : 'bg-orange-400'}`} style={{ width: `${tipo.porcentaje}%` }}></div>
+                                      </div>
+                                  </div>
+                              ))
+                          ) : (
+                              <>
+                                  <div>
+                                      <div className="flex justify-between text-xs mb-1 font-medium"><span>Primera Vez</span><span>{currentMuniStats.breakdown.primera?.count || 0}</span></div>
+                                      <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{ width: `${currentMuniStats.breakdown.primera?.pct || 0}%` }}></div></div>
+                                  </div>
+                                  <div>
+                                      <div className="flex justify-between text-xs mb-1 font-medium"><span>Renovación</span><span>{currentMuniStats.breakdown.renovacion?.count || 0}</span></div>
+                                      <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-orange-400 h-2 rounded-full" style={{ width: `${currentMuniStats.breakdown.renovacion?.pct || 0}%` }}></div></div>
+                                  </div>
+                              </>
+                          )}
                       </div>
                   </div>
                   <button onClick={handlePreviewMuniPDF} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2">

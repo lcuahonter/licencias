@@ -41,5 +41,9 @@ export const API_ENDPOINTS = {
     VERIFICAR_RESULTADO: '/api/pruebas/examen-teorico/verificar-resultado',
     VERIFICAR_APROBACION: '/api/pruebas/examen-teorico/verificar-aprobacion',
     OBTENER_POR_SOLICITUD: '/api/pruebas/obtener-por-solicitud'
+  },
+  DASHBOARD: {
+    GET_DASHBOARD_TRAMITE: '/api/dashboard/getDashboardTramite',
+    GET_DASHBOARD_REVISOR: '/api/dashboard/getDashboardRevisor'
   }
 };
