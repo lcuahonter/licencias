@@ -21,18 +21,8 @@ module.exports = async function (context, req) {
   const targetPath = req.query.path || '';
   const targetUrl = `${backendUrl}${targetPath}`;
   
-  // Extraer Authorization header (puede venir en diferentes formatos)
-  const authHeader = req.headers['authorization'] 
-    || req.headers['Authorization'] 
-    || req.headers['AUTHORIZATION'];
-  
   context.log(`Proxying ${req.method} request to: ${targetUrl}`);
-  context.log(`All headers: ${JSON.stringify(Object.keys(req.headers))}`);
-  if (authHeader) {
-    context.log(`Auth header present: ${authHeader.substring(0, 20)}...`);
-  } else {
-    context.log('⚠️  No auth header found');
-  }
+  context.log(`Headers received: ${JSON.stringify(req.headers)}`);
   
   try {
     // Preparar el body
@@ -41,15 +31,22 @@ module.exports = async function (context, req) {
       bodyData = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
     }
 
-    // Preparar headers para reenviar
+    // Preparar headers para reenviar - copiar TODOS los headers importantes
     const forwardHeaders = {
       'Content-Type': req.headers['content-type'] || 'application/json',
-      'Accept': 'application/json',
+      'Accept': req.headers['accept'] || 'application/json',
     };
 
-    // Agregar Authorization si existe
+    // Buscar Authorization en todos los posibles formatos
+    const authHeader = req.headers['authorization'] 
+      || req.headers['Authorization'] 
+      || req.headers['AUTHORIZATION'];
+    
     if (authHeader) {
       forwardHeaders['Authorization'] = authHeader;
+      context.log(`✅ Authorization header found: ${authHeader.substring(0, 30)}...`);
+    } else {
+      context.log('⚠️  No Authorization header found');
     }
 
     const response = await makeRequest(targetUrl, {
