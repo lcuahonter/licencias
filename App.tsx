@@ -66,10 +66,6 @@ const App: React.FC = () => {
       setUserData(prev => ({ ...prev, requests: [] }));
   };
 
-  (window as any).tempAddRequest = addRequest;
-  (window as any).tempUpdateRequestData = updateRequestData;
-  (window as any).tempClearRequests = clearRequests;
-
   // --- RENDERIZADO DE PANTALLAS ---
   const renderScreen = () => {
     switch (currentStep) {
@@ -107,22 +103,9 @@ const App: React.FC = () => {
                     // Administrador -> panel admin
                     setCurrentStep(AppStep.ADMIN_DASHBOARD);
                     return;
-                }
-
-                // --- MOCKS PARA PRUEBAS (Si no vino nextScreen, usamos la lógica anterior) ---
-                if (loginData.email === 'admin@gmail.com') {
-                    setCurrentStep(AppStep.ADMIN_DASHBOARD);
-                } else if (loginData.email === 'operador@gmail.com') {
-                    setCurrentStep(AppStep.OPERATOR_DASHBOARD);
-                } else if (loginData.email === 'existente@gmail.com') {
-                  updateUserData({
-                    ...loginData, firstName: 'Juan', lastName: 'Pérez García', idNumber: 'PEPJ880101HDFRXX05', birthDate: '1988-01-01', licenseType: 'Automovilista Particular', validityDuration: '3 Años', photo: 'photos/cara.jpeg', address: 'Calle Falsa 123', emergencyContact: 'Maria Perez',
-                    requests: [{ id: '101', type: 'Automovilista', process: 'Refrendo', cost: 912, date: '26/12/2025', status: 'paid_pending_docs', folio: 'DGO-9988' }]
-                  });
-                  setCurrentStep(AppStep.DASHBOARD);
                 } else {
-                  // Flujo normal de registro nuevo
-                  setCurrentStep(AppStep.REGISTRATION); // O Documents según tu flujo
+                  // Flujo normal de registro nuevo si no hay nextScreen
+                  setCurrentStep(AppStep.REGISTRATION);
                 }
               } else {
                 // Caso: Crear Cuenta Nueva
