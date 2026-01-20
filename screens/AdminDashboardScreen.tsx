@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import html2pdf from 'html2pdf.js';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { FileOpener } from '@capacitor-community/file-opener';
+import MD5 from 'crypto-js/md5';
+import { userService } from '../src/api/userService';
+import { fetchCurpData } from '../src/utils/curpHelpers';
 
 interface AdminDashboardScreenProps {
   onLogout: () => void;
@@ -50,10 +53,35 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
   const [pdfPreview, setPdfPreview] = useState<{ show: boolean, html: string, title: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false); 
 
-  // INPUTS
-  const [newOpName, setNewOpName] = useState('');
-  const [newOpEmail, setNewOpEmail] = useState('');
-  const [formErrors, setFormErrors] = useState<{name?: string, email?: string}>({});
+  // INPUTS FORMULARIO OPERADOR
+  const [operatorForm, setOperatorForm] = useState({
+    firstName: '',
+    paternalName: '',
+    maternalName: '',
+    curp: '',
+    email: '',
+    password: '',
+    birthDate: ''
+  });
+  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
+  const [isSubmittingOperator, setIsSubmittingOperator] = useState(false);
+  const [loadingCurp, setLoadingCurp] = useState(false);
+  const [lastFetchedCurp, setLastFetchedCurp] = useState('');
+  
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  
+  const operatorInputRefs = {
+    firstName: useRef<HTMLInputElement>(null),
+    paternalName: useRef<HTMLInputElement>(null),
+    maternalName: useRef<HTMLInputElement>(null),
+    curp: useRef<HTMLInputElement>(null),
+    email: useRef<HTMLInputElement>(null),
+    password: useRef<HTMLInputElement>(null),
+    birthDate: useRef<HTMLInputElement>(null)
+  };
 
   // --- HELPERS ---
   const formatDateMX = (isoDate: string) => {
@@ -242,7 +270,9 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
       }
     } catch (error) {
       console.error("Error al exportar Excel:", error);
-      alert("No se pudo descargar el archivo.");
+      setAlertMessage("No se pudo descargar el archivo.");
+      setAlertType('error');
+      setShowAlertModal(true);
     }
   };
 
@@ -280,29 +310,156 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
         document.body.removeChild(element);
     } catch (error) {
         console.error("Error PDF:", error);
-        alert("Error al generar el documento.");
+        setAlertMessage("Error al generar el documento.");
+        setAlertType('error');
+        setShowAlertModal(true);
     } finally {
         setIsGenerating(false);
     }
   };
 
   // --- HANDLERS OPERADORES ---
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      if (/^[a-zA-ZñÑáéíóúÁÉÍÓÚ\s]*$/.test(value)) setNewOpName(value);
+  const CURP_REGEX = /^[A-Z]{4}\d{6}[HMX][A-Z]{2}[B-DF-HJ-NP-TV-Z]{3}[A-Z0-9]\d$/;
+  const NAME_REGEX = /^[A-ZÑ\s]*$/;
+  
+  const handleOperatorNameInput = (field: 'firstName' | 'paternalName' | 'maternalName', value: string) => {
+    const upperValue = value.toUpperCase();
+    if (NAME_REGEX.test(upperValue)) {
+      setOperatorForm(prev => ({ ...prev, [field]: upperValue }));
+      if (formErrors[field]) {
+        setFormErrors(prev => { const n = {...prev}; delete n[field]; return n; });
+      }
+    }
   };
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => setNewOpEmail(e.target.value);
-  const handleAddOperator = () => {
-      const errors: {name?: string, email?: string} = {};
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!newOpName.trim()) errors.name = "El nombre es requerido.";
-      if (!newOpEmail.trim()) { errors.email = "El email es requerido."; } else if (!emailRegex.test(newOpEmail)) { errors.email = "Formato inválido."; }
-      if (Object.keys(errors).length > 0) { setFormErrors(errors); return; }
-      const newOp = { id: Date.now(), name: newOpName, email: newOpEmail, role: 'Operador', status: 'active', rejections: 0, approvals: 0 };
-      // @ts-ignore
-      setOperators([...operators, newOp]);
-      setShowAddModal(false); setNewOpName(''); setNewOpEmail(''); setFormErrors({});
+
+  const handleOperatorCurpInput = (value: string) => {
+    const upperValue = value.toUpperCase();
+    if (/^[A-Z0-9Ñ]*$/.test(upperValue) && upperValue.length <= 18) {
+      setOperatorForm(prev => ({ ...prev, curp: upperValue }));
+      if (formErrors.curp) {
+        setFormErrors(prev => { const n = {...prev}; delete n.curp; return n; });
+      }
+    }
   };
+
+  const handleOperatorCurpBlur = async () => {
+    if (CURP_REGEX.test(operatorForm.curp) && operatorForm.curp !== lastFetchedCurp) {
+      setLoadingCurp(true);
+      const result = await fetchCurpData(operatorForm.curp);
+      setLoadingCurp(false);
+
+      if (result.success && result.data) {
+        setLastFetchedCurp(operatorForm.curp);
+        setOperatorForm(prev => ({
+          ...prev,
+          firstName: result.data.firstName || prev.firstName, 
+          paternalName: result.data.paternalName || prev.paternalName,
+          maternalName: result.data.maternalName || prev.maternalName,
+          birthDate: result.data.birthDate || prev.birthDate
+        }));
+        // Limpiar errores si se autocompletó
+        setFormErrors({});
+      }
+    }
+  };
+
+  const focusOnOperatorError = (errorList: {[key: string]: string}) => {
+    const errorKeys = Object.keys(errorList);
+    if (errorKeys.length === 0) return;
+    const fieldOrder = ['firstName', 'paternalName', 'curp', 'email', 'password', 'birthDate'];
+    const firstErrorField = fieldOrder.find(field => errorKeys.includes(field));
+    if (firstErrorField) {
+      const ref = operatorInputRefs[firstErrorField as keyof typeof operatorInputRefs];
+      if (ref && ref.current) {
+        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => ref.current!.focus(), 100);
+      }
+    }
+  };
+
+  const validateOperatorForm = () => {
+    const errors: {[key: string]: string} = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    if (!operatorForm.email || !emailRegex.test(operatorForm.email)) errors.email = 'Correo inválido';
+    if (!operatorForm.password || operatorForm.password.length < 4) errors.password = 'Mínimo 4 caracteres';
+    if (!operatorForm.curp) {
+      errors.curp = 'La CURP es requerida';
+    } else if (operatorForm.curp.length !== 18) {
+      errors.curp = 'Debe tener 18 caracteres';
+    } else if (!CURP_REGEX.test(operatorForm.curp)) {
+      errors.curp = 'Formato de CURP inválido';
+    }
+    if (!operatorForm.firstName.trim()) errors.firstName = 'Nombre requerido';
+    if (!operatorForm.paternalName.trim()) errors.paternalName = 'Apellido P. requerido';
+    if (!operatorForm.birthDate) errors.birthDate = 'Fecha requerida';
+    
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      focusOnOperatorError(errors);
+      return false;
+    }
+    return true;
+  };
+
+  const handleAddOperator = async () => {
+    if (!validateOperatorForm()) return;
+    
+    setIsSubmittingOperator(true);
+    setFormErrors({});
+    
+    try {
+      const md5Password = MD5(operatorForm.password).toString();
+      
+      const payload = {
+        tipoUsuario: 3,  // ID para Operador
+        nombres: operatorForm.firstName,
+        apellidopaterno: operatorForm.paternalName,
+        apellidomaterno: operatorForm.maternalName,
+        curp: operatorForm.curp,
+        email: operatorForm.email,
+        password: md5Password,
+        fechanacimiento: operatorForm.birthDate
+      };
+      
+      const data = await userService.createUsuario(payload);
+      
+      // Solo code "200" es exitoso
+      if (data.code === "200") {
+        setAlertMessage(`✅ Operador "${operatorForm.firstName} ${operatorForm.paternalName}" creado exitosamente.`);
+        setAlertType('success');
+        setShowAlertModal(true);
+        // Agregar a la lista local (opcional, podrías recargar desde API)
+        const newOp = { 
+          id: Date.now(), 
+          name: `${operatorForm.firstName} ${operatorForm.paternalName}`, 
+          email: operatorForm.email, 
+          role: 'Operador', 
+          status: 'active', 
+          rejections: 0, 
+          approvals: 0 
+        };
+        setOperators(prev => [...prev, newOp]);
+        
+        // Limpiar y cerrar
+        setShowAddModal(false);
+        setOperatorForm({ firstName: '', paternalName: '', maternalName: '', curp: '', email: '', password: '', birthDate: '' });
+        setFormErrors({});
+        setLastFetchedCurp('');
+        setLoadingCurp(false);
+      } else {
+        throw new Error(data.message || 'Error al crear operador');
+      }
+    } catch (error: any) {
+      console.error('Error al crear operador:', error);
+      setAlertMessage(error.message || 'Error desconocido al crear operador');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setIsSubmittingOperator(false);
+    }
+  };
+
   const handleToggleStatus = (id: number) => { 
       // @ts-ignore
       setOperators(prev => prev.map(op => op.id === id ? { ...op, status: op.status === 'active' ? 'inactive' : 'active' } : op)); 
@@ -565,22 +722,156 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
 
       {/* --- MODAL AGREGAR OPERADOR --- */}
       {showAddModal && (
-        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-             <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in zoom-in-95 space-y-4">
-                 <h2 className="text-lg font-black text-gray-900 dark:text-white">Dar de Alta Operador</h2>
-                 <div className="space-y-1">
-                     <label className="text-xs font-bold text-gray-400 uppercase">Nombre Completo</label>
-                     <input value={newOpName} onChange={handleNameChange} className={`w-full h-12 border rounded-xl px-4 bg-gray-50 dark:bg-gray-900 dark:text-white outline-none focus:border-indigo-500 ${formErrors.name ? 'border-red-400 bg-red-50' : 'dark:border-gray-700'}`} placeholder="Ej. Luis Miguel" />
-                     {formErrors.name && <p className="text-[10px] text-red-500 font-bold">{formErrors.name}</p>}
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in overflow-y-auto">
+             <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-3xl shadow-2xl p-6 my-8 animate-in zoom-in-95">
+                 <h2 className="text-xl font-black text-gray-900 dark:text-white mb-4">Dar de Alta Operador</h2>
+                 
+                 <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
+                     {/* CREDENCIALES */}
+                     <section className="space-y-3">
+                         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 dark:border-gray-700 pb-2">Credenciales</h3>
+                         
+                         <div className="space-y-1.5">
+                             <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Correo Electrónico</label>
+                             <input 
+                                 ref={operatorInputRefs.email}
+                                 type="email" 
+                                 value={operatorForm.email} 
+                                 onChange={e => setOperatorForm({...operatorForm, email: e.target.value})} 
+                                 placeholder="operador@durango.gob.mx" 
+                                 className={`w-full h-12 bg-white dark:bg-gray-900 border-2 rounded-xl px-4 focus:border-indigo-500 outline-none transition-all ${formErrors.email ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`} 
+                             />
+                             {formErrors.email && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{formErrors.email}</p>}
+                         </div>
+
+                         <div className="space-y-1.5">
+                             <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Contraseña</label>
+                             <input 
+                                 ref={operatorInputRefs.password}
+                                 type="password" 
+                                 value={operatorForm.password} 
+                                 onChange={e => setOperatorForm({...operatorForm, password: e.target.value})} 
+                                 placeholder="••••••••" 
+                                 className={`w-full h-12 bg-white dark:bg-gray-900 border-2 rounded-xl px-4 focus:border-indigo-500 outline-none transition-all ${formErrors.password ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`} 
+                             />
+                             {formErrors.password && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{formErrors.password}</p>}
+                         </div>
+                     </section>
+
+                     {/* DATOS PERSONALES */}
+                     <section className="space-y-3">
+                         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-200 dark:border-gray-700 pb-2">Datos Personales</h3>
+                         
+                         <div className="space-y-1.5 relative">
+                             <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">CURP</label>
+                             <input 
+                                 ref={operatorInputRefs.curp}
+                                 value={operatorForm.curp} 
+                                 onChange={e => handleOperatorCurpInput(e.target.value)} 
+                                 onBlur={handleOperatorCurpBlur}
+                                 maxLength={18} 
+                                 placeholder="ABCD990101H..." 
+                                 className={`w-full h-12 bg-white dark:bg-gray-900 border-2 rounded-xl px-4 focus:border-indigo-500 outline-none transition-all uppercase font-mono ${formErrors.curp ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`} 
+                             />
+                             {loadingCurp && <div className="absolute right-4 top-9 animate-spin rounded-full h-5 w-5 border-2 border-indigo-500 border-t-transparent"></div>}
+                             {!formErrors.curp && CURP_REGEX.test(operatorForm.curp) && !loadingCurp && (
+                                 <div className="absolute right-4 top-9 text-green-500">
+                                     <span className="material-symbols-outlined">check_circle</span>
+                                 </div>
+                             )}
+                             {formErrors.curp && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{formErrors.curp}</p>}
+                         </div>
+
+                         <div className="space-y-1.5">
+                             <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Nombre(s)</label>
+                             <input 
+                                 ref={operatorInputRefs.firstName}
+                                 value={operatorForm.firstName} 
+                                 onChange={e => handleOperatorNameInput('firstName', e.target.value)} 
+                                 placeholder="Ej. JUAN CARLOS" 
+                                 className={`w-full h-12 bg-white dark:bg-gray-900 border-2 rounded-xl px-4 focus:border-indigo-500 outline-none transition-all ${formErrors.firstName ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`} 
+                             />
+                             {formErrors.firstName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{formErrors.firstName}</p>}
+                         </div>
+
+                         <div className="grid grid-cols-2 gap-3">
+                             <div className="space-y-1.5">
+                                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Paterno</label>
+                                 <input 
+                                     ref={operatorInputRefs.paternalName}
+                                     value={operatorForm.paternalName} 
+                                     onChange={e => handleOperatorNameInput('paternalName', e.target.value)} 
+                                     placeholder="PÉREZ" 
+                                     className={`w-full h-12 bg-white dark:bg-gray-900 border-2 rounded-xl px-4 focus:border-indigo-500 outline-none transition-all ${formErrors.paternalName ? 'border-red-400 bg-red-50' : 'border-gray-200 dark:border-gray-700'}`} 
+                                 />
+                                 {formErrors.paternalName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{formErrors.paternalName}</p>}
+                             </div>
+                             
+                             <div className="space-y-1.5">
+                                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Ap. Materno <span className="text-[9px] text-gray-300 normal-case">(Opc)</span></label>
+                                 <input 
+                                     ref={operatorInputRefs.maternalName}
+                                     value={operatorForm.maternalName} 
+                                     onChange={e => handleOperatorNameInput('maternalName', e.target.value)} 
+                                     placeholder="GARCÍA" 
+                                     className="w-full h-12 bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-xl px-4 focus:border-indigo-500 outline-none transition-all" 
+                                 />
+                             </div>
+                         </div>
+
+                         <div className="space-y-1.5">
+                             <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Fecha de Nacimiento</label>
+                             <div className="relative">
+                                 <input 
+                                     ref={operatorInputRefs.birthDate}
+                                     type="date" 
+                                     value={operatorForm.birthDate} 
+                                     readOnly
+                                     disabled
+                                     className={`w-full h-12 bg-gray-100 dark:bg-gray-900 border-2 rounded-xl px-4 outline-none text-gray-500 font-bold cursor-not-allowed ${formErrors.birthDate ? 'border-red-400' : 'border-gray-200 dark:border-gray-700'}`} 
+                                 />
+                                 <span className="material-symbols-outlined absolute right-4 top-4 text-gray-400 text-lg">lock</span>
+                             </div>
+                             {formErrors.birthDate ? (
+                                 <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{formErrors.birthDate}</p>
+                             ) : (
+                                 <p className="text-[10px] text-gray-400 pl-1">Se calcula automáticamente de la CURP</p>
+                             )}
+                         </div>
+                     </section>
                  </div>
-                 <div className="space-y-1">
-                     <label className="text-xs font-bold text-gray-400 uppercase">Email Institucional</label>
-                     <input value={newOpEmail} onChange={handleEmailChange} className={`w-full h-12 border rounded-xl px-4 bg-gray-50 dark:bg-gray-900 dark:text-white outline-none focus:border-indigo-500 ${formErrors.email ? 'border-red-400 bg-red-50' : 'dark:border-gray-700'}`} placeholder="@durango.gob.mx" />
-                     {formErrors.email && <p className="text-[10px] text-red-500 font-bold">{formErrors.email}</p>}
-                 </div>
-                 <div className="flex gap-3 pt-2">
-                     <button onClick={() => { setShowAddModal(false); setFormErrors({}); }} className="flex-1 py-3 font-bold text-gray-500 hover:bg-gray-100 rounded-xl">Cancelar</button>
-                     <button onClick={handleAddOperator} className="flex-1 py-3 font-bold bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700">Guardar</button>
+                 
+                 <div className="flex gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+                     <button 
+                         onClick={() => { 
+                             setShowAddModal(false); 
+                             setOperatorForm({ firstName: '', paternalName: '', maternalName: '', curp: '', email: '', password: '', birthDate: '' }); 
+                             setFormErrors({});
+                             setLastFetchedCurp('');
+                             setLoadingCurp(false);
+                         }} 
+                         disabled={isSubmittingOperator}
+                         className="flex-1 py-3 font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                     >
+                         Cancelar
+                     </button>
+                     <button 
+                         onClick={handleAddOperator} 
+                         disabled={isSubmittingOperator}
+                         className={`flex-1 py-3 font-bold bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 ${isSubmittingOperator ? 'opacity-70 cursor-wait' : ''}`}
+                     >
+                         {isSubmittingOperator ? (
+                             <>
+                                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                 Guardando...
+                             </>
+                         ) : (
+                             <>
+                                 <span className="material-symbols-outlined text-sm">person_add</span>
+                                 Guardar
+                             </>
+                         )}
+                     </button>
                  </div>
              </div>
         </div>
@@ -613,6 +904,52 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout })
                   </div>
               </div>
           </div>
+      )}
+
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                alertType === 'success' ? 'bg-green-100' : 
+                alertType === 'error' ? 'bg-red-100' : 
+                alertType === 'warning' ? 'bg-yellow-100' : 
+                'bg-blue-100'
+              }`}>
+                <span className={`material-symbols-outlined text-5xl ${
+                  alertType === 'success' ? 'text-green-600' : 
+                  alertType === 'error' ? 'text-red-600' : 
+                  alertType === 'warning' ? 'text-yellow-600' : 
+                  'text-blue-600'
+                }`}>
+                  {alertType === 'success' ? 'check_circle' : 
+                   alertType === 'error' ? 'error' : 
+                   alertType === 'warning' ? 'warning' : 
+                   'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' : 
+                 alertType === 'error' ? 'Error' : 
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700' : 
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' : 
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

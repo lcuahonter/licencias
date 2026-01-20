@@ -3,13 +3,15 @@ import MD5 from 'crypto-js/md5';
 import { jwtDecode } from "jwt-decode"; 
 import { UserData } from '../types';
 import { authService } from '../src/api/authService'; // <--- Importamos el servicio
+import { userService } from '../src/api/userService';
+import { documentService } from '../src/api/documentService';
 
 // Definimos la estructura del token JWT
 interface DecodedToken {
   username: string;
-  rol: string;
-  aData: number;       // ID de Usuario
-  perfil: string;      // "Incompleto" o "Completo"
+  rol: number;           // Ahora rol es un ID (número)
+  aData: number;         // ID de Usuario
+  perfil: string;        // "Incompleto" o "Completo"
   iat: number;
   exp: number;
 }
@@ -35,16 +37,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       // 1. Encriptar password a MD5
       const md5Password = MD5(password).toString();
 
-      console.log("Enviando credenciales...");
-
       // 2. Usar el servicio de autenticación
       // El apiClient se encarga de lanzar excepciones si hay error (codes != 200)
       const data = await authService.login({
         username: email,
         password: md5Password 
       });
-
-      console.log("Respuesta Backend:", data);
 
       // 3. Procesar Token
       const tokenString = data.token || data.data?.token; 
@@ -56,30 +54,76 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       // 4. Decodificar Token para obtener ID y Perfil
       try {
           const decoded = jwtDecode<DecodedToken>(tokenString);
-          console.log("Token decodificado:", decoded);
 
-          // Priorizar rol cuando venga en el token
-          let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard';
-          if (decoded.rol === 'Revisor') {
-              destino = 'OperatorDashboard';
-          } else if (decoded.rol === 'Usuario') {
-              // En este momento los usuarios van a cargas de documentos (puede cambiar después)
-              destino = 'DocumentUploadScreen';
-          } else {
-              destino = decoded.perfil === "Incompleto" ? 'DocumentUploadScreen' : 'Dashboard';
+          // Validar datos críticos del token
+          if (!decoded.aData || !decoded.rol) {
+              throw new Error("Token inválido: faltan datos de usuario o rol.");
           }
 
-          console.log(`Redirigiendo a: ${destino} (ID Usuario: ${decoded.aData}, rol: ${decoded.rol})`);
+          // Validar que el ID de usuario sea un número positivo
+          const idUsuario = Number(decoded.aData);
+          if (isNaN(idUsuario) || idUsuario <= 0) {
+              throw new Error("Token inválido: ID de usuario no válido.");
+          }
 
-          // 5. Notificar al padre (App.tsx)
-          onStart({ 
-            email: email,
-            idUsuario: decoded.aData, 
-            token: tokenString
-          }, destino);
+          const rolId = Number(decoded.rol);
+
+          // Datos base sanitizados (solo lo necesario para la sesión)
+          const basePayload = {
+              email: email.toLowerCase().trim(),
+              idUsuario: idUsuario,
+              token: tokenString
+          };
+
+          // === ROL 1: ADMINISTRADOR ===
+          if (rolId === 1) {
+              console.log('[SECURITY] Login Admin - ID:', idUsuario);
+              onStart(basePayload, 'AdminDashboard');
+              return;
+          }
+
+          // === ROL 3: OPERADOR ===
+          if (rolId === 3) {
+              console.log('[SECURITY] Login Operador - ID:', idUsuario);
+              onStart(basePayload, 'OperatorDashboard');
+              return;
+          }
+
+          // === ROL 2: USUARIO NORMAL ===
+          if (rolId === 2) {
+              console.log('[SECURITY] Login Usuario - ID:', idUsuario);
+              
+              // Obtener datos del usuario de forma segura
+              let userFresh: any = null;
+              try {
+                  const u = await userService.getUsuarioById(idUsuario, tokenString);
+                  userFresh = u?.data?.usuario ?? u?.data ?? null;
+              } catch (e) {
+                  console.warn('[SECURITY] No se pudo obtener perfil de usuario:', e);
+              }
+
+              // Construir payload con datos sanitizados
+              const userPayload = {
+                  ...basePayload,
+                  perfil: userFresh?.perfil || 'Incompleto',
+                  firstName: userFresh?.nombres?.trim() || undefined,
+                  lastName: userFresh?.apellidopaterno 
+                      ? `${userFresh.apellidopaterno} ${userFresh.apellidomaterno || ''}`.trim() 
+                      : undefined,
+                  idNumber: userFresh?.curp?.trim() || undefined,
+                  phone: userFresh?.telefono?.trim() || undefined
+              };
+
+              onStart(userPayload, 'Dashboard');
+              return;
+          }
+
+          // === ROL NO RECONOCIDO ===
+          console.error('[SECURITY] Rol no reconocido:', rolId);
+          throw new Error("Acceso denegado: rol de usuario no válido.");
 
       } catch (decodeError) {
-          console.error("Error al leer el token", decodeError);
+          console.error("[SECURITY] Error al procesar token:", decodeError);
           throw new Error("Error al procesar la sesión del usuario.");
       }
 

@@ -32,7 +32,7 @@ const App: React.FC = () => {
         await StatusBar.setBackgroundColor({ color: '#FFFFFF' }); 
         await StatusBar.setOverlaysWebView({ overlay: false }); 
       } catch (e) {
-        console.log("No estamos en móvil", e);
+        // No estamos en móvil
       }
     };
     configStatusBar();
@@ -62,9 +62,13 @@ const App: React.FC = () => {
   const updateRequestData = (id: string, updates: Partial<LicenseRequest>) => {
       setUserData(prev => ({ ...prev, requests: prev.requests?.map(req => req.id === id ? { ...req, ...updates } : req) }));
   };
+  const clearRequests = () => {
+      setUserData(prev => ({ ...prev, requests: [] }));
+  };
 
   (window as any).tempAddRequest = addRequest;
   (window as any).tempUpdateRequestData = updateRequestData;
+  (window as any).tempClearRequests = clearRequests;
 
   // --- RENDERIZADO DE PANTALLAS ---
   const renderScreen = () => {
@@ -79,7 +83,6 @@ const App: React.FC = () => {
                 
                 // 1. Guardar el ID si viene del login real
                 if (loginData.idUsuario) {
-                    console.log("🔑 ID Guardado en App:", loginData.idUsuario);
                     setUserId(loginData.idUsuario);
                 }
 
@@ -92,16 +95,17 @@ const App: React.FC = () => {
                 }
 
                 // 3. Decidir navegación basada en el token (Prioridad Alta)
-                if (nextScreen === 'DocumentUploadScreen') {
-                    // Si el token indica perfil incompleto o usuario, mandamos a cargar documentos
-                    setCurrentStep(AppStep.DOCUMENTS); 
-                    return;
-                } else if (nextScreen === 'Dashboard') {
+                if (nextScreen === 'Dashboard') {
+                    // Usuario con rol 2 va directo a Dashboard
                     setCurrentStep(AppStep.DASHBOARD);
                     return;
                 } else if (nextScreen === 'OperatorDashboard') {
                     // Revisor -> panel del operador
                     setCurrentStep(AppStep.OPERATOR_DASHBOARD);
+                    return;
+                } else if (nextScreen === 'AdminDashboard') {
+                    // Administrador -> panel admin
+                    setCurrentStep(AppStep.ADMIN_DASHBOARD);
                     return;
                 }
 
@@ -138,6 +142,7 @@ const App: React.FC = () => {
             idUsuario={userId}
             token={authToken || undefined}
             onGoToProfile={() => setCurrentStep(AppStep.COMPLETE_PROFILE)} 
+            onGoToDocuments={() => setCurrentStep(AppStep.DOCUMENTS)}
             onContinueRequest={(req) => { updateUserData({ licenseType: req.type === 'Motociclista' ? 'Motociclista' : 'Automovilista Particular' }); setCurrentStep(AppStep.APPOINTMENT); }} 
             onLogout={() => { 
                 setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); 
@@ -157,7 +162,7 @@ const App: React.FC = () => {
             onSave={(data) => { updateUserData(data); setCurrentStep(AppStep.DASHBOARD); }} 
         />;
       
-      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
+      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
       case AppStep.PAYMENT: return <PaymentScreen userData={userData} onBack={() => setCurrentStep(AppStep.APPOINTMENT)} onPaymentSuccess={(paymentData) => { updateUserData({ payment: paymentData }); setCurrentStep(AppStep.DASHBOARD); }} />;
