@@ -1,8 +1,5 @@
 // src/api/apiClient.ts
-
-
-// Usamos process.env directo. Si no existe, usa localhost por defecto.
-const BASE_URL = import.meta.env.VITE_API_URL
+import { buildApiUrl } from './urlBuilder';
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -23,7 +20,7 @@ export const apiBlobRequest = async (endpoint: string, options: RequestOptions =
   }
 
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
+    const response = await fetch(buildApiUrl(endpoint), {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
@@ -69,7 +66,7 @@ export const apiRequest = async <T>(endpoint: string, options: RequestOptions = 
   }
 
   try {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
+    const response = await fetch(buildApiUrl(endpoint), {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
