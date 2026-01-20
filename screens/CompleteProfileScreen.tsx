@@ -133,6 +133,11 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  
   const inputRefs = {
       rfc: useRef<HTMLInputElement>(null),
       workplace: useRef<HTMLInputElement>(null),
@@ -265,10 +270,19 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       else setEmergColoniesList([]);
   }, [form.emergZipCode]);
 
+  // Auto-generar RFC desde CURP (primeros 10 caracteres)
+  useEffect(() => {
+    if (form.curp && form.curp.length >= 10) {
+      const rfcFromCurp = form.curp.substring(0, 10).toUpperCase();
+      setForm(prev => ({ ...prev, rfc: rfcFromCurp }));
+    }
+  }, [form.curp]);
+
   const validateRFC = (rfc: string) => {
-      const rfcRegex = /^([A-ZÑ&]{3,4})(\d{2})(\d{2})(\d{2})([A-Z\d]{3})$/;
+      // Acepta 10 caracteres (sin homoclave) o 13 (con homoclave)
+      const rfcRegex = /^([A-ZÑ&]{3,4})(\d{6})([A-Z\d]{0,3})$/;
       if (!rfc) return "Requerido";
-      if (rfc.length < 12) return "Longitud incompleta";
+      if (rfc.length !== 10 && rfc.length !== 13) return "Debe tener 10 o 13 caracteres";
       if (!rfcRegex.test(rfc)) return "Formato inválido";
       return null;
   };
@@ -402,7 +416,9 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
       } catch (error: any) {
           console.error("Error Update:", error);
-          alert(error.message || 'Error al actualizar perfil');
+          setAlertMessage(error.message || 'Error al actualizar perfil');
+          setAlertType('error');
+          setShowAlertModal(true);
       } finally {
           setIsSubmitting(false);
       }
@@ -451,7 +467,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 <InputField label="CURP" value={form.curp} readOnly={true} width="half" />
                 <InputField label="Correo" value={form.email} readOnly={true} width="half" />
 
-                <InputField innerRef={inputRefs.rfc} label="RFC" value={form.rfc} onChange={(val: string) => handleSafeInput('rfc', val, 'alphanumeric')} placeholder="AAAA990101XXX" width="half" max={13} error={errors.rfc} />
+                <InputField innerRef={inputRefs.rfc} label="RFC (Homoclave Opcional)" value={form.rfc} onChange={(val: string) => handleSafeInput('rfc', val, 'alphanumeric')} placeholder="AAAA990101 o AAAA990101XXX" width="half" max={13} error={errors.rfc} />
                 
                 <div className="col-span-1 space-y-1">
                     <label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Sexo</label>
@@ -505,7 +521,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                             ))}
                         </select>
                     ) : (
-                        <input readOnly value={form.colonyName} placeholder="Autocompletado..." className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
+                        <input readOnly value={form.colonyName} placeholder="" className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
                     )}
                     {errors.colony && <p className="text-[9px] text-red-500 font-bold ml-2">{errors.colony}</p>}
                 </div>
@@ -518,7 +534,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                     label="Localidad" 
                     value={form.locality} 
                     onChange={(val: string) => handleSafeInput('locality', val, 'address')} 
-                    placeholder="ESCRIBE MANUALMENTE" 
+                    placeholder="LOCALIDAD" 
                     width="half" 
                     error={errors.locality} 
                 />
@@ -555,7 +571,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                             ))}
                         </select>
                     ) : (
-                        <input readOnly value={form.emergColonyName} placeholder="Autocompletado..." className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
+                        <input readOnly value={form.emergColonyName} placeholder="" className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 font-bold uppercase cursor-not-allowed outline-none" />
                     )}
                     {errors.emergColony && <p className="text-[9px] text-red-500 font-bold ml-2">{errors.emergColony}</p>}
                 </div>
@@ -568,7 +584,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                     label="Localidad" 
                     value={form.emergLocality} 
                     onChange={(val: string) => handleSafeInput('emergLocality', val, 'address')} 
-                    placeholder="ESCRIBE MANUALMENTE" 
+                    placeholder="LOCALIDAD" 
                     width="half" 
                     error={errors.emergLocality} 
                 />
@@ -585,6 +601,52 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             {!isSubmitting && <span className="material-symbols-outlined">{currentStep === 3 ? 'save' : 'arrow_forward'}</span>}
         </button>
       </div>
+
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                alertType === 'success' ? 'bg-green-100' : 
+                alertType === 'error' ? 'bg-red-100' : 
+                alertType === 'warning' ? 'bg-yellow-100' : 
+                'bg-blue-100'
+              }`}>
+                <span className={`material-symbols-outlined text-5xl ${
+                  alertType === 'success' ? 'text-green-600' : 
+                  alertType === 'error' ? 'text-red-600' : 
+                  alertType === 'warning' ? 'text-yellow-600' : 
+                  'text-blue-600'
+                }`}>
+                  {alertType === 'success' ? 'check_circle' : 
+                   alertType === 'error' ? 'error' : 
+                   alertType === 'warning' ? 'warning' : 
+                   'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' : 
+                 alertType === 'error' ? 'Error' : 
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700' : 
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' : 
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

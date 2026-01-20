@@ -70,6 +70,30 @@ const examService = {
     );
     return response.data;
   },
+
+  async obtenerPorSolicitud(idsolicitud: number, token: string): Promise<any> {
+    const response = await apiRequest<any>(
+      API_ENDPOINTS.EXAM.OBTENER_POR_SOLICITUD,
+      {
+        method: 'POST',
+        body: { idsolicitud },
+        token
+      }
+    );
+    return response.data;
+  },
+
+  async verificarAprobacion(idsolicitud: number, token: string): Promise<any> {
+    const response = await apiRequest<any>(
+      API_ENDPOINTS.EXAM.VERIFICAR_APROBACION,
+      {
+        method: 'POST',
+        body: { idsolicitud },
+        token
+      }
+    );
+    return response.data;
+  },
 };
 
 export default examService;

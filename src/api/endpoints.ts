@@ -38,6 +38,8 @@ export const API_ENDPOINTS = {
   EXAM: {
     OBTENER_PREGUNTAS: '/api/pruebas/examen-teorico/obtener-preguntas',
     ENVIAR_RESPUESTAS: '/api/pruebas/examen-teorico/enviar-respuestas',
-    VERIFICAR_RESULTADO: '/api/pruebas/examen-teorico/verificar-resultado'
+    VERIFICAR_RESULTADO: '/api/pruebas/examen-teorico/verificar-resultado',
+    VERIFICAR_APROBACION: '/api/pruebas/examen-teorico/verificar-aprobacion',
+    OBTENER_POR_SOLICITUD: '/api/pruebas/obtener-por-solicitud'
   }
 };

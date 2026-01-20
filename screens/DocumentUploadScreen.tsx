@@ -9,6 +9,7 @@ interface DocumentUploadScreenProps {
   idSolicitud?: number;
   token?: string;
   onSessionExpired?: () => void;
+  isSubmittingRequest?: boolean;
 }
 
 // Tipos de identificación disponibles
@@ -21,7 +22,7 @@ const ID_OPTIONS: { id: IdType; label: string; icon: string }[] = [
 
 import { catalogService } from '../src/api/catalogService';
 
-const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onContinue, idUsuario, idSolicitud, token }) => {
+const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onContinue, idUsuario, idSolicitud, token, isSubmittingRequest }) => {
   
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -461,11 +462,20 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       <div className="p-6 absolute bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 z-20 safe-bottom">
         <button 
           onClick={submitDocuments}
-          disabled={!isComplete()}
+          disabled={!isComplete() || isSubmittingRequest}
           className="w-full h-14 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-black text-lg shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Guardar y Continuar
-          <span className="material-symbols-outlined">save</span>
+          {isSubmittingRequest ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white dark:border-black"></div>
+              Enviando...
+            </>
+          ) : (
+            <>
+              Guardar y Continuar
+              <span className="material-symbols-outlined">save</span>
+            </>
+          )}
         </button>
       </div>
     </div>

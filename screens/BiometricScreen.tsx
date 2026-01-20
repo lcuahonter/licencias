@@ -54,6 +54,11 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
   const [scanProgress, setScanProgress] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
   
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  
   const webcamRef = useRef<Webcam>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -159,7 +164,9 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
 
   const handleStartButton = () => {
       if (cameraError) {
-          alert("Reinicia la app o revisa permisos.");
+          setAlertMessage("Reinicia la app o revisa permisos.");
+          setAlertType('error');
+          setShowAlertModal(true);
           return;
       }
       startRecording();
@@ -293,6 +300,52 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
           </button>
 
       </div>
+
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                alertType === 'success' ? 'bg-green-100' : 
+                alertType === 'error' ? 'bg-red-100' : 
+                alertType === 'warning' ? 'bg-yellow-100' : 
+                'bg-blue-100'
+              }`}>
+                <span className={`material-symbols-outlined text-5xl ${
+                  alertType === 'success' ? 'text-green-600' : 
+                  alertType === 'error' ? 'text-red-600' : 
+                  alertType === 'warning' ? 'text-yellow-600' : 
+                  'text-blue-600'
+                }`}>
+                  {alertType === 'success' ? 'check_circle' : 
+                   alertType === 'error' ? 'error' : 
+                   alertType === 'warning' ? 'warning' : 
+                   'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' : 
+                 alertType === 'error' ? 'Error' : 
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700' : 
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' : 
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

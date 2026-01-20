@@ -74,6 +74,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [fixedDocs, setFixedDocs] = useState<Record<string, any>>({});
   const [activeDocKey, setActiveDocKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmittingCorrections, setIsSubmittingCorrections] = useState(false);
+  
+  // Modales para documentos corregidos
+  const [showCorrectionsSuccessModal, setShowCorrectionsSuccessModal] = useState(false);
+  const [showCorrectionsErrorModal, setShowCorrectionsErrorModal] = useState(false);
+  const [correctionsMessage, setCorrectionsMessage] = useState('');
+  
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
 
   const [selectedType, setSelectedType] = useState<LicenseType>('Automovilista');
   const [selectedProcess, setSelectedProcess] = useState<ProcessType>('Primera Vez');
@@ -97,24 +108,167 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [userDataFresh, setUserDataFresh] = useState<any>(userData);
   const isProfileIncomplete = userDataFresh?.perfil === 'Incompleto';
   
-  useEffect(() => {
+  const reloadUserProfile = async () => {
     if (!idUsuario || !token) return;
-    let mounted = true;
-    
-    userService.getUsuarioById(idUsuario, token)
-      .then(resp => {
-        const userFresh = {
-          ...resp?.data?.usuario,
-          perfil: resp?.data?.perfil
-        };
-        if (mounted && userFresh) {
-          setUserDataFresh(userFresh);
-        }
-      })
-      .catch(err => {});
-    
-    return () => { mounted = false; };
+    try {
+      const resp = await userService.getUsuarioById(idUsuario, token);
+      const userFresh = {
+        ...resp?.data?.usuario,
+        perfil: resp?.data?.perfil
+      };
+      if (userFresh) {
+        setUserDataFresh(userFresh);
+      }
+    } catch (err) {
+      console.error('Error recargando perfil:', err);
+    }
+  };
+  
+  useEffect(() => {
+    reloadUserProfile();
   }, [idUsuario, token]);
+
+  // Recargar perfil cuando se regresa a esta pantalla (focus)
+  useEffect(() => {
+    const handleFocus = () => {
+      reloadUserProfile();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [idUsuario, token]);
+
+  // --- FUNCIÓN PARA RECARGAR SOLICITUDES ---
+  const reloadSolicitudes = async () => {
+    if (!idUsuario || !token) return;
+    
+    try {
+      // Limpiar solicitudes anteriores antes de cargar nuevas
+      if ((window as any).tempClearRequests) {
+        (window as any).tempClearRequests();
+      }
+      
+      const resp = await solicitudService.getByUser(idUsuario, token);
+      const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
+      
+      if (solicitudes.length > 0 && (window as any).tempAddRequest) {
+        // Procesar cada solicitud usando su idestatus como fuente de verdad
+        for (const sol of solicitudes) {
+          const idestatus = sol.idestatus;
+          
+          // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
+          if (![22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+          
+          let status: any = 'pending';
+          let rejectedDocuments: any[] = [];
+          
+          // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
+          if (idestatus === 26) {
+            // Examen teórico APROBADO - Verificar si tiene examen aprobado
+            try {
+              console.log(`🔍 [reloadSolicitudes] Verificando examen para solicitud ${sol.id}...`);
+              const examResp = await examService.obtenerPorSolicitud(sol.id, token);
+              const pruebas = examResp?.pruebas || [];
+              const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+              console.log(`📊 [reloadSolicitudes] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
+              
+              if (examenAprobado) {
+                status = 'completed';
+              } else {
+                // Caso raro: estado 26 pero sin examen aprobado
+                status = 'paid_pending_docs';
+              }
+            } catch (err) {
+              console.error('❌ [reloadSolicitudes] Error verificando examen:', err);
+              status = 'paid_pending_docs';
+            }
+          } else if (idestatus === 24) {
+            // Solicitud APROBADA por el backend - Verificar si tiene examen aprobado
+            try {
+              console.log(`🔍 [reloadSolicitudes] Verificando examen para solicitud ${sol.id}...`);
+              const examResp = await examService.obtenerPorSolicitud(sol.id, token);
+              const pruebas = examResp?.pruebas || [];
+              const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+              console.log(`📊 [reloadSolicitudes] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
+              
+              if (examenAprobado) {
+                status = 'completed';
+              } else {
+                // Documentos aprobados pero falta examen
+                status = 'paid_pending_docs';
+              }
+            } catch (err) {
+              console.error('❌ [reloadSolicitudes] Error verificando examen:', err);
+              status = 'paid_pending_docs';
+            }
+          } else if (idestatus === 27) {
+            // Examen teórico REPROBADO
+            status = 'rejected';
+          } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
+            status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
+            
+            try {
+              const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
+              const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
+              const revision = revisionesData[0];
+              
+              if (revision?.id) {
+                const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
+                const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
+                
+                const rechazados = docs.filter((d: any) => d.idestatus === 15);
+                
+                if (rechazados.length > 0) {
+                  status = 'rejected';
+                  rejectedDocuments = rechazados.map((d: any) => ({
+                    iddocumento: d.iddocumento,
+                    tipodocumento: d.tipodocumento || d.documento || 'Documento',
+                    comentarios: d.comentarios || 'Sin comentarios'
+                  }));
+                }
+              }
+            } catch (err) {
+              // Error al consultar documentos
+            }
+          }
+          
+          // Si status final es completed, agregar como licencia
+          if (status === 'completed') {
+            const licenseData: LicenseRequest = {
+              id: String(sol.id),
+              type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
+                    sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
+              process: 'Primera Vez',
+              cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
+              date: new Date(sol.creacion).toLocaleDateString('es-MX'),
+              status: 'completed',
+              folio: sol.numerolicencia || sol.folio || `DGO-${sol.id}`,
+              rejectedDocuments: [],
+              rawData: sol
+            };
+            (window as any).tempAddRequest(licenseData);
+            continue;
+          }
+          
+          // Para estados no completados, agregar como proceso activo
+          const request: LicenseRequest = {
+            id: String(sol.id),
+            type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
+                  sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
+            process: 'Primera Vez',
+            cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
+            date: new Date(sol.creacion).toLocaleDateString('es-MX'),
+            status: status,
+            folio: sol.folio || `DGO-${sol.id}`,
+            rejectedDocuments: rejectedDocuments,
+            rawData: sol
+          };
+          (window as any).tempAddRequest(request);
+        }
+      }
+    } catch (error) {
+      // Error al cargar solicitudes
+    }
+  };
 
   // --- CARGAR SOLICITUDES AL INICIAR ---
   useEffect(() => {
@@ -136,21 +290,55 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           for (const sol of solicitudes) {
             const idestatus = sol.idestatus;
             
-            // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Aprobada), 25 (Rechazada), 32 (Asignada a operador)
-            if (![22, 23, 24, 25, 32].includes(idestatus)) continue;
+            // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
+            if (![22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
             
             let status: any = 'pending';
             let rejectedDocuments: any[] = [];
             
             // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-            // 24 = Aprobada/Completada
-            // 25 = Rechazada (pero consultar documentos para ver cuáles rechazaron)
-            // 22, 23, 32 = En proceso
-            
-            if (idestatus === 24) {
-              // Solicitud APROBADA por el backend - Mostrar como completada
-              // TODO: Implementar validación de examen cuando el backend tenga endpoint por idusuario
-              status = 'completed';
+            if (idestatus === 26) {
+              // Examen teórico APROBADO - Verificar si tiene examen aprobado
+              try {
+                console.log(`🔍 [useEffect INICIAL] Verificando examen para solicitud ${sol.id}...`);
+                const examResp = await examService.obtenerPorSolicitud(sol.id, token);
+                const pruebas = examResp?.pruebas || [];
+                const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+                console.log(`📊 [useEffect INICIAL] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
+                
+                if (examenAprobado) {
+                  status = 'completed';
+                } else {
+                  // Caso raro: estado 26 pero sin examen aprobado
+                  status = 'paid_pending_docs';
+                }
+              } catch (err) {
+                console.error('❌ [useEffect INICIAL] Error verificando examen:', err);
+                status = 'paid_pending_docs';
+              }
+            } else if (idestatus === 24) {
+              // Solicitud APROBADA por el backend - Verificar si tiene examen aprobado
+              try {
+                console.log(`🔍 [useEffect INICIAL] Verificando examen para solicitud ${sol.id}...`);
+                const examResp = await examService.obtenerPorSolicitud(sol.id, token);
+                const pruebas = examResp?.pruebas || [];
+                const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+                console.log(`📊 [useEffect INICIAL] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
+                
+                if (examenAprobado) {
+                  status = 'completed';
+                } else {
+                  // Documentos aprobados pero falta examen
+                  status = 'paid_pending_docs';
+                }
+              } catch (err) {
+                console.error('❌ [useEffect INICIAL] Error verificando examen:', err);
+                // En caso de error, mostrar como pendiente de examen por seguridad
+                status = 'paid_pending_docs';
+              }
+            } else if (idestatus === 27) {
+              // Examen teórico REPROBADO
+              status = 'rejected';
             } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
               // Para solicitudes rechazadas o en proceso, consultar documentos
               // IMPORTANTE: NUNCA marcar como completed si idestatus no es 24
@@ -323,7 +511,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   const handleProceedToPay = () => {
     if (activeProcessList.some(r => r.type === selectedType)) { 
-        alert(`Ya tienes un trámite de ${selectedType} en curso.`); 
+        setAlertMessage(`Ya tienes un trámite de ${selectedType} en curso.`);
+        setAlertType('warning');
+        setShowAlertModal(true);
         return; 
     }
     setShowNewReqModal(false);
@@ -339,11 +529,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       // Validaciones previas si es tarjeta
       if (method === 'card') {
           if (detectCardType(cardData.number) === 'unknown') { 
-              alert("Tarjeta no válida."); 
+              setAlertMessage("Tarjeta no válida.");
+              setAlertType('error');
+              setShowAlertModal(true);
               return; 
           }
           if (cardErrors.exp || cardData.exp.length < 5) { 
-              alert("Fecha incorrecta."); 
+              setAlertMessage("Fecha incorrecta.");
+              setAlertType('error');
+              setShowAlertModal(true);
               return; 
           }
       }
@@ -362,13 +556,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   // =========================================================================
   const finalizeRequest = async (documentsData: any) => {
       if (!selectedPaymentMethod) {
-          alert('No se seleccionó método de pago.');
+          setAlertMessage('No se seleccionó método de pago.');
+          setAlertType('warning');
+          setShowAlertModal(true);
           return;
       }
 
       const method = selectedPaymentMethod;
 
-      if (!idUsuario) { alert('Usuario no identificado.'); return; }
+      if (!idUsuario) { 
+        setAlertMessage('Usuario no identificado.');
+        setAlertType('error');
+        setShowAlertModal(true);
+        return; 
+      }
 
       const idtipolicencia = selectedType === 'Motociclista' ? 2 : 1;
       const idmetodopago = method === 'card' ? 1 : 2;
@@ -420,7 +621,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         }
 
         if (!idSolicitudReal) {
-            alert("La solicitud se creó, pero el sistema está tardando en procesarla. Verifica tu historial en unos minutos.");
+            setAlertMessage("La solicitud se creó, pero el sistema está tardando en procesarla. Verifica tu historial en unos minutos.");
+            setAlertType('info');
+            setShowAlertModal(true);
             setIsSubmittingRequest(false);
             setShowDocumentsModal(false);
             return;
@@ -468,17 +671,23 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             } catch (derr: any) {
                 console.error(`Error subiendo doc ${doc.idtipodocumento}`, derr);
                 if (derr.isAuthError) {
-                    alert('Sesión expirada durante la carga de documentos.');
-                    onLogout();
+                    setAlertMessage('Sesión expirada durante la carga de documentos.');
+                    setAlertType('error');
+                    setShowAlertModal(true);
+                    setTimeout(() => onLogout(), 2000);
                     return;
                 }
             }
         }
         
         if (docsOk > 0) {
-            alert(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
+            setAlertMessage(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
+            setAlertType('success');
+            setShowAlertModal(true);
         } else {
-            alert("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
+            setAlertMessage("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
+            setAlertType('warning');
+            setShowAlertModal(true);
         }
 
         // Cerrar modal y limpiar estados
@@ -488,10 +697,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       } catch (err: any) {
         console.error('Error Crítico al Finalizar:', err);
         if (err.isAuthError) {
-          alert('Sesión expirada. Por favor inicia sesión de nuevo.');
-          onLogout();
+          setAlertMessage('Sesión expirada. Por favor inicia sesión de nuevo.');
+          setAlertType('error');
+          setShowAlertModal(true);
+          setTimeout(() => onLogout(), 2000);
         } else {
-          alert('Error al procesar la solicitud. Inténtalo de nuevo.');
+          setAlertMessage('Error al procesar la solicitud. Inténtalo de nuevo.');
+          setAlertType('error');
+          setShowAlertModal(true);
         }
       } finally {
         setIsSubmittingRequest(false);
@@ -513,9 +726,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
   
   const handleSubmitCorrections = async () => { 
-    if (!fixingRequest || !token) return;
+    if (!fixingRequest || !token || isSubmittingCorrections) return;
     
     try {
+      setIsSubmittingCorrections(true);
       // Convertir archivos a base64 y enviar updateDocumento para cada documento rechazado
       for (const docData of fixingRequest.rejectedDocuments || []) {
         const file = fixedDocs[docData.iddocumento];
@@ -560,15 +774,53 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       for (const sol of solicitudes) {
         const idestatus = sol.idestatus;
         
-        if (![22, 23, 24, 25, 32].includes(idestatus)) continue;
+        if (![22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
         
         let status: any = 'pending';
         let rejectedDocuments: any[] = [];
         
         // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-        if (idestatus === 24) {
-          // Solicitud APROBADA - Mostrar como completada
-          status = 'completed';
+        if (idestatus === 26) {
+          // Examen teórico APROBADO - Verificar si tiene examen aprobado
+          try {
+            console.log(`🔍 [handleSubmitCorrections] Verificando examen para solicitud ${sol.id}...`);
+            const examResp = await examService.obtenerPorSolicitud(sol.id, token);
+            const pruebas = examResp?.pruebas || [];
+            const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+            console.log(`📊 [handleSubmitCorrections] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
+            
+            if (examenAprobado) {
+              status = 'completed';
+            } else {
+              status = 'paid_pending_docs';
+            }
+          } catch (err) {
+            console.error('❌ [handleSubmitCorrections] Error verificando examen:', err);
+            status = 'paid_pending_docs';
+          }
+        } else if (idestatus === 24) {
+          // Solicitud APROBADA - Verificar si tiene examen aprobado
+          try {
+            console.log(`🔍 [handleSubmitCorrections] Verificando examen para solicitud ${sol.id}...`);
+            const examResp = await examService.obtenerPorSolicitud(sol.id, token);
+            const pruebas = examResp?.pruebas || [];
+            const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+            console.log(`📊 [handleSubmitCorrections] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
+            
+            if (examenAprobado) {
+              status = 'completed';
+            } else {
+              // Documentos aprobados pero falta examen
+              status = 'paid_pending_docs';
+            }
+          } catch (err) {
+            console.error('❌ [handleSubmitCorrections] Error verificando examen:', err);
+            // En caso de error, mostrar como pendiente de examen por seguridad
+            status = 'paid_pending_docs';
+          }
+        } else if (idestatus === 27) {
+          // Examen teórico REPROBADO
+          status = 'rejected';
         } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
           // Para solicitudes rechazadas o en proceso, consultar documentos
           status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
@@ -628,10 +880,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       }
       
       setFixingRequest(null);
-      alert("✅ Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN (amarillo) esperando que el operador valide los nuevos documentos.");
+      setCorrectionsMessage("✅ Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN esperando que el operador valide los nuevos documentos.");
+      setShowCorrectionsSuccessModal(true);
     } catch (error: any) {
       console.error('❌ Error actualizando documentos:', error);
-      alert(`Error al enviar los documentos: ${error?.data?.message || error?.message || 'Error desconocido'}`);
+      setCorrectionsMessage(`Error al enviar los documentos: ${error?.data?.message || error?.message || 'Error desconocido'}`);
+      setShowCorrectionsErrorModal(true);
+    } finally {
+      setIsSubmittingCorrections(false);
     }
   };
 
@@ -711,11 +967,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
                       const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
                       const estatus = rawData?.estatus || 'En revisión';
+                      const idestatus = rawData?.idestatus;
                       
                       // Determinar el texto del estado
-                      const statusDisplay = req.status === 'rejected' ? 'RECHAZADO' : 
-                                          req.status === 'pending_payment' ? 'PENDIENTE PAGO' : 
-                                          (estatus || 'EN REVISIÓN');
+                      const statusDisplay = req.status === 'rejected' ? (idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADO') : 
+                                          req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' : 
+                                          (idestatus === 24 ? 'APROBADO - FALTA EXAMEN' : 
+                                           idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
                       
                       return (
                         <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden ${req.status === 'rejected' ? 'border-red-500' : 'border-yellow-400'}`}>
@@ -749,8 +1007,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               </div>
                             )}
                             
-                            {/* Botón examen teórico - Solo en solicitudes NO rechazadas */}
-                            {req.status !== 'rejected' && (
+                            {/* Botón examen teórico - Solo ocultar cuando la solicitud esté completada (documentos + examen) */}
+                            {req.status !== 'rejected' && req.status !== 'completed' && (
                               <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                 <button 
                                   onClick={() => {
@@ -912,7 +1170,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         </div>
                     ))}
                 </div>
-                <button disabled={Object.keys(fixedDocs).length < (fixingRequest.rejectedDocuments?.length || 0)} onClick={handleSubmitCorrections} className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">Enviar a Revisión <span className="material-symbols-outlined text-sm">send</span></button>
+                <button 
+                  disabled={Object.keys(fixedDocs).length < (fixingRequest.rejectedDocuments?.length || 0) || isSubmittingCorrections} 
+                  onClick={handleSubmitCorrections} 
+                  className="w-full h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmittingCorrections ? (
+                    <>
+                      <div className="animate-spin w-5 h-5 border-2 border-white dark:border-black border-t-transparent rounded-full"></div>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      Enviar a Revisión <span className="material-symbols-outlined text-sm">send</span>
+                    </>
+                  )}
+                </button>
             </div>
         </div>
       )}
@@ -939,6 +1212,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         idUsuario={idUsuario}
                         token={token}
                         onSessionExpired={onLogout}
+                        isSubmittingRequest={isSubmittingRequest}
                         onBack={() => {
                             setShowDocumentsModal(false);
                             setShowPaymentModal(true);
@@ -1078,7 +1352,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setTiempoInicioPreguntas(Date.now());
                       } catch (error: any) {
                         console.error('Error al cargar examen:', error);
-                        alert('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
+                        setAlertMessage('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
+                        setAlertType('error');
+                        setShowAlertModal(true);
                         setShowExamModal(false);
                       } finally {
                         setLoadingExam(false);
@@ -1321,33 +1597,31 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         // Esperar 1 segundo antes de verificar
                         await wait(1000);
                         
-                        const resultadoExamen = await examService.verificarResultado(idIntentoGuardado!, token || '');
-                        console.log('Resultado del examen:', resultadoExamen);
+                        const resultadoExamen = await examService.verificarAprobacion(selectedSolicitudId!, token || '');
+                        console.log('🎯 Resultado completo del examen:', JSON.stringify(resultadoExamen, null, 2));
                         
-                        // Determinar el tipo según el resultado
-                        // Asumiendo que resultadoExamen tiene una propiedad 'aprobado' o similar
-                        const aprobado = resultadoExamen.aprobado || resultadoExamen.data?.aprobado;
+                        const aprobado = resultadoExamen?.aprobo === true;
+                        const mensaje = resultadoExamen?.mensaje || resultadoExamen?.message || '';
+                        const calificacion = resultadoExamen?.calificacion;
                         
-                        // Si aprobó, guardar el idintento en localStorage
-                        if (aprobado && idIntentoGuardado) {
-                          // Obtener userId del token
-                          const tokenParts = (token || '').split('.');
-                          if (tokenParts.length === 3) {
-                            const decodedPayload = JSON.parse(atob(tokenParts[1]));
-                            const userId = decodedPayload.aData || decodedPayload.idUsuario;
-                            localStorage.setItem(`examen_aprobado_${userId}`, idIntentoGuardado.toString());
-                            console.log(`✅ Examen aprobado guardado en localStorage: idintento=${idIntentoGuardado} para usuario=${userId}`);
-                          }
-                        }
+                        console.log(`📊 Procesando resultado: aprobado=${aprobado}, mensaje="${mensaje}", calificacion=${calificacion}`);
                         
-                        setResultMessage(resultadoExamen.message || `Calificación: ${resultadoExamen.calificacion || 'N/A'}`);
+                        const mensajeFinal = mensaje || (aprobado ? `¡Felicidades! Has aprobado el examen con ${calificacion}` : `No aprobaste el examen. Calificación: ${calificacion || 'N/A'}`);
+                        
+                        setResultMessage(mensajeFinal);
                         setResultType(aprobado ? 'success' : 'error');
                         setShowVerResultButton(false);
+                        
+                        // Recargar solicitudes para actualizar el estado
+                        if (aprobado) {
+                          await wait(1000);
+                          reloadSolicitudes();
+                        }
                       } catch (error: any) {
                         console.log('Error al verificar resultado:', error);
-                        const mensaje = error.response?.data?.message || error.message || 'El examen está siendo procesado';
+                        const mensaje = error.response?.data?.message || error.response?.data?.data?.mensaje || error.message || 'El examen está siendo procesado';
                         setResultMessage(mensaje);
-                        setResultType('info' as any); // Azul para pendiente
+                        setResultType('info' as any);
                         setShowVerResultButton(false);
                       } finally {
                         setVerificandoResultado(false);
@@ -1375,6 +1649,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     setShowResultModal(false);
                     setShowVerResultButton(false);
                     setIdIntentoGuardado(null);
+                    // Recargar solicitudes para actualizar el estado del examen
+                    reloadSolicitudes();
                   }}
                   className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold"
                 >
@@ -1463,6 +1739,94 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 className="w-full px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold"
               >
                 Aceptar y Enviar Respuestas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* MODAL DE ÉXITO - DOCUMENTOS CORREGIDOS */}
+      {showCorrectionsSuccessModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-green-600 text-5xl">check_circle</span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">¡Éxito!</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{correctionsMessage}</p>
+              <button
+                onClick={() => setShowCorrectionsSuccessModal(false)}
+                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* MODAL DE ERROR - DOCUMENTOS CORREGIDOS */}
+      {showCorrectionsErrorModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-red-600 text-5xl">error</span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Error</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">{correctionsMessage}</p>
+              <button
+                onClick={() => setShowCorrectionsErrorModal(false)}
+                className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                alertType === 'success' ? 'bg-green-100' : 
+                alertType === 'error' ? 'bg-red-100' : 
+                alertType === 'warning' ? 'bg-yellow-100' : 
+                'bg-blue-100'
+              }`}>
+                <span className={`material-symbols-outlined text-5xl ${
+                  alertType === 'success' ? 'text-green-600' : 
+                  alertType === 'error' ? 'text-red-600' : 
+                  alertType === 'warning' ? 'text-yellow-600' : 
+                  'text-blue-600'
+                }`}>
+                  {alertType === 'success' ? 'check_circle' : 
+                   alertType === 'error' ? 'error' : 
+                   alertType === 'warning' ? 'warning' : 
+                   'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' : 
+                 alertType === 'error' ? 'Error' : 
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700' : 
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' : 
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Cerrar
               </button>
             </div>
           </div>

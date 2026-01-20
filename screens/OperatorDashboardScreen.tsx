@@ -11,6 +11,7 @@ interface OperatorDashboardScreenProps {
 const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLogout, token }) => {
   
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
+  const [solicitudesHistorial, setSolicitudesHistorial] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,6 +28,17 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   const [docStatus, setDocStatus] = useState<Record<number, 'accepted' | 'rejected' | null>>({});
   const [docReasons, setDocReasons] = useState<Record<number, string>>({});
   const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string; isBlob?: boolean; filename?: string; contentType?: string } | null>(null);
+  
+  // Estados para modales de confirmación/error
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [isEnviandoDictamen, setIsEnviandoDictamen] = useState(false);
+  
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
 
   // Limpiar blob URLs cuando el componente se desmonte o cambie el preview
   React.useEffect(() => {
@@ -143,6 +155,32 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       const solicitudesFinales = [...solicitudesSinRevision, ...solicitudesConRevision];
       console.log('📊 Total de solicitudes a mostrar:', solicitudesFinales.length);
       setSolicitudes(solicitudesFinales);
+      
+      // Cargar historial - Solicitudes completadas por este operador (estados 24, 26, 27)
+      if (revisorId) {
+        try {
+          const respCompletas24 = await solicitudService.getByEstatus(24, token);
+          const solicitudes24 = respCompletas24?.data?.solicitudesData || [];
+          
+          const respCompletas26 = await solicitudService.getByEstatus(26, token);
+          const solicitudes26 = respCompletas26?.data?.solicitudesData || [];
+          
+          const respCompletas27 = await solicitudService.getByEstatus(27, token);
+          const solicitudes27 = respCompletas27?.data?.solicitudesData || [];
+          
+          // Combinar y filtrar solo las que tienen revisión de este operador
+          const todasCompletas = [...solicitudes24, ...solicitudes26, ...solicitudes27];
+          const completasDelOperador = todasCompletas.filter(sol => {
+            return revisionesDelOperador.some(rev => rev.idsolicitud === sol.id);
+          });
+          
+          console.log('📋 Solicitudes completadas por este operador:', completasDelOperador.length);
+          setSolicitudesHistorial(completasDelOperador);
+        } catch (err) {
+          console.error('Error cargando historial:', err);
+          setSolicitudesHistorial([]);
+        }
+      }
     } catch (error) {
       console.error('Error al cargar solicitudes:', error);
     } finally {
@@ -199,7 +237,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       setDocReasons(initialReasons);
     } catch (error) {
       console.error('Error al cargar documentos:', error);
-      alert('Error al cargar los documentos');
+      setAlertMessage('Error al cargar los documentos');
+      setAlertType('error');
+      setShowAlertModal(true);
     } finally {
       setIsLoadingDocs(false);
     }
@@ -253,7 +293,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       
     } catch (error: any) {
       console.error('Error al descargar documento:', error);
-      alert(error.message || 'Error al cargar el documento. El archivo puede no estar disponible.');
+      setAlertMessage(error.message || 'Error al cargar el documento. El archivo puede no estar disponible.');
+      setAlertType('error');
+      setShowAlertModal(true);
     }
   };
 
@@ -263,7 +305,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       setIsTakingRequest(true);
 
       if (!idRevisor) {
-        alert('Error: No se pudo obtener el ID del revisor');
+        setAlertMessage('Error: No se pudo obtener el ID del revisor');
+        setAlertType('error');
+        setShowAlertModal(true);
         return;
       }
 
@@ -284,32 +328,41 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       // Llamar al servicio
       await solicitudService.createRevision(payload, token);
 
-      alert('Solicitud asignada exitosamente');
+      setAlertMessage('Solicitud asignada exitosamente');
+      setAlertType('success');
+      setShowAlertModal(true);
       
       // Recargar solicitudes
       fetchSolicitudes();
     } catch (error: any) {
       console.error('❌ Error al asignar solicitud:', error);
-      alert(`Error: ${error.message}`);
+      setAlertMessage(`Error: ${error.message}`);
+      setAlertType('error');
+      setShowAlertModal(true);
     } finally {
       setIsTakingRequest(false);
     }
   };
 
   const handleEnviarDictamen = async () => {
-    if (!selectedSolicitud || !token) return;
+    if (!selectedSolicitud || !token || isEnviandoDictamen) return;
 
     try {
+      setIsEnviandoDictamen(true);
       console.log(`📤 Enviando dictamen para solicitud ${selectedSolicitud.id}...`);
       await solicitudService.updateSolicitud(selectedSolicitud.id, 24, token);
       console.log(`✅ Solicitud ${selectedSolicitud.id} actualizada a estado 24 (Aprobada)`);
       
-      alert('Dictamen enviado exitosamente. La solicitud ha sido aprobada.');
-      setShowValidationModal(false);
+      setModalMessage('Dictamen enviado exitosamente. La solicitud ha sido aprobada.');
+      setShowSuccessModal(true);
+      setSelectedSolicitud(null);
       fetchSolicitudes();
     } catch (error: any) {
       console.error('❌ Error al enviar dictamen:', error);
-      alert('Error al enviar el dictamen. Por favor intente nuevamente.');
+      setModalMessage('Error al enviar el dictamen. Por favor intente nuevamente.');
+      setShowErrorModal(true);
+    } finally {
+      setIsEnviandoDictamen(false);
     }
   };
 
@@ -318,7 +371,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
 
     // Validar que la revisión actual existe
     if (!revisionActual || !revisionActual.id) {
-      alert('Error: No se encontró la información de la revisión');
+      setAlertMessage('Error: No se encontró la información de la revisión');
+      setAlertType('error');
+      setShowAlertModal(true);
       return;
     }
 
@@ -342,7 +397,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     
     // Validar que al menos un documento haya sido revisado
     if (selectedDocs.length === 0) {
-      alert('No hay documentos nuevos para revisar. Los documentos ya aprobados o rechazados no se pueden modificar.');
+      setAlertMessage('No hay documentos nuevos para revisar. Los documentos ya aprobados o rechazados no se pueden modificar.');
+      setAlertType('warning');
+      setShowAlertModal(true);
       return;
     }
 
@@ -350,7 +407,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     const rejectedDocs = selectedDocs.filter(doc => docStatus[doc.id] === 'rejected');
     const missingReasons = rejectedDocs.filter(doc => !docReasons[doc.id] || docReasons[doc.id].trim() === '');
     if (missingReasons.length > 0) {
-      alert('Debes ingresar el motivo para todos los documentos rechazados');
+      setAlertMessage('Debes ingresar el motivo para todos los documentos rechazados');
+      setAlertType('warning');
+      setShowAlertModal(true);
       return;
     }
 
@@ -376,7 +435,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       console.log('📤 Creando revisión de documentos:', payloadCreate);
       await revisionService.createRevisionDocumentos(payloadCreate, token);
       console.log('✅ Todos los documentos procesados correctamente');
-      alert('Revisión guardada exitosamente');
+      setAlertMessage('Revisión guardada exitosamente');
+      setAlertType('success');
+      setShowAlertModal(true);
       
       // Recargar los documentos de revisión para actualizar el estado
       if (revisionActual?.id) {
@@ -398,7 +459,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       fetchSolicitudes(); // Recargar lista
     } catch (error) {
       console.error('Error al guardar revisión:', error);
-      alert('Error al guardar la revisión');
+      setAlertMessage('Error al guardar la revisión');
+      setAlertType('error');
+      setShowAlertModal(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -423,8 +486,39 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         </button>
       </header>
 
-      {/* BUSCADOR */}
+      {/* BUSCADOR Y TABS */}
       <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setActiveTab('pending')}
+            className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
+              activeTab === 'pending'
+                ? 'bg-primary text-white shadow-md'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+            }`}
+          >
+            <span className="flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined text-sm">pending_actions</span>
+              Pendientes ({filteredSolicitudes.length})
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
+              activeTab === 'history'
+                ? 'bg-primary text-white shadow-md'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+            }`}
+          >
+            <span className="flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined text-sm">history</span>
+              Historial ({solicitudesHistorial.length})
+            </span>
+          </button>
+        </div>
+        
+        {/* Buscador */}
         <div className="relative">
           <input 
             type="text" 
@@ -448,14 +542,15 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
-        ) : filteredSolicitudes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400 opacity-60">
-            <span className="material-symbols-outlined text-5xl mb-2">task_alt</span>
-            <p className="text-sm">No hay solicitudes pendientes.</p>
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {filteredSolicitudes.map(sol => (
+        ) : activeTab === 'pending' ? (
+          filteredSolicitudes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 opacity-60">
+              <span className="material-symbols-outlined text-5xl mb-2">task_alt</span>
+              <p className="text-sm">No hay solicitudes pendientes.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {filteredSolicitudes.map(sol => (
               <div key={sol.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
                 <div className="flex justify-between items-start gap-3">
                   <div className="flex-1 min-w-0">
@@ -496,6 +591,52 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
               </div>
             ))}
           </div>
+        )
+        ) : (
+          /* TAB DE HISTORIAL */
+          solicitudesHistorial.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 opacity-60">
+              <span className="material-symbols-outlined text-5xl mb-2">history</span>
+              <p className="text-sm">No hay solicitudes completadas aún.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {solicitudesHistorial.map(sol => {
+                const statusBadge = sol.idestatus === 26 ? 'APROBADA' : sol.idestatus === 27 ? 'REPROBADA' : 'COMPLETADA';
+                const statusColor = sol.idestatus === 26 ? 'bg-green-100 text-green-700' : sol.idestatus === 27 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700';
+                
+                return (
+                  <div key={sol.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-2 py-0.5 ${statusColor} rounded text-[9px] font-bold uppercase`}>
+                            {statusBadge}
+                          </span>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-bold uppercase">
+                            {sol.licencia}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-mono">ID: {sol.id}</span>
+                        </div>
+                        <h4 className="font-bold text-sm text-gray-900 dark:text-white truncate">
+                          {sol.nombres} {sol.apellidopaterno} {sol.apellidomaterno}
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1">{sol.descripcion}</p>
+                        {sol.numerolicencia && (
+                          <p className="text-xs text-gray-400 mt-1 font-mono">Folio: {sol.numerolicencia}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] text-gray-400">
+                          {new Date(sol.modificacion || sol.creacion).toLocaleDateString('es-MX')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
       </main>
 
@@ -661,11 +802,20 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
               </button>
               <button 
                 onClick={handleEnviarDictamen} 
-                disabled={!documentos.every(doc => documentosRevision.find(dr => dr.iddocumento === doc.id && dr.idestatus === 14))}
+                disabled={!documentos.every(doc => documentosRevision.find(dr => dr.iddocumento === doc.id && dr.idestatus === 14)) || isEnviandoDictamen}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm disabled:opacity-50 disabled:bg-gray-400"
               >
-                <span className="material-symbols-outlined text-sm">send</span> 
-                Enviar Dictamen
+                {isEnviandoDictamen ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-sm">send</span> 
+                    Enviar Dictamen
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -694,6 +844,94 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
             >
               <span className="material-symbols-outlined text-sm">download</span> Descargar
             </a>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Éxito */}
+      {showSuccessModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-green-600 text-5xl">check_circle</span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">¡Éxito!</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">{modalMessage}</p>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de Error */}
+      {showErrorModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-red-600 text-5xl">error</span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Error</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">{modalMessage}</p>
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                alertType === 'success' ? 'bg-green-100' : 
+                alertType === 'error' ? 'bg-red-100' : 
+                alertType === 'warning' ? 'bg-yellow-100' : 
+                'bg-blue-100'
+              }`}>
+                <span className={`material-symbols-outlined text-5xl ${
+                  alertType === 'success' ? 'text-green-600' : 
+                  alertType === 'error' ? 'text-red-600' : 
+                  alertType === 'warning' ? 'text-yellow-600' : 
+                  'text-blue-600'
+                }`}>
+                  {alertType === 'success' ? 'check_circle' : 
+                   alertType === 'error' ? 'error' : 
+                   alertType === 'warning' ? 'warning' : 
+                   'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' : 
+                 alertType === 'error' ? 'Error' : 
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700' : 
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' : 
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

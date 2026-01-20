@@ -15,6 +15,11 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
   const [examSubmitted, setExamSubmitted] = useState(false);
   const [resultado, setResultado] = useState<VerificarResultadoResponse | null>(null);
   const [startTime, setStartTime] = useState<number>(Date.now());
+  
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
 
   useEffect(() => {
     loadExam();
@@ -30,7 +35,9 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('No hay token de autenticación');
+        setAlertMessage('No hay token de autenticación');
+        setAlertType('error');
+        setShowAlertModal(true);
         return;
       }
 
@@ -39,7 +46,9 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
       setLoading(false);
     } catch (error: any) {
       console.error('Error al cargar examen:', error);
-      alert('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
+      setAlertMessage('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
+      setAlertType('error');
+      setShowAlertModal(true);
       setLoading(false);
     }
   };
@@ -75,7 +84,9 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
     if (!examData) return;
 
     if (respuestas.size !== examData.preguntas.length) {
-      alert(`Por favor responde todas las preguntas. Has respondido ${respuestas.size} de ${examData.preguntas.length}`);
+      setAlertMessage(`Por favor responde todas las preguntas. Has respondido ${respuestas.size} de ${examData.preguntas.length}`);
+      setAlertType('warning');
+      setShowAlertModal(true);
       return;
     }
 
@@ -96,7 +107,9 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
       setExamSubmitted(true);
     } catch (error: any) {
       console.error('Error al enviar examen:', error);
-      alert('Error al enviar el examen: ' + (error.response?.data?.message || error.message));
+      setAlertMessage('Error al enviar el examen: ' + (error.response?.data?.message || error.message));
+      setAlertType('error');
+      setShowAlertModal(true);
     }
   };
 
@@ -243,6 +256,14 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
           ))}
         </div>
       </div>
+
+      {/* Modal de Alertas */}
+      <ModalAlert 
+        show={showAlertModal} 
+        type={alertType} 
+        message={alertMessage} 
+        onClose={() => setShowAlertModal(false)} 
+      />
     </div>
   );
 };
@@ -434,4 +455,46 @@ const styles: { [key: string]: React.CSSProperties } = {
   }
 };
 
-export default ExamScreen;
+const ModalAlert: React.FC<{
+  show: boolean;
+  type: 'success' | 'error' | 'warning' | 'info';
+  message: string;
+  onClose: () => void;
+}> = ({ show, type, message, onClose }) => {
+  if (!show) return null;
+
+  const bgColor = type === 'success' ? '#dcfce7' : type === 'error' ? '#fee2e2' : type === 'warning' ? '#fef3c7' : '#dbeafe';
+  const iconColor = type === 'success' ? '#16a34a' : type === 'error' ? '#dc2626' : type === 'warning' ? '#d97706' : '#2563eb';
+  const icon = type === 'success' ? 'check_circle' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info';
+  const title = type === 'success' ? '¡Éxito!' : type === 'error' ? 'Error' : type === 'warning' ? 'Atención' : 'Información';
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', padding: '32px', maxWidth: '400px', width: '100%' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', backgroundColor: bgColor }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '48px', color: iconColor }}>{icon}</span>
+          </div>
+          <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '12px' }}>{title}</h3>
+          <p style={{ color: '#6b7280', marginBottom: '24px', whiteSpace: 'pre-line' }}>{message}</p>
+          <button
+            onClick={onClose}
+            style={{ width: '100%', padding: '12px 24px', color: 'white', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', backgroundColor: iconColor }}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ExamScreenWithModal: React.FC<ExamScreenProps> = (props) => {
+  return (
+    <>
+      <ExamScreen {...props} />
+    </>
+  );
+};
+
+export default ExamScreenWithModal;
