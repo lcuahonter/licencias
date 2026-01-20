@@ -77,21 +77,18 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
 
           // === ROL 1: ADMINISTRADOR ===
           if (rolId === 1) {
-              console.log('[SECURITY] Login Admin - ID:', idUsuario);
               onStart(basePayload, 'AdminDashboard');
               return;
           }
 
           // === ROL 3: OPERADOR ===
           if (rolId === 3) {
-              console.log('[SECURITY] Login Operador - ID:', idUsuario);
               onStart(basePayload, 'OperatorDashboard');
               return;
           }
 
           // === ROL 2: USUARIO NORMAL ===
           if (rolId === 2) {
-              console.log('[SECURITY] Login Usuario - ID:', idUsuario);
               
               // Obtener datos del usuario de forma segura
               let userFresh: any = null;
@@ -99,7 +96,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
                   const u = await userService.getUsuarioById(idUsuario, tokenString);
                   userFresh = u?.data?.usuario ?? u?.data ?? null;
               } catch (e) {
-                  console.warn('[SECURITY] No se pudo obtener perfil de usuario:', e);
+                  // Error al obtener perfil - continuar con datos básicos
               }
 
               // Construir payload con datos sanitizados

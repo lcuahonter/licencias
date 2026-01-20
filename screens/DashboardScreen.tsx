@@ -165,11 +165,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           if (idestatus === 26) {
             // Examen teórico APROBADO - Verificar si tiene examen aprobado
             try {
-              console.log(`🔍 [reloadSolicitudes] Verificando examen para solicitud ${sol.id}...`);
               const examResp = await examService.obtenerPorSolicitud(sol.id, token);
               const pruebas = examResp?.pruebas || [];
               const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-              console.log(`📊 [reloadSolicitudes] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
               
               if (examenAprobado) {
                 status = 'completed';
@@ -184,11 +182,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           } else if (idestatus === 24) {
             // Solicitud APROBADA por el backend - Verificar si tiene examen aprobado
             try {
-              console.log(`🔍 [reloadSolicitudes] Verificando examen para solicitud ${sol.id}...`);
               const examResp = await examService.obtenerPorSolicitud(sol.id, token);
               const pruebas = examResp?.pruebas || [];
               const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-              console.log(`📊 [reloadSolicitudes] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
               
               if (examenAprobado) {
                 status = 'completed';
@@ -300,11 +296,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             if (idestatus === 26) {
               // Examen teórico APROBADO - Verificar si tiene examen aprobado
               try {
-                console.log(`🔍 [useEffect INICIAL] Verificando examen para solicitud ${sol.id}...`);
                 const examResp = await examService.obtenerPorSolicitud(sol.id, token);
                 const pruebas = examResp?.pruebas || [];
                 const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-                console.log(`📊 [useEffect INICIAL] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
                 
                 if (examenAprobado) {
                   status = 'completed';
@@ -319,11 +313,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             } else if (idestatus === 24) {
               // Solicitud APROBADA por el backend - Verificar si tiene examen aprobado
               try {
-                console.log(`🔍 [useEffect INICIAL] Verificando examen para solicitud ${sol.id}...`);
                 const examResp = await examService.obtenerPorSolicitud(sol.id, token);
                 const pruebas = examResp?.pruebas || [];
                 const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-                console.log(`📊 [useEffect INICIAL] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
                 
                 if (examenAprobado) {
                   status = 'completed';
@@ -349,20 +341,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
                 const revision = revisionesData[0];
                 
-                console.log(`🔍 Solicitud ${sol.id} (idestatus: ${idestatus}): Revisión encontrada:`, revision?.id);
-                
                 if (revision?.id) {
                   const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
                   const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
-                  
-                  console.log(`📄 Documentos de revisión (${docs.length}):`, docs.map((d: any) => ({ iddocumento: d.iddocumento, tipo: d.tipodocumento, idestatus: d.idestatus })));
                   
                   // Buscar documentos rechazados (idestatus 15) para mostrar al usuario
                   const rechazados = docs.filter((d: any) => d.idestatus === 15);
                   const aprobados = docs.filter((d: any) => d.idestatus === 14);
                   const actualizados = docs.filter((d: any) => d.idestatus === 13);
-                  
-                  console.log(`✅ Aprobados: ${aprobados.length}, ❌ Rechazados: ${rechazados.length}, 🔄 Actualizados: ${actualizados.length}`);
                   
                   if (rechazados.length > 0) {
                     // Si hay documentos rechazados, cambiar status a rejected
@@ -381,8 +367,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 // Error al consultar documentos - continuar con estado basado en idestatus
               }
             }
-            
-            console.log(`📋 Solicitud ${sol.id}: idestatus=${idestatus}, status final=${status}`);
             
             // Si status final es completed, agregar como licencia
             if (status === 'completed') {
@@ -783,11 +767,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         if (idestatus === 26) {
           // Examen teórico APROBADO - Verificar si tiene examen aprobado
           try {
-            console.log(`🔍 [handleSubmitCorrections] Verificando examen para solicitud ${sol.id}...`);
             const examResp = await examService.obtenerPorSolicitud(sol.id, token);
             const pruebas = examResp?.pruebas || [];
             const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-            console.log(`📊 [handleSubmitCorrections] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
             
             if (examenAprobado) {
               status = 'completed';
@@ -801,11 +783,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         } else if (idestatus === 24) {
           // Solicitud APROBADA - Verificar si tiene examen aprobado
           try {
-            console.log(`🔍 [handleSubmitCorrections] Verificando examen para solicitud ${sol.id}...`);
             const examResp = await examService.obtenerPorSolicitud(sol.id, token);
             const pruebas = examResp?.pruebas || [];
             const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-            console.log(`📊 [handleSubmitCorrections] Solicitud ${sol.id}: pruebas=${JSON.stringify(pruebas)}, examenAprobado=${examenAprobado}`);
             
             if (examenAprobado) {
               status = 'completed';
@@ -1502,12 +1482,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   setExamStarted(false);
                   
                   try {
-                    // Construir el array de respuestas
-                    const respuestasArray = Object.entries(respuestas).map(([idpregunta, respuesta]) => ({
-                      idpregunta: Number(idpregunta),
-                      respuesta: respuesta as string,
-                      tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 30
-                    }));
+                    // Validación de tipo de respuesta
+                    const isValidRespuesta = (resp: string): resp is "A" | "B" | "C" | "D" => {
+                      return ["A", "B", "C", "D"].includes(resp);
+                    };
+                    
+                    // Construir el array de respuestas con validación
+                    const respuestasArray = Object.entries(respuestas)
+                      .filter(([, respuesta]) => respuesta !== null && isValidRespuesta(respuesta as string))
+                      .map(([idpregunta, respuesta]) => ({
+                        idpregunta: Number(idpregunta),
+                        respuesta: respuesta as "A" | "B" | "C" | "D",
+                        tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 30
+                      }));
                     
                     console.log('Enviando respuestas con idintento:', idIntento, 'respuestas:', respuestasArray);
                     
@@ -1697,7 +1684,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     // Enviar respuestas
                     const respuestasArray = Object.entries(respuestasCompletas).map(([idpregunta, respuesta]) => ({
                       idpregunta: Number(idpregunta),
-                      respuesta: respuesta as string,
+                      respuesta: respuesta as "A" | "B" | "C" | "D",
                       tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 60
                     }));
                     
