@@ -49,7 +49,7 @@ const dashboardService = {
     token?: string
   ): Promise<DashboardTramiteResponse> {
     const response = await apiRequest<{ data: DashboardTramiteResponse }>(
-      API_ENDPOINTS.DASHBOARD.GET_DASHBOARD_TRAMITE,
+      API_ENDPOINTS.DASHBOARD.ADMIN_DATA,
       {
         method: 'POST',
         body: payload,
@@ -67,7 +67,7 @@ const dashboardService = {
     token?: string
   ): Promise<DashboardRevisorResponse> {
     const response = await apiRequest<{ data: DashboardRevisorResponse }>(
-      API_ENDPOINTS.DASHBOARD.GET_DASHBOARD_REVISOR,
+      API_ENDPOINTS.DASHBOARD.MUNICIPIO_DATA,
       {
         method: 'POST',
         body: payload,
