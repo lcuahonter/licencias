@@ -23,30 +23,47 @@ module.exports = async function (context, req) {
   
   context.log(`Proxying ${req.method} request to: ${targetUrl}`);
   context.log(`Headers received: ${JSON.stringify(req.headers)}`);
+  context.log(`Query params: ${JSON.stringify(req.query)}`);
   
   try {
     // Preparar el body
     let bodyData = undefined;
     if (req.body && (req.method === 'POST' || req.method === 'PUT')) {
       bodyData = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      context.log(`Body: ${bodyData}`);
     }
 
     // Preparar headers para reenviar - copiar TODOS los headers importantes
     const forwardHeaders = {
-      'Content-Type': req.headers['content-type'] || 'application/json',
-      'Accept': req.headers['accept'] || 'application/json',
+      'Content-Type': req.headers['content-type'] || req.headers['Content-Type'] || 'application/json',
+      'Accept': req.headers['accept'] || req.headers['Accept'] || 'application/json',
     };
 
-    // Buscar Authorization en todos los posibles formatos
-    const authHeader = req.headers['authorization'] 
+    // Buscar Authorization en TODOS los posibles lugares
+    let authToken = null;
+    
+    // 1. Buscar en headers (diferentes variaciones)
+    authToken = req.headers['authorization'] 
       || req.headers['Authorization'] 
       || req.headers['AUTHORIZATION'];
     
-    if (authHeader) {
-      forwardHeaders['Authorization'] = authHeader;
-      context.log(`✅ Authorization header found: ${authHeader.substring(0, 30)}...`);
+    // 2. Si no está en headers, buscar en query params
+    if (!authToken && req.query.token) {
+      authToken = `Bearer ${req.query.token}`;
+      context.log(`Token found in query params`);
+    }
+    
+    // 3. Si no está en query, buscar en el body
+    if (!authToken && req.body && req.body.token) {
+      authToken = `Bearer ${req.body.token}`;
+      context.log(`Token found in body`);
+    }
+    
+    if (authToken) {
+      forwardHeaders['Authorization'] = authToken;
+      context.log(`✅ Authorization will be sent: ${authToken.substring(0, 30)}...`);
     } else {
-      context.log('⚠️  No Authorization header found');
+      context.log('⚠️  No Authorization found in headers, query, or body');
     }
 
     const response = await makeRequest(targetUrl, {
