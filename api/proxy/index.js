@@ -2,24 +2,43 @@ const https = require('https');
 const http = require('http');
 
 module.exports = async function (context, req) {
+  // Manejar preflight CORS
+  if (req.method === 'OPTIONS') {
+    context.res = {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      }
+    };
+    return;
+  }
+
   const backendUrl = process.env.BACKEND_URL || 'http://172.174.80.112';
   
   // Obtener el path desde la query string
   const targetPath = req.query.path || '';
   const targetUrl = `${backendUrl}${targetPath}`;
   
-  context.log(`Proxying request to: ${targetUrl}`);
+  context.log(`Proxying ${req.method} request to: ${targetUrl}`);
   
   try {
+    // Preparar el body
+    let bodyData = undefined;
+    if (req.body && (req.method === 'POST' || req.method === 'PUT')) {
+      bodyData = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    }
+
     const response = await makeRequest(targetUrl, {
       method: req.method,
       headers: {
         'Content-Type': req.headers['content-type'] || 'application/json',
         'Accept': 'application/json',
-        // Reenviar otros headers importantes
+        // Reenviar el token de autorización si existe
         ...(req.headers['authorization'] && { 'Authorization': req.headers['authorization'] }),
       },
-      body: req.body ? JSON.stringify(req.body) : undefined
+      body: bodyData
     });
 
     context.res = {
@@ -36,6 +55,10 @@ module.exports = async function (context, req) {
     context.log.error('Proxy error:', error);
     context.res = {
       status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
       body: {
         error: 'Proxy error',
         message: error.message
@@ -54,7 +77,9 @@ function makeRequest(url, options) {
       port: urlObj.port,
       path: urlObj.pathname + urlObj.search,
       method: options.method || 'GET',
-      headers: options.headers || {}
+      headers: options.headers || {},
+      // Aumentar timeout
+      timeout: 30000
     };
 
     const req = protocol.request(reqOptions, (res) => {
@@ -66,12 +91,14 @@ function makeRequest(url, options) {
       
       res.on('end', () => {
         try {
+          // Intentar parsear como JSON, si falla devolver string
           const body = data ? JSON.parse(data) : null;
           resolve({
             statusCode: res.statusCode,
             body: body
           });
         } catch (e) {
+          // Si no es JSON válido, devolver el string
           resolve({
             statusCode: res.statusCode,
             body: data
@@ -82,6 +109,11 @@ function makeRequest(url, options) {
 
     req.on('error', (error) => {
       reject(error);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
     });
 
     if (options.body) {
