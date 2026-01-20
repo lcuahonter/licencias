@@ -653,7 +653,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-      <header className="safe-top text-white px-6 pb-5 shadow-lg sticky top-0 z-10 rounded-b-3xl" style={{ backgroundColor: '#003DA5' }}>
+      <header className="safe-top text-white px-6 pb-5 shadow-lg sticky top-0 z-10 rounded-b-3xl" style={{ backgroundColor: '#1565C0' }}>
         <div className="flex justify-between items-center mb-4 pt-4"> 
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/30">
@@ -669,10 +669,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             </button>
         </div>
         <div className="flex p-1 rounded-xl" style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
-            <button onClick={() => setActiveTab('overview')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'overview' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`} style={activeTab === 'overview' ? { color: '#003DA5' } : {}}>
+            <button onClick={() => setActiveTab('overview')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'overview' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`} style={activeTab === 'overview' ? { color: '#1565C0' } : {}}>
                 <span className="material-symbols-outlined text-sm">analytics</span> Reportes
             </button>
-            <button onClick={() => setActiveTab('operators')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'operators' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`} style={activeTab === 'operators' ? { color: '#003DA5' } : {}}>
+            <button onClick={() => setActiveTab('operators')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'operators' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`} style={activeTab === 'operators' ? { color: '#1565C0' } : {}}>
                 <span className="material-symbols-outlined text-sm">group</span> Operadores
             </button>
         </div>
@@ -686,7 +686,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <p className="text-xs font-bold text-gray-400 uppercase mb-1">Trámites {filterLabel === 'Periodo Personalizado' ? 'en periodo' : filterLabel}</p>
                         <h2 className="text-2xl font-black text-gray-800 dark:text-white">{globalStats.count.toLocaleString()}</h2>
-                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="h-1.5 rounded-full w-[70%]" style={{ backgroundColor: '#003DA5' }}></div></div>
+                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-2"><div className="h-1.5 rounded-full w-[70%]" style={{ backgroundColor: '#1565C0' }}></div></div>
                     </div>
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <p className="text-xs font-bold text-gray-400 uppercase mb-1">Recaudación Total</p>
@@ -698,7 +698,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                 <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-lg border dark:border-gray-700" style={{ borderColor: 'rgba(0, 61, 165, 0.2)' }}>
                     <div className="flex flex-col gap-4">
                         <div className="flex justify-between items-center">
-                            <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined" style={{ color: '#003DA5' }}>filter_alt</span> Exportar Datos</h3>
+                            <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined" style={{ color: '#1565C0' }}>filter_alt</span> Exportar Datos</h3>
                             <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 rounded-lg p-1 border border-gray-100 dark:border-gray-700">
                                 <button onClick={handlePreviewGlobalPDF} className="p-2 text-gray-400 hover:text-red-500 hover:bg-white dark:hover:bg-gray-800 rounded-md transition-all"><span className="material-symbols-outlined text-xl">picture_as_pdf</span></button>
                                 <div className="w-px h-4 bg-gray-200 dark:bg-gray-700"></div>
@@ -740,21 +740,21 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                             <button 
                                 onClick={() => handleQuickDate('month')} 
                                 className="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-md"
-                                style={activeFilterBtn === 'month' ? { backgroundColor: '#003DA5', color: '#fff', borderColor: '#003DA5' } : { backgroundColor: '#E3F2FD', color: '#003DA5', borderColor: '#BBDEFB' }}
+                                style={activeFilterBtn === 'month' ? { backgroundColor: '#1565C0', color: '#fff', borderColor: '#1565C0' } : { backgroundColor: '#E3F2FD', color: '#1565C0', borderColor: '#BBDEFB' }}
                             >
                                 Mes Actual
                             </button>
                             <button 
                                 onClick={() => handleQuickDate('quarter')} 
                                 className="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-md"
-                                style={activeFilterBtn === 'quarter' ? { backgroundColor: '#003DA5', color: '#fff', borderColor: '#003DA5' } : { backgroundColor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }}
+                                style={activeFilterBtn === 'quarter' ? { backgroundColor: '#1565C0', color: '#fff', borderColor: '#1565C0' } : { backgroundColor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }}
                             >
                                 3 Meses
                             </button>
                             <button 
                                 onClick={() => handleQuickDate('year')} 
                                 className="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-md"
-                                style={activeFilterBtn === 'year' ? { backgroundColor: '#003DA5', color: '#fff', borderColor: '#003DA5' } : { backgroundColor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }}
+                                style={activeFilterBtn === 'year' ? { backgroundColor: '#1565C0', color: '#fff', borderColor: '#1565C0' } : { backgroundColor: '#f9fafb', color: '#6b7280', borderColor: '#e5e7eb' }}
                             >
                                 Año Actual
                             </button>
@@ -764,8 +764,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
 
                 <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                     <div className="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined" style={{ color: '#003DA5' }}>map</span> Desglose por Municipio</h3>
-                        <p className="text-[10px] text-gray-400 mt-1">Filtrado por: <span className="font-bold" style={{ color: '#003DA5' }}>{filterLabel} ({getRangeText()})</span></p>
+                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2"><span className="material-symbols-outlined" style={{ color: '#1565C0' }}>map</span> Desglose por Municipio</h3>
+                        <p className="text-[10px] text-gray-400 mt-1">Filtrado por: <span className="font-bold" style={{ color: '#1565C0' }}>{filterLabel} ({getRangeText()})</span></p>
                     </div>
                     <div className="max-h-[300px] overflow-y-auto">
                         {dashboardData && dashboardData.desglose && dashboardData.desglose.length > 0 ? (
@@ -793,13 +793,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                  <div className="flex justify-between items-center">
                     <h3 className="font-bold text-gray-800 dark:text-white">Equipo Registrado</h3>
-                    <button onClick={() => setShowAddModal(true)} className="text-xs font-bold text-white px-3 py-1.5 rounded-lg shadow flex items-center gap-1" style={{ backgroundColor: '#003DA5' }}>
+                    <button onClick={() => setShowAddModal(true)} className="text-xs font-bold text-white px-3 py-1.5 rounded-lg shadow flex items-center gap-1" style={{ backgroundColor: '#1565C0' }}>
                         <span className="material-symbols-outlined text-sm">add</span> Nuevo
                     </button>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
                     <div className="relative">
-                        <input type="text" value={searchOp} onChange={(e) => setSearchOp(e.target.value)} placeholder="Buscar por Nombre o Correo..." className="w-full h-11 pl-10 pr-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none transition-colors" style={{ focusBorderColor: '#003DA5' }} />
+                        <input type="text" value={searchOp} onChange={(e) => setSearchOp(e.target.value)} placeholder="Buscar por Nombre o Correo..." className="w-full h-11 pl-10 pr-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none transition-colors" style={{ focusBorderColor: '#1565C0' }} />
                         <span className="material-symbols-outlined absolute left-3 top-2.5 text-gray-400">search</span>
                     </div>
                     <div className="flex gap-2">
