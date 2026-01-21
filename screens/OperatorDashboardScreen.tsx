@@ -471,7 +471,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
       
       {/* NAVBAR */}
-      <header className="bg-[#2c3e50] text-white px-4 py-3 flex justify-between items-center shadow-md sticky top-0 z-20">
+      <header className="bg-indigo-900 text-white px-4 py-3 flex justify-between items-center shadow-md sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
             <span className="material-symbols-outlined">admin_panel_settings</span>
