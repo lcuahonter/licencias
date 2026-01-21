@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
 import DocumentUploadScreen from './DocumentUploadScreen';
 
@@ -90,6 +90,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [selectedProcess, setSelectedProcess] = useState<ProcessType>('Primera Vez');
   
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  
+  // Estado local para solicitudes cargadas desde el backend
+  const [solicitudesCargadas, setSolicitudesCargadas] = useState<LicenseRequest[]>([]);
 
   // --- HELPERS ---
   
@@ -112,15 +115,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     if (!idUsuario || !token) return;
     try {
       const resp = await userService.getUsuarioById(idUsuario, token);
+      
       const userFresh = {
         ...resp?.data?.usuario,
         perfil: resp?.data?.perfil
       };
+      
       if (userFresh) {
         setUserDataFresh(userFresh);
       }
     } catch (err) {
-      console.error('Error recargando perfil:', err);
+      // Error al recargar perfil
     }
   };
   
@@ -139,67 +144,51 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // --- FUNCIÓN PARA RECARGAR SOLICITUDES ---
   const reloadSolicitudes = async () => {
-    if (!idUsuario || !token) return;
+    if (!idUsuario || !token) {
+      return;
+    }
     
     try {
-      // Limpiar solicitudes anteriores antes de cargar nuevas
-      if ((window as any).tempClearRequests) {
-        (window as any).tempClearRequests();
-      }
-      
       const resp = await solicitudService.getByUser(idUsuario, token);
+      
       const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
       
-      if (solicitudes.length > 0 && (window as any).tempAddRequest) {
+      if (solicitudes.length > 0) {
+        const solicitudesProcesadas: LicenseRequest[] = [];
         // Procesar cada solicitud usando su idestatus como fuente de verdad
         for (const sol of solicitudes) {
           const idestatus = sol.idestatus;
           
-          // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
-          if (![22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+          // Solo mostrar: 20 (Nueva), 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
+          if (![20, 22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
           
           let status: any = 'pending';
           let rejectedDocuments: any[] = [];
           
           // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
           if (idestatus === 26) {
-            // Examen teórico APROBADO - Verificar si tiene examen aprobado
-            try {
-              const examResp = await examService.obtenerPorSolicitud(sol.id, token);
-              const pruebas = examResp?.pruebas || [];
-              const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-              
-              if (examenAprobado) {
-                status = 'completed';
-              } else {
-                // Caso raro: estado 26 pero sin examen aprobado
-                status = 'paid_pending_docs';
-              }
-            } catch (err) {
-              console.error('❌ [reloadSolicitudes] Error verificando examen:', err);
-              status = 'paid_pending_docs';
-            }
+            // Estado 26 = Examen APROBADO confirmado por el backend
+            status = 'completed';
           } else if (idestatus === 24) {
-            // Solicitud APROBADA por el backend - Verificar si tiene examen aprobado
+            // Solicitud APROBADA (documentos OK) - verificar examen usando API de verificación
             try {
-              const examResp = await examService.obtenerPorSolicitud(sol.id, token);
-              const pruebas = examResp?.pruebas || [];
-              const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+              const resultadoExamen = await examService.verificarAprobacion(sol.id, token);
+              const examenAprobado = resultadoExamen?.aprobo === true;
               
               if (examenAprobado) {
                 status = 'completed';
               } else {
-                // Documentos aprobados pero falta examen
+                // Documentos aprobados pero examen pendiente o reprobado
                 status = 'paid_pending_docs';
               }
             } catch (err) {
-              console.error('❌ [reloadSolicitudes] Error verificando examen:', err);
+              // Si hay error al verificar, mantener como pendiente
               status = 'paid_pending_docs';
             }
           } else if (idestatus === 27) {
             // Examen teórico REPROBADO
             status = 'rejected';
-          } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
+          } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
             status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
             
             try {
@@ -241,7 +230,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               rejectedDocuments: [],
               rawData: sol
             };
-            (window as any).tempAddRequest(licenseData);
+            solicitudesProcesadas.push(licenseData);
             continue;
           }
           
@@ -258,8 +247,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             rejectedDocuments: rejectedDocuments,
             rawData: sol
           };
-          (window as any).tempAddRequest(request);
+          solicitudesProcesadas.push(request);
         }
+        
+        setSolicitudesCargadas(solicitudesProcesadas);
       }
     } catch (error) {
       // Error al cargar solicitudes
@@ -268,70 +259,55 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // --- CARGAR SOLICITUDES AL INICIAR ---
   useEffect(() => {
-    if (!idUsuario || !token) return;
+    if (!idUsuario || !token) {
+      return;
+    }
+    
     let mounted = true;
 
     const loadSolicitudes = async () => {
       try {
-        // Limpiar solicitudes anteriores antes de cargar nuevas
-        if ((window as any).tempClearRequests) {
-          (window as any).tempClearRequests();
-        }
-        
         const resp = await solicitudService.getByUser(idUsuario, token);
+        
         const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
         
-        if (mounted && solicitudes.length > 0 && (window as any).tempAddRequest) {
+        if (mounted && solicitudes.length > 0) {
+          const solicitudesProcesadas: LicenseRequest[] = [];
+          
           // Procesar cada solicitud usando su idestatus como fuente de verdad
           for (const sol of solicitudes) {
             const idestatus = sol.idestatus;
             
-            // Solo mostrar: 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
-            if (![22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+            // Solo mostrar: 20 (Nueva), 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
+            if (![20, 22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
             
             let status: any = 'pending';
             let rejectedDocuments: any[] = [];
             
             // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
             if (idestatus === 26) {
-              // Examen teórico APROBADO - Verificar si tiene examen aprobado
-              try {
-                const examResp = await examService.obtenerPorSolicitud(sol.id, token);
-                const pruebas = examResp?.pruebas || [];
-                const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-                
-                if (examenAprobado) {
-                  status = 'completed';
-                } else {
-                  // Caso raro: estado 26 pero sin examen aprobado
-                  status = 'paid_pending_docs';
-                }
-              } catch (err) {
-                console.error('❌ [useEffect INICIAL] Error verificando examen:', err);
-                status = 'paid_pending_docs';
-              }
+              // Estado 26 = Examen APROBADO confirmado por el backend
+              status = 'completed';
             } else if (idestatus === 24) {
-              // Solicitud APROBADA por el backend - Verificar si tiene examen aprobado
+              // Solicitud APROBADA (documentos OK) - verificar examen usando API de verificación
               try {
-                const examResp = await examService.obtenerPorSolicitud(sol.id, token);
-                const pruebas = examResp?.pruebas || [];
-                const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
+                const resultadoExamen = await examService.verificarAprobacion(sol.id, token);
+                const examenAprobado = resultadoExamen?.aprobo === true;
                 
                 if (examenAprobado) {
                   status = 'completed';
                 } else {
-                  // Documentos aprobados pero falta examen
+                  // Documentos aprobados pero examen pendiente o reprobado
                   status = 'paid_pending_docs';
                 }
               } catch (err) {
-                console.error('❌ [useEffect INICIAL] Error verificando examen:', err);
-                // En caso de error, mostrar como pendiente de examen por seguridad
+                // Si hay error al verificar, mantener como pendiente
                 status = 'paid_pending_docs';
               }
             } else if (idestatus === 27) {
               // Examen teórico REPROBADO
               status = 'rejected';
-            } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
+            } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
               // Para solicitudes rechazadas o en proceso, consultar documentos
               // IMPORTANTE: NUNCA marcar como completed si idestatus no es 24
               status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
@@ -382,7 +358,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 rejectedDocuments: [],
                 rawData: sol
               };
-              (window as any).tempAddRequest(licenseData);
+              solicitudesProcesadas.push(licenseData);
               continue; // No mostrar en procesos activos
             }
             
@@ -399,8 +375,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               rejectedDocuments: rejectedDocuments,
               rawData: sol
             };
-            (window as any).tempAddRequest(request);
+            solicitudesProcesadas.push(request);
           }
+          
+          setSolicitudesCargadas(solicitudesProcesadas);
         }
       } catch (error) {
         // Error al cargar solicitudes
@@ -433,8 +411,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   }, [examStarted, timeRemaining]); // Remover dependencias innecesarias
   
   // --- LICENCIAS Y TRÁMITES ---
-  const activeLicenses = userData.requests?.filter(r => r.status === 'completed') || [];
-  const activeProcessList = userData.requests?.filter(r => 
+  // Combinar solicitudes del prop userData.requests con las cargadas del backend
+  const todasLasSolicitudes = [...(userData.requests || []), ...solicitudesCargadas];
+  const activeLicenses = todasLasSolicitudes.filter(r => r.status === 'completed') || [];
+  const activeProcessList = todasLasSolicitudes.filter(r => 
       r.status !== 'completed' && r.status !== 'replaced' && r.status !== 'archived'
   ) || [];
 
@@ -627,7 +607,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             rejectedDocuments: [],
             rawData: solicitudDataCompleta
         };
-        (window as any).tempAddRequest(newRequest);
+        
+        // Agregar al estado local
+        setSolicitudesCargadas(prev => [...prev, newRequest]);
 
         // -------------------------------------------------------------------
         // PASO 4: SUBIR DOCUMENTOS
@@ -653,7 +635,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 await documentService.createDocumento(payloadDoc, token);
                 docsOk++;
             } catch (derr: any) {
-                console.error(`Error subiendo doc ${doc.idtipodocumento}`, derr);
+                // Error subiendo documento
                 if (derr.isAuthError) {
                     setAlertMessage('Sesión expirada durante la carga de documentos.');
                     setAlertType('error');
@@ -679,7 +661,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         setSelectedPaymentMethod(null);
 
       } catch (err: any) {
-        console.error('Error Crítico al Finalizar:', err);
         if (err.isAuthError) {
           setAlertMessage('Sesión expirada. Por favor inicia sesión de nuevo.');
           setAlertType('error');
@@ -745,125 +726,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         await documentService.updateDocumento(payload, token);
       }
       
-      // Recargar solicitudes usando la misma lógica del useEffect
-      const resp = await solicitudService.getByUser(idUsuario!, token);
-      const solicitudes = resp?.data?.solicitudesData || resp?.data?.solicitudes || [];
-      
-      // Limpiar requests actuales
-      if ((window as any).tempClearRequests) {
-        (window as any).tempClearRequests();
-      }
-      
-      // Recargar todas las solicitudes con el estado actualizado usando LA MISMA LÓGICA del useEffect
-      for (const sol of solicitudes) {
-        const idestatus = sol.idestatus;
-        
-        if (![22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
-        
-        let status: any = 'pending';
-        let rejectedDocuments: any[] = [];
-        
-        // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-        if (idestatus === 26) {
-          // Examen teórico APROBADO - Verificar si tiene examen aprobado
-          try {
-            const examResp = await examService.obtenerPorSolicitud(sol.id, token);
-            const pruebas = examResp?.pruebas || [];
-            const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-            
-            if (examenAprobado) {
-              status = 'completed';
-            } else {
-              status = 'paid_pending_docs';
-            }
-          } catch (err) {
-            console.error('❌ [handleSubmitCorrections] Error verificando examen:', err);
-            status = 'paid_pending_docs';
-          }
-        } else if (idestatus === 24) {
-          // Solicitud APROBADA - Verificar si tiene examen aprobado
-          try {
-            const examResp = await examService.obtenerPorSolicitud(sol.id, token);
-            const pruebas = examResp?.pruebas || [];
-            const examenAprobado = pruebas.some((p: any) => p.aprobado === true);
-            
-            if (examenAprobado) {
-              status = 'completed';
-            } else {
-              // Documentos aprobados pero falta examen
-              status = 'paid_pending_docs';
-            }
-          } catch (err) {
-            console.error('❌ [handleSubmitCorrections] Error verificando examen:', err);
-            // En caso de error, mostrar como pendiente de examen por seguridad
-            status = 'paid_pending_docs';
-          }
-        } else if (idestatus === 27) {
-          // Examen teórico REPROBADO
-          status = 'rejected';
-        } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
-          // Para solicitudes rechazadas o en proceso, consultar documentos
-          status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
-          
-          try {
-            const revResp = await revisionService.getRevisionesBySolicitud(sol.id, token);
-            const revisionesData = revResp?.data?.revisionesData || revResp?.data?.revisiones || [];
-            const revision = revisionesData[0];
-            
-            if (revision?.id) {
-              const docsResp = await revisionService.getDocumentosByRevision(revision.id, token);
-              const docs = docsResp?.data?.revisionesDocumentosData || docsResp?.data?.revisionDocumentos || [];
-              
-              const rechazados = docs.filter((d: any) => d.idestatus === 15);
-              
-              if (rechazados.length > 0) {
-                status = 'rejected';
-                rejectedDocuments = rechazados.map((d: any) => ({
-                  iddocumento: d.iddocumento,
-                  tipodocumento: d.tipodocumento || d.documento || 'Documento',
-                  comentarios: d.comentarios || 'Sin comentarios'
-                }));
-              }
-            }
-          } catch (err) {
-            // Error al consultar documentos
-          }
-        }
-        
-        if (status === 'completed') {
-          (window as any).tempAddRequest({
-            id: String(sol.id),
-            type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
-                  sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
-            process: 'Primera Vez',
-            cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
-            date: new Date(sol.creacion).toLocaleDateString('es-MX'),
-            status: 'completed',
-            folio: sol.numerolicencia || sol.folio || `DGO-${sol.id}`,
-            rejectedDocuments: [],
-            rawData: sol
-          });
-        } else {
-          (window as any).tempAddRequest({
-            id: String(sol.id),
-            type: sol.descripcion?.includes('Automovilista') ? 'Automovilista' : 
-                  sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista',
-            process: 'Primera Vez',
-            cost: getCost(sol.descripcion?.includes('Motociclista') ? 'Motociclista' : 'Automovilista'),
-            date: new Date(sol.creacion).toLocaleDateString('es-MX'),
-            status: status,
-            folio: sol.folio || `DGO-${sol.id}`,
-            rejectedDocuments: rejectedDocuments,
-            rawData: sol
-          });
-        }
-      }
+      // Recargar todas las solicitudes después de actualizar documentos
+      await reloadSolicitudes();
       
       setFixingRequest(null);
       setCorrectionsMessage("✅ Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN esperando que el operador valide los nuevos documentos.");
       setShowCorrectionsSuccessModal(true);
     } catch (error: any) {
-      console.error('❌ Error actualizando documentos:', error);
       setCorrectionsMessage(`Error al enviar los documentos: ${error?.data?.message || error?.message || 'Error desconocido'}`);
       setShowCorrectionsErrorModal(true);
     } finally {
@@ -900,10 +769,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <div className="space-y-4">
                     {activeLicenses.map((lic) => {
                       const rawData = lic.rawData;
-                      const nombres = rawData?.nombres || userDataFresh?.nombres || '';
-                      const apellidoPaterno = rawData?.apellidopaterno || userDataFresh?.apellidopaterno || '';
-                      const apellidoMaterno = rawData?.apellidomaterno || userDataFresh?.apellidomaterno || '';
+                      const nombres = userDataFresh?.nombres || '';
+                      const apellidoPaterno = userDataFresh?.apellidopaterno || '';
+                      const apellidoMaterno = userDataFresh?.apellidomaterno || '';
                       const nombreCompleto = `${nombres} ${apellidoPaterno} ${apellidoMaterno}`.trim();
+                      
                       const numeroLicencia = rawData?.numerolicencia || lic.folio;
                       const vigencia = rawData?.vigencia || '2025 - 2028';
                       const descripcion = rawData?.descripcion || `Licencia ${lic.type}`;
@@ -952,7 +822,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       // Determinar el texto del estado
                       const statusDisplay = req.status === 'rejected' ? (idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADO') : 
                                           req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' : 
-                                          (idestatus === 24 ? 'APROBADO - FALTA EXAMEN' : 
+                                          (idestatus === 20 ? 'EN ESPERA QUE REALICES TU EXAMEN' :
+                                           idestatus === 24 ? 'APROBADO - FALTA EXAMEN' : 
                                            idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
                       
                       return (
@@ -962,7 +833,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     <div className="flex items-center gap-2 mb-1"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{statusDisplay}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
                                     <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
                                     <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
-                                    {rawData?.idestatus && <p className="text-xs text-gray-400">Estado ID: {rawData.idestatus}</p>}
                                 </div>
                                 <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
                             </div>
@@ -987,8 +857,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               </div>
                             )}
                             
-                            {/* Botón examen teórico - Solo ocultar cuando la solicitud esté completada (documentos + examen) */}
-                            {req.status !== 'rejected' && req.status !== 'completed' && (
+                            {/* Botón examen teórico - Solo mostrar cuando idestatus es 20 (Nueva solicitud sin examen) */}
+                            {req.status !== 'rejected' && req.status !== 'completed' && idestatus === 20 && (
                               <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                 <button 
                                   onClick={() => {
@@ -1291,7 +1161,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     <div className="bg-white p-3 rounded-lg">
                       <p className="text-gray-500 text-xs mb-1">Usuario</p>
                       <p className="font-bold text-gray-900">
-                        {userDataFresh?.nombre || userDataFresh?.nombres || ''} {userDataFresh?.apellidopaterno || userDataFresh?.apellidoPaterno || ''} {userDataFresh?.apellidomaterno || userDataFresh?.apellidoMaterno || ''}
+                        {userDataFresh?.nombres || ''} {userDataFresh?.apellidopaterno || ''} {userDataFresh?.apellidomaterno || ''}
                       </p>
                     </div>
                     <div className="bg-white p-3 rounded-lg">
@@ -1324,14 +1194,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       setLoadingExam(true);
                       try {
                         const data = await examService.obtenerPreguntas(selectedSolicitudId!, token || '');
-                        console.log('Preguntas obtenidas:', data);
                         setExamPreguntas(data.preguntas);
                         setIdIntento(data.idintento);
                         setExamStarted(true);
                         setTimeRemaining(900); // 15 minutos = 900 segundos
                         setTiempoInicioPreguntas(Date.now());
                       } catch (error: any) {
-                        console.error('Error al cargar examen:', error);
                         setAlertMessage('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
                         setAlertType('error');
                         setShowAlertModal(true);
@@ -1496,11 +1364,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 30
                       }));
                     
-                    console.log('Enviando respuestas con idintento:', idIntento, 'respuestas:', respuestasArray);
-                    
                     // Llamar al servicio con los parámetros separados
                     await examService.enviarRespuestas(idIntento!, respuestasArray, token || '');
-                    console.log('Respuestas enviadas exitosamente');
                     
                     // Guardar idIntento para verificar después
                     setIdIntentoGuardado(idIntento);
@@ -1511,7 +1376,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     setShowVerResultButton(true);
                     setShowResultModal(true);
                   } catch (error: any) {
-                    console.error('Error al enviar examen (mostrando botón de verificar):', error);
                     
                     // Guardar idIntento para verificar después
                     setIdIntentoGuardado(idIntento);
@@ -1523,10 +1387,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     setShowResultModal(true);
                   }
                   
-                  // Cerrar todo
+                  // Cerrar todo (mantener selectedSolicitudId para Ver Resultado)
                   setShowExamModal(false);
                   setExamPreguntas([]);
-                  setSelectedSolicitudId(null);
                   setRespuestas({});
                   setTiemposRespuesta({});
                   setIdIntento(null);
@@ -1570,6 +1433,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     onClick={() => {
                       setShowResultModal(false);
                       setShowVerResultButton(false);
+                      setSelectedSolicitudId(null);
                     }}
                     className="flex-1 px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold"
                   >
@@ -1585,13 +1449,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         await wait(1000);
                         
                         const resultadoExamen = await examService.verificarAprobacion(selectedSolicitudId!, token || '');
-                        console.log('🎯 Resultado completo del examen:', JSON.stringify(resultadoExamen, null, 2));
                         
                         const aprobado = resultadoExamen?.aprobo === true;
                         const mensaje = resultadoExamen?.mensaje || resultadoExamen?.message || '';
                         const calificacion = resultadoExamen?.calificacion;
-                        
-                        console.log(`📊 Procesando resultado: aprobado=${aprobado}, mensaje="${mensaje}", calificacion=${calificacion}`);
                         
                         const mensajeFinal = mensaje || (aprobado ? `¡Felicidades! Has aprobado el examen con ${calificacion}` : `No aprobaste el examen. Calificación: ${calificacion || 'N/A'}`);
                         
@@ -1599,13 +1460,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setResultType(aprobado ? 'success' : 'error');
                         setShowVerResultButton(false);
                         
-                        // Recargar solicitudes para actualizar el estado
-                        if (aprobado) {
-                          await wait(1000);
-                          reloadSolicitudes();
+                        // Si aprobó el examen, actualizar solicitud a estado 22
+                        if (aprobado && selectedSolicitudId) {
+                          try {
+                            await solicitudService.updateSolicitud(selectedSolicitudId, 22, token || '');
+                          } catch (updateErr) {
+                            // Error al actualizar solicitud, pero continuar
+                          }
                         }
+                        
+                        // Recargar solicitudes para actualizar el estado (aprobado o reprobado)
+                        await wait(1000);
+                        await reloadSolicitudes();
+                        
+                        // Limpiar selectedSolicitudId después de recargar
+                        setSelectedSolicitudId(null);
                       } catch (error: any) {
-                        console.log('Error al verificar resultado:', error);
                         const mensaje = error.response?.data?.message || error.response?.data?.data?.mensaje || error.message || 'El examen está siendo procesado';
                         setResultMessage(mensaje);
                         setResultType('info' as any);
@@ -1688,13 +1558,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       tiempoRespuesta: tiemposRespuesta[Number(idpregunta)] || 60
                     }));
                     
-                    console.log('ENVÍO POR TIMEOUT - Payload:', { idintento: idIntento, respuestas: respuestasArray });
-                    
                     try {
                       await examService.enviarRespuestas(idIntento!, respuestasArray, token || '');
-                      console.log('Respuestas enviadas exitosamente');
                     } catch (errorEnviar: any) {
-                      console.error('Error al enviar (mostrando botón de verificar):', errorEnviar);
+                      // Error al enviar
                     }
                     
                     // Guardar idIntento para verificar después
@@ -1706,16 +1573,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     setShowVerResultButton(true);
                     setShowResultModal(true);
                     
-                    // Cerrar todo
+                    // Cerrar todo (mantener selectedSolicitudId para Ver Resultado)
                     setShowExamModal(false);
                     setExamStarted(false);
                     setExamPreguntas([]);
-                    setSelectedSolicitudId(null);
                     setRespuestas({});
                     setTiemposRespuesta({});
                     setIdIntento(null);
                   } catch (error: any) {
-                    console.error('Error en envío:', error);
                     setResultMessage('Error al enviar el examen: ' + (error.response?.data?.message || error.message));
                     setResultType('error');
                     setShowResultModal(true);
