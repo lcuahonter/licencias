@@ -1,6 +1,24 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities;
+
+@layer base {
+
+  html,
+  body,
+  #root,
+  * {
+    font-family: 'Century Gothic', 'CenturyGothic', 'AppleGothic', sans-serif;
+  }
+}
+
+
+@layer base {
+
+  html,
+  body {
+    font-family: 'Century Gothic', sans-serif;
+  }
+}
 
 /* CLASES DE ÁREAS SEGURAS */
 
