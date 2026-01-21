@@ -833,7 +833,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     <div className="flex items-center gap-2 mb-1"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{statusDisplay}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
                                     <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
                                     <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
-                                    {rawData?.idestatus && <p className="text-xs text-gray-400">Estado ID: {rawData.idestatus}</p>}
                                 </div>
                                 <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
                             </div>
@@ -858,8 +857,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               </div>
                             )}
                             
-                            {/* Botón examen teórico - Solo ocultar cuando la solicitud esté completada (documentos + examen) */}
-                            {req.status !== 'rejected' && req.status !== 'completed' && (
+                            {/* Botón examen teórico - Solo mostrar cuando idestatus es 20 (Nueva solicitud sin examen) */}
+                            {req.status !== 'rejected' && req.status !== 'completed' && idestatus === 20 && (
                               <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                                 <button 
                                   onClick={() => {

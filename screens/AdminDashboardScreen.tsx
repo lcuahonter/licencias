@@ -835,6 +835,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                                                     // Mapeo de colores por estado
                                                     const colorMap: { [key: string]: string } = {
                                                         'Asignada': 'bg-blue-100 text-blue-700',
+                                                        'Aprobada': 'bg-green-100 text-green-700',
+                                                        'Rechazada': 'bg-red-100 text-red-700',
                                                         'Activo': 'bg-green-100 text-green-700',
                                                         'Pendiente de revisión': 'bg-yellow-100 text-yellow-700',
                                                         'Completada': 'bg-green-100 text-green-700',
@@ -844,6 +846,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                                                     const labelMap: { [key: string]: string } = {
                                                         'Activo': 'Completados',
                                                         'Asignada': 'Asignadas',
+                                                        'Aprobada': 'Aprobadas',
+                                                        'Rechazada': 'Rechazadas',
                                                         'Pendiente de revisión': 'Pendiente de revisión',
                                                         'Completada': 'Completadas',
                                                         'En revisión': 'En revisión'

@@ -763,9 +763,25 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                 Cancelar
               </button>
               <button 
+                onClick={handleSubmitReview} 
+                disabled={isSubmitting}
+                className="px-6 py-2 bg-gray-600 dark:bg-gray-700 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-sm">save</span> 
+                    Guardar Dictamen
+                  </>
+                )}
+              </button>
+              <button 
                 onClick={() => setShowDictamenModal(true)} 
-                disabled={isSubmitting || documentos.length === 0}
-                className="px-6 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm disabled:opacity-50"
+                className="px-6 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm"
               >
                 <span className="material-symbols-outlined text-sm">gavel</span> 
                 Emitir Dictamen
@@ -789,7 +805,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
             
             <div className="p-6">
               <div className="space-y-3">
-                {/* Botón Aprobar */}
+                {/* Botón Aprobar - Solo habilitado si todos los documentos están aprobados */}
                 <button
                   onClick={async () => {
                     if (!selectedSolicitud || !token || !revisionActual) return;
@@ -819,8 +835,8 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                       setIsEnviandoDictamen(false);
                     }
                   }}
-                  disabled={isEnviandoDictamen}
-                  className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                  disabled={isEnviandoDictamen || !documentos.every(doc => documentosRevision.find(dr => dr.iddocumento === doc.id && dr.idestatus === 14))}
+                  className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50 disabled:bg-gray-400"
                 >
                   <span className="material-symbols-outlined text-2xl">check_circle</span>
                   <span>Aprobar Dictamen</span>
