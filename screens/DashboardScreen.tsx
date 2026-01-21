@@ -1,6 +1,7 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
 import DocumentUploadScreen from './DocumentUploadScreen';
+import durangoLogo from '../src/recursos/durangogob.svg';
 
 interface DashboardScreenProps {
   userData: UserData;
@@ -44,6 +45,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   // --- ESTADOS ---
   const [showNewReqModal, setShowNewReqModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showDigitalLicense, setShowDigitalLicense] = useState(false);
+  const [selectedLicense, setSelectedLicense] = useState<LicenseRequest | null>(null);
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
   const [selectedSolicitudId, setSelectedSolicitudId] = useState<number | null>(null);
@@ -779,7 +782,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       const descripcion = rawData?.descripcion || `Licencia ${lic.type}`;
                       
                       return (
-                        <div key={lic.id} className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden group">
+                        <div key={lic.id} onClick={() => { setSelectedLicense(lic); setShowDigitalLicense(true); }} className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden group cursor-pointer hover:scale-[1.02] transition-transform">
                             <div className="absolute -right-4 -top-4 text-white opacity-10"><span className="material-symbols-outlined text-9xl">verified</span></div>
                             <div className="relative z-10">
                                 <div className="flex justify-between items-start">
@@ -1682,6 +1685,162 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MODAL LICENCIA DIGITAL */}
+      {showDigitalLicense && selectedLicense && (
+        <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={(e) => e.target === e.currentTarget && setShowDigitalLicense(false)}>
+            <div className="w-full max-w-sm relative perspective-1000 animate-in zoom-in duration-300">
+                
+                {/* TARJETA DE LICENCIA - ESTILO REALISTA */}
+                <div className="relative bg-white rounded-2xl overflow-hidden shadow-2xl transform transition-transform border border-gray-200">
+                    
+                    {/* ENCABEZADO - GOBIERNO */}
+                    <div className="bg-[#1F2937] text-white p-4 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
+                        <div className="flex justify-between items-center relative z-10">
+                            <img src={durangoLogo} className="h-8 invert opacity-90" alt="Gobierno de Durango" />
+                            <div className="text-right">
+                                <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-gray-400">Estados Unidos Mexicanos</p>
+                                <p className="text-[10px] font-black uppercase tracking-wider">Gobierno del Estado de Durango</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* CUERPO DE LA LICENCIA */}
+                    <div className="p-5 relative">
+                        {/* Marca de agua de seguridad */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none z-0">
+                             <img src={durangoLogo} className="w-48 grayscale" />
+                        </div>
+
+                        <div className="relative z-10 flex flex-col gap-4">
+                            {/* FOTO y TIPO */}
+                            <div className="flex justify-between items-start">
+                                <div className="w-32 h-40 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200 shadow-md relative">
+                                    {userDataFresh.photo ? (
+                                        <img src={userDataFresh.photo} className="w-full h-full object-cover" alt="Foto Conductor" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-50">
+                                            <span className="material-symbols-outlined text-6xl">person</span>
+                                        </div>
+                                    )}
+                                    <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-center py-1">
+                                        <p className="text-[10px] text-white font-bold uppercase tracking-wider">Conductor</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-2">
+                                     <div className="text-right">
+                                        <p className="text-[9px] font-bold text-red-600 uppercase tracking-wider mb-0.5">Tipo de Licencia</p>
+                                        <div className="bg-gray-900 text-white px-4 py-2 rounded-lg shadow-sm inline-block">
+                                             <span className="text-3xl font-black">{selectedLicense.type === 'Automovilista' ? 'A' : 'M'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right mt-2">
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">No. de Licencia</p>
+                                        <p className="text-xl font-black text-gray-900 font-mono tracking-tight">{selectedLicense.folio || 'S/N'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* DATOS */}
+                            <div className="space-y-3 pt-2">
+                                <div>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Nombre</p>
+                                    <p className="text-lg font-bold text-gray-900 leading-tight uppercase">
+                                        {userDataFresh?.nombres} {userDataFresh?.apellidopaterno} {userDataFresh?.apellidomaterno}
+                                    </p>
+                                </div>
+                                
+                                <div className="grid grid-cols-3 gap-3 border-t border-gray-100 pt-3">
+                                    <div>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Nacionalidad</p>
+                                        <p className="text-sm font-bold text-gray-900">N/A</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Tipo Sangre</p>
+                                        <p className="text-sm font-bold text-gray-900 text-red-600">N/A</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">RFC</p>
+                                        <p className="text-xs font-bold text-gray-900">N/A</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 border-t border-gray-100 pt-3 mt-1">
+                                    <div className="flex-1 space-y-3">
+                                        <div className="grid grid-cols-1 gap-0.5">
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Fecha de Expedición</p>
+                                            <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
+                                                {new Date(selectedLicense.rawData?.creacion || Date.now()).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-0.5">
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Vigencia</p>
+                                            <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
+                                                {selectedLicense.rawData?.vigencia 
+                                                    ? new Date(selectedLicense.rawData.vigencia).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})
+                                                    : new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})
+                                                }
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-0.5">
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Antigüedad</p>
+                                            <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
+                                                {new Date(selectedLicense.rawData?.creacion || Date.now()).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* QR CODE - ALADO DE FECHAS */}
+                                    <div className="flex-shrink-0 flex items-center justify-center pl-2 border-l border-gray-100">
+                                        <div className="w-28 h-28 bg-white p-1.5 rounded-lg border border-gray-200 shadow-sm">
+                                            <img 
+                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`LICENCIA-DGO:${selectedLicense.folio}|USR:${userDataFresh.id}|${userDataFresh.curp}`)}`} 
+                                                className="w-full h-full object-contain" 
+                                                alt="QR de Validación"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* FOOTER - SOLO FIRMAS */}
+                        <div className="mt-6 pt-4 border-t-2 border-dashed border-gray-100 flex items-end justify-between gap-8 relative z-10 px-4 pb-4">
+                            {/* FIRMA DIGITAL */}
+                            <div className="flex-1 flex flex-col items-center justify-end">
+                                <div className="h-16 w-full flex items-end justify-center pb-2 border-b border-gray-400 mb-1 relative">
+                                   <p className="text-4xl text-gray-800 text-center w-full transform -rotate-2" style={{ fontFamily: '"Monsieur La Doulaise", cursive', lineHeight: '1' }}>
+                                        {userDataFresh?.nombres?.split(' ')[0]} {userDataFresh?.apellidopaterno}
+                                   </p>
+                                </div>
+                                <p className="text-[7px] text-center font-bold text-gray-500 uppercase tracking-wider">Firma del Titular</p>
+                            </div>
+
+                            {/* FIRMA SECRETARIO */}
+                            <div className="flex-1 flex flex-col items-center justify-end">
+                                <div className="h-12 w-full flex items-end justify-center pb-1 border-b border-gray-400 mb-1 relative overflow-hidden">
+                                     <svg viewBox="0 0 140 50" className="w-full h-full opacity-80" preserveAspectRatio="none">
+                                        <path d="M10,40 C30,10 50,60 70,30 S110,10 130,40" stroke="#1f2937" strokeWidth="2" fill="none" />
+                                        <path d="M20,25 Q60,50 90,20" stroke="#1f2937" strokeWidth="1.5" fill="none" />
+                                     </svg>
+                                </div>
+                                <p className="text-[7px] text-center font-bold text-gray-500 uppercase tracking-wider">Secretario de Movilidad</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* BANDA INFERIOR */}
+                    <div className="bg-[#B91C1C] h-3 w-full"></div>
+                </div>
+
+                {/* BOTÓN CERRAR */}
+                <button onClick={() => setShowDigitalLicense(false)} className="mt-6 w-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined">close</span> Cerrar Vista Previa
+                </button>
+            </div>
         </div>
       )}
 

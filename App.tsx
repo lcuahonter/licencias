@@ -32,7 +32,7 @@ const App: React.FC = () => {
         await StatusBar.setBackgroundColor({ color: '#FFFFFF' }); 
         await StatusBar.setOverlaysWebView({ overlay: false }); 
       } catch (e) {
-        // No estamos en móvil
+        console.log("No estamos en móvil", e);
       }
     };
     configStatusBar();
@@ -62,9 +62,9 @@ const App: React.FC = () => {
   const updateRequestData = (id: string, updates: Partial<LicenseRequest>) => {
       setUserData(prev => ({ ...prev, requests: prev.requests?.map(req => req.id === id ? { ...req, ...updates } : req) }));
   };
-  const clearRequests = () => {
-      setUserData(prev => ({ ...prev, requests: [] }));
-  };
+
+  (window as any).tempAddRequest = addRequest;
+  (window as any).tempUpdateRequestData = updateRequestData;
 
   // --- RENDERIZADO DE PANTALLAS ---
   const renderScreen = () => {
@@ -79,6 +79,7 @@ const App: React.FC = () => {
                 
                 // 1. Guardar el ID si viene del login real
                 if (loginData.idUsuario) {
+                    console.log("🔑 ID Guardado en App:", loginData.idUsuario);
                     setUserId(loginData.idUsuario);
                 }
 
@@ -91,21 +92,33 @@ const App: React.FC = () => {
                 }
 
                 // 3. Decidir navegación basada en el token (Prioridad Alta)
-                if (nextScreen === 'Dashboard') {
-                    // Usuario con rol 2 va directo a Dashboard
+                if (nextScreen === 'DocumentUploadScreen') {
+                    // Si el token indica perfil incompleto o usuario, mandamos a cargar documentos
+                    setCurrentStep(AppStep.DOCUMENTS); 
+                    return;
+                } else if (nextScreen === 'Dashboard') {
                     setCurrentStep(AppStep.DASHBOARD);
                     return;
                 } else if (nextScreen === 'OperatorDashboard') {
                     // Revisor -> panel del operador
                     setCurrentStep(AppStep.OPERATOR_DASHBOARD);
                     return;
-                } else if (nextScreen === 'AdminDashboard') {
-                    // Administrador -> panel admin
+                }
+
+                // --- MOCKS PARA PRUEBAS (Si no vino nextScreen, usamos la lógica anterior) ---
+                if (loginData.email === 'admin@gmail.com') {
                     setCurrentStep(AppStep.ADMIN_DASHBOARD);
-                    return;
+                } else if (loginData.email === 'operador@gmail.com') {
+                    setCurrentStep(AppStep.OPERATOR_DASHBOARD);
+                } else if (loginData.email === 'existente@gmail.com') {
+                  updateUserData({
+                    ...loginData, firstName: 'Juan', lastName: 'Pérez García', idNumber: 'PEPJ880101HDFRXX05', birthDate: '1988-01-01', licenseType: 'Automovilista Particular', validityDuration: '3 Años', photo: 'photos/cara.jpeg', address: 'Calle Falsa 123', emergencyContact: 'Maria Perez',
+                    requests: [{ id: '101', type: 'Automovilista', process: 'Refrendo', cost: 912, date: '26/12/2025', status: 'paid_pending_docs', folio: 'DGO-9988' }]
+                  });
+                  setCurrentStep(AppStep.DASHBOARD);
                 } else {
-                  // Flujo normal de registro nuevo si no hay nextScreen
-                  setCurrentStep(AppStep.REGISTRATION);
+                  // Flujo normal de registro nuevo
+                  setCurrentStep(AppStep.REGISTRATION); // O Documents según tu flujo
                 }
               } else {
                 // Caso: Crear Cuenta Nueva
@@ -145,8 +158,8 @@ const App: React.FC = () => {
             onSave={(data) => { updateUserData(data); setCurrentStep(AppStep.DASHBOARD); }} 
         />;
       
-      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
-      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
+      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
+      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
       case AppStep.PAYMENT: return <PaymentScreen userData={userData} onBack={() => setCurrentStep(AppStep.APPOINTMENT)} onPaymentSuccess={(paymentData) => { updateUserData({ payment: paymentData }); setCurrentStep(AppStep.DASHBOARD); }} />;
       case AppStep.SUCCESS: return <SuccessScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} />;
