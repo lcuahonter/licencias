@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
     BY_SOLICITUD: import.meta.env.VITE_REVISION_BY_SOLICITUD || '/api/revisiones/revisionesBySolicitud',
     BY_REVISOR: import.meta.env.VITE_REVISION_BY_REVISOR || '/api/revisiones/revisionesByRevisor',
     CREATE_DOCUMENTOS: import.meta.env.VITE_REVISION_CREATE_DOCUMENTOS || '/createRevisionDocumentos',
+    UPDATE: import.meta.env.VITE_REVISION_UPDATE || '/api/revisiones/updateRevision',
     UPDATE_DOCUMENTO: import.meta.env.VITE_REVISION_UPDATE_DOCUMENTO || '/updateRevisionDocumento',
     DOCUMENTOS_BY_REVISION: import.meta.env.VITE_REVISION_DOCUMENTOS_BY_REVISION || '/revisionesDocumentosByRevision',
     DOCUMENTOS_BY_DOCUMENTO: import.meta.env.VITE_REVISION_DOCUMENTOS_BY_DOCUMENTO || '/revisionesDocumentosByDocumento'

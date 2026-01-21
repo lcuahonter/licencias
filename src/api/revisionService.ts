@@ -73,5 +73,13 @@ export const revisionService = {
       body: { idrevisor },
       token
     });
+  },
+
+  updateRevision: async (payload: { id: number; comentarios: string; idestatus: number }, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.REVISION.UPDATE, {
+      method: 'POST',
+      body: payload,
+      token
+    });
   }
 };

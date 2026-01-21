@@ -34,6 +34,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [isEnviandoDictamen, setIsEnviandoDictamen] = useState(false);
+  const [showDictamenModal, setShowDictamenModal] = useState(false);
   
   // Modal genérico para alertas
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -320,7 +321,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         idsolicitud: solicitud.id,
         idrevisor: idRevisor,
         comentarios: 'Asignado',
-        idestatus: 23 // En revisión
+        idestatus: 32 // Asignada
       };
 
       console.log('📤 Enviando createRevision:', payload);
@@ -341,28 +342,6 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       setShowAlertModal(true);
     } finally {
       setIsTakingRequest(false);
-    }
-  };
-
-  const handleEnviarDictamen = async () => {
-    if (!selectedSolicitud || !token || isEnviandoDictamen) return;
-
-    try {
-      setIsEnviandoDictamen(true);
-      console.log(`📤 Enviando dictamen para solicitud ${selectedSolicitud.id}...`);
-      await solicitudService.updateSolicitud(selectedSolicitud.id, 24, token);
-      console.log(`✅ Solicitud ${selectedSolicitud.id} actualizada a estado 24 (Aprobada)`);
-      
-      setModalMessage('Dictamen enviado exitosamente. La solicitud ha sido aprobada.');
-      setShowSuccessModal(true);
-      setSelectedSolicitud(null);
-      fetchSolicitudes();
-    } catch (error: any) {
-      console.error('❌ Error al enviar dictamen:', error);
-      setModalMessage('Error al enviar el dictamen. Por favor intente nuevamente.');
-      setShowErrorModal(true);
-    } finally {
-      setIsEnviandoDictamen(false);
     }
   };
 
@@ -784,38 +763,115 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                 Cancelar
               </button>
               <button 
-                onClick={handleSubmitReview} 
-                disabled={isSubmitting}
-                className="px-6 py-2 bg-gray-600 dark:bg-gray-700 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm disabled:opacity-50"
+                onClick={() => setShowDictamenModal(true)} 
+                disabled={isSubmitting || documentos.length === 0}
+                className="px-6 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm disabled:opacity-50"
               >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <span className="material-symbols-outlined text-sm">save</span> 
-                    Guardar Dictamen
-                  </>
-                )}
+                <span className="material-symbols-outlined text-sm">gavel</span> 
+                Emitir Dictamen
               </button>
-              <button 
-                onClick={handleEnviarDictamen} 
-                disabled={!documentos.every(doc => documentosRevision.find(dr => dr.iddocumento === doc.id && dr.idestatus === 14)) || isEnviandoDictamen}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2 text-sm disabled:opacity-50 disabled:bg-gray-400"
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE DICTAMEN */}
+      {showDictamenModal && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+              <h2 className="text-xl font-black text-gray-800 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600">gavel</span>
+                Emitir Dictamen
+              </h2>
+              <p className="text-sm text-gray-500 mt-2">Selecciona el resultado del dictamen</p>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-3">
+                {/* Botón Aprobar */}
+                <button
+                  onClick={async () => {
+                    if (!selectedSolicitud || !token || !revisionActual) return;
+                    setIsEnviandoDictamen(true);
+                    try {
+                      // Actualizar revisión con estado APROBADO (34)
+                      await revisionService.updateRevision({
+                        id: revisionActual.id,
+                        comentarios: 'Completada',
+                        idestatus: 34
+                      }, token);
+
+                      // Actualizar solicitud con estado APROBADO (24)
+                      await solicitudService.updateSolicitud(selectedSolicitud.id, 24, token);
+
+                      setAlertMessage('Dictamen aprobado exitosamente');
+                      setAlertType('success');
+                      setShowAlertModal(true);
+                      setShowDictamenModal(false);
+                      setSelectedSolicitud(null);
+                      fetchSolicitudes();
+                    } catch (error: any) {
+                      setAlertMessage('Error al aprobar el dictamen: ' + (error.response?.data?.message || error.message));
+                      setAlertType('error');
+                      setShowAlertModal(true);
+                    } finally {
+                      setIsEnviandoDictamen(false);
+                    }
+                  }}
+                  disabled={isEnviandoDictamen}
+                  className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-2xl">check_circle</span>
+                  <span>Aprobar Dictamen</span>
+                </button>
+
+                {/* Botón Rechazar */}
+                <button
+                  onClick={async () => {
+                    if (!selectedSolicitud || !token || !revisionActual) return;
+                    setIsEnviandoDictamen(true);
+                    try {
+                      // Actualizar revisión con estado RECHAZADO (35)
+                      await revisionService.updateRevision({
+                        id: revisionActual.id,
+                        comentarios: 'Rechazado',
+                        idestatus: 35
+                      }, token);
+
+                      // Actualizar solicitud con estado RECHAZADO (25)
+                      await solicitudService.updateSolicitud(selectedSolicitud.id, 25, token);
+
+                      setAlertMessage('Dictamen rechazado exitosamente');
+                      setAlertType('success');
+                      setShowAlertModal(true);
+                      setShowDictamenModal(false);
+                      setSelectedSolicitud(null);
+                      fetchSolicitudes();
+                    } catch (error: any) {
+                      setAlertMessage('Error al rechazar el dictamen: ' + (error.response?.data?.message || error.message));
+                      setAlertType('error');
+                      setShowAlertModal(true);
+                    } finally {
+                      setIsEnviandoDictamen(false);
+                    }
+                  }}
+                  disabled={isEnviandoDictamen}
+                  className="w-full px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-2xl">cancel</span>
+                  <span>Rechazar Dictamen</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+              <button
+                onClick={() => setShowDictamenModal(false)}
+                disabled={isEnviandoDictamen}
+                className="px-6 py-2 rounded-lg font-bold text-gray-500 hover:bg-gray-200 transition-colors text-sm disabled:opacity-50"
               >
-                {isEnviandoDictamen ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    <span className="material-symbols-outlined text-sm">send</span> 
-                    Enviar Dictamen
-                  </>
-                )}
+                Cancelar
               </button>
             </div>
           </div>
