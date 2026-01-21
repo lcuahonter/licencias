@@ -27,6 +27,8 @@ export const decodeCurpData = (curp: string) => {
         data: {
           firstName: '', 
           lastName: '',
+          paternalName: '',
+          maternalName: '',
           birthDate,
           found: false
         }

@@ -232,7 +232,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
       // Convertir OperadorData[] a formato compatible si viene del API
       const normalizedOps = operadoresData.length > 0 
         ? operadoresData.map((op, idx) => {
-            const totalSolicitudes = Object.values(op.solicitudes).reduce((sum, val) => sum + val, 0);
+            const totalSolicitudes = Object.values(op.solicitudes).reduce((sum: number, val) => sum + (val as number), 0);
             // Mapear estatus español a inglés
             const statusMap: { [key: string]: 'active' | 'inactive' } = {
               'Activo': 'active',
@@ -314,13 +314,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
     
     dashboardData.desglose.forEach(muniData => {
         const stats = getMuniStats(muniData.municipio);
-        const cash = stats.total * 900;
+        const cash = stats.total * 912;
         grandTotal += stats.total;
         grandPrimera += stats.breakdown.primera.count;
         grandRenovacion += stats.breakdown.renovacion.count;
         const shortName = muniData.municipio.length > 15 ? muniData.municipio.substring(0,13) + '..' : muniData.municipio;
         // COLUMNAS ACTUALIZADAS
-        rowsHTML += `<tr><td>${shortName}</td><td><strong>${stats.total}</strong></td><td>${stats.breakdown.primera.count}</td><td>${stats.breakdown.renovacion.count}</td><td>$${(cash/1000).toFixed(1)}k</td></tr>`;
+        rowsHTML += `<tr><td>${shortName}</td><td><strong>${stats.total}</strong></td><td>${stats.breakdown.primera.count}</td><td>${stats.breakdown.renovacion.count}</td><td>$${cash.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`;
     });
 
     const body = `
@@ -328,7 +328,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             <div class="box">
                 <h3 style="margin:0 0 5px 0;">Resumen General</h3>
                 <div class="row"><span>Total Trámites:</span> <span class="val" style="font-size:14px">${grandTotal.toLocaleString()}</span></div>
-                <div class="row"><span>Recaudación Est:</span> <span class="val" style="color:green">$${(grandTotal * 900).toLocaleString()}</span></div>
+                <div class="row"><span>Recaudación Est:</span> <span class="val" style="color:green">$${(grandTotal * 912).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
             </div>
         </div>
         <table class="data-table">
