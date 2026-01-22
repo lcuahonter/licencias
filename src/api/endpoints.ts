@@ -46,6 +46,9 @@ export const API_ENDPOINTS = {
   DASHBOARD: {
     ADMIN_DATA: import.meta.env.VITE_DASHBOARD_ADMIN_DATA || '/api/dashboard/getDashboardTramite',
     OPERADORES_DATA: import.meta.env.VITE_DASHBOARD_OPERADORES_DATA || '/api/dashboard/getDashboardRevisor'
+  },
+  FOTOS_ROSTRO: {
+    SUBIR: import.meta.env.VITE_FOTOS_ROSTRO_SUBIR || '/api/fotos-rostro/subir'
   }
 };
 
