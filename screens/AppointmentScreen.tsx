@@ -13,6 +13,21 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
 
+  // Estados para Modal de Alerta
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+
+  const handleGeneratePDF = async () => {
+    try {
+      await generateFilledApplication(userData);
+    } catch (error: any) {
+      setAlertMessage(error.message || 'Error al generar el documento');
+      setAlertType('error');
+      setShowAlertModal(true);
+    }
+  };
+
   // 1. Sedes Oficiales DURANGO (Centros Multipago y Recaudación)
   const locations = [
     { id: '1', name: 'Unidad Administrativa (Carnation)', address: 'Blvd. Luis Donaldo Colosio 200, Fracc. San Ignacio' },
@@ -23,7 +38,7 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
 
   // 2. Horarios Gubernamentales Durango (Lunes a Viernes 8:30 - 14:30)
   const timeSlots = [
-    '08:30', '09:00', '09:30', '10:00', '10:30', 
+    '08:30', '09:00', '09:30', '10:00', '10:30',
     '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00'
   ];
 
@@ -33,10 +48,10 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
   useEffect(() => {
     const days = [];
     const today = new Date();
-    
+
     // Festivos en México (Formato MM-DD)
     const holidays = ['01-01', '02-05', '03-18', '05-01', '09-16', '11-18', '12-25'];
-    
+
     let current = new Date(today);
     // Empezamos a contar desde mañana para no agendar hoy mismo
     current.setDate(current.getDate() + 1);
@@ -45,17 +60,17 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
     while (days.length < 30) {
       const dayOfWeek = current.getDay(); // 0 = Domingo, 6 = Sábado
       const monthDay = `${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-      
+
       // Si NO es domingo (0), NI sábado (6), NI festivo
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.includes(monthDay)) {
-        
+
         const options: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' };
         let label = current.toLocaleDateString('es-MX', options);
         label = label.charAt(0).toUpperCase() + label.slice(1);
         label = label.replace('.', '');
 
         days.push({
-          label: label, 
+          label: label,
           val: current.toISOString().split('T')[0] // YYYY-MM-DD
         });
       }
@@ -86,25 +101,25 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
       </header>
 
       <main className="flex-1 overflow-y-auto px-6 pb-24">
-        
+
         <div className="py-4">
           <h1 className="text-2xl font-black mb-1">Finalizar Trámite</h1>
           <p className="text-gray-500 text-sm">Selecciona dónde y cuándo recoger tu licencia física.</p>
         </div>
 
         <div className="space-y-6">
-          
+
           {/* SECCIÓN 1: SEDE */}
           <section>
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 px-1">1. Selecciona Centro Multipago</h3>
             <div className="space-y-3">
               {locations.map((loc) => (
-                <div 
+                <div
                   key={loc.id}
                   onClick={() => setSelectedLocation(loc.id)}
                   className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3
-                    ${selectedLocation === loc.id 
-                      ? 'bg-white dark:bg-surface-dark border-primary ring-1 ring-primary shadow-lg shadow-primary/10' 
+                    ${selectedLocation === loc.id
+                      ? 'bg-white dark:bg-surface-dark border-primary ring-1 ring-primary shadow-lg shadow-primary/10'
                       : 'bg-white dark:bg-surface-dark border-gray-100 dark:border-gray-800 hover:border-primary/50'}`}
                 >
                   <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center
@@ -129,8 +144,8 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
                   key={day.val}
                   onClick={() => setSelectedDate(day.val)}
                   className={`flex flex-col items-center justify-center min-w-[80px] h-20 rounded-2xl border transition-all shrink-0 snap-start
-                    ${selectedDate === day.val 
-                      ? 'bg-primary text-white border-primary shadow-md transform scale-105' 
+                    ${selectedDate === day.val
+                      ? 'bg-primary text-white border-primary shadow-md transform scale-105'
                       : 'bg-white dark:bg-surface-dark text-gray-600 dark:text-gray-300 border-gray-100 dark:border-gray-800 hover:border-primary/50'}`}
                 >
                   <span className="text-[10px] uppercase font-bold opacity-80">{day.label.split(',')[0]}</span>
@@ -150,8 +165,8 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
                   key={time}
                   onClick={() => setSelectedTime(time)}
                   className={`py-2 rounded-xl text-sm font-bold border transition-all
-                    ${selectedTime === time 
-                      ? 'bg-primary text-white border-primary' 
+                    ${selectedTime === time
+                      ? 'bg-primary text-white border-primary'
                       : 'bg-white dark:bg-surface-dark text-gray-600 dark:text-gray-300 border-gray-100 dark:border-gray-800 hover:border-primary/50'}`}
                 >
                   {time}
@@ -169,7 +184,7 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
             <p className="text-xs text-yellow-800/80 dark:text-yellow-500/80 mb-3">
               Es obligatorio presentar <strong>Original y Copia</strong> el día de tu cita:
             </p>
-            
+
             <ul className="space-y-3">
               {[
                 { t: "Solicitud de licencia", d: "Requisitada (Original y 2 copias).", hasAction: true },
@@ -183,20 +198,20 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
                   <div className="flex gap-3 items-start w-full">
                     <span className="material-symbols-outlined text-[16px] text-primary mt-0.5">check_circle</span>
                     <div className="flex-1">
-                        <span className="font-bold block">{req.t}</span>
-                        <span className="text-gray-500 dark:text-gray-400">{req.d}</span>
+                      <span className="font-bold block">{req.t}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{req.d}</span>
                     </div>
                   </div>
-                  
+
                   {/* BOTÓN PARA GENERAR PDF */}
                   {req.hasAction && (
-                      <button 
-                        onClick={() => generateFilledApplication(userData)} 
-                        className="ml-7 mt-2 text-[10px] bg-blue-600 text-white px-3 py-1.5 rounded-md font-bold hover:bg-blue-700 transition-colors flex items-center gap-1 shadow-sm active:scale-95"
-                      >
-                        <span className="material-symbols-outlined text-[12px]">edit_document</span>
-                        Descargar Solicitud Llenada
-                      </button>
+                    <button
+                      onClick={handleGeneratePDF}
+                      className="ml-7 mt-2 text-[10px] bg-blue-600 text-white px-3 py-1.5 rounded-md font-bold hover:bg-blue-700 transition-colors flex items-center gap-1 shadow-sm active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[12px]">edit_document</span>
+                      Descargar Solicitud Llenada
+                    </button>
                   )}
                 </li>
               ))}
@@ -207,19 +222,51 @@ const AppointmentScreen: React.FC<AppointmentScreenProps> = ({ userData, onBack,
       </main>
 
       <div className="p-6 absolute bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 z-20">
-        <button 
+        <button
           onClick={handleConfirm}
           disabled={!selectedLocation || !selectedDate || !selectedTime}
-          className={`w-full h-14 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 shadow-xl ${
-            (selectedLocation && selectedDate && selectedTime)
-              ? 'bg-primary text-white shadow-primary/20 hover:bg-blue-700 active:scale-95' 
-              : 'bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
-          }`}
+          className={`w-full h-14 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2 shadow-xl ${(selectedLocation && selectedDate && selectedTime)
+            ? 'bg-primary text-white shadow-primary/20 hover:bg-blue-700 active:scale-95'
+            : 'bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
+            }`}
         >
           Confirmar Cita
           <span className="material-symbols-outlined">event_available</span>
         </button>
       </div>
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${alertType === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' :
+                alertType === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600' :
+                  alertType === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600' :
+                    'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
+                }`}>
+                <span className="material-symbols-outlined text-5xl">
+                  {alertType === 'success' ? 'check_circle' :
+                    alertType === 'error' ? 'error' :
+                      alertType === 'warning' ? 'warning' : 'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' :
+                  alertType === 'error' ? 'Error' :
+                    alertType === 'warning' ? 'Atención' :
+                      'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: import.meta.env.VITE_AUTH_LOGIN || '/auth/login',
+    LOGOUT: import.meta.env.VITE_AUTH_LOGOUT || '/auth/logout',
   },
   USUARIOS: {
     CREATE: import.meta.env.VITE_USUARIOS_CREATE || '/api/usuarios/createUsuario',
@@ -31,6 +32,7 @@ export const API_ENDPOINTS = {
     BY_SOLICITUD: import.meta.env.VITE_REVISION_BY_SOLICITUD || '/api/revisiones/revisionesBySolicitud',
     BY_REVISOR: import.meta.env.VITE_REVISION_BY_REVISOR || '/api/revisiones/revisionesByRevisor',
     CREATE_DOCUMENTOS: import.meta.env.VITE_REVISION_CREATE_DOCUMENTOS || '/createRevisionDocumentos',
+    UPDATE: import.meta.env.VITE_REVISION_UPDATE || '/api/revisiones/updateRevision',
     UPDATE_DOCUMENTO: import.meta.env.VITE_REVISION_UPDATE_DOCUMENTO || '/updateRevisionDocumento',
     DOCUMENTOS_BY_REVISION: import.meta.env.VITE_REVISION_DOCUMENTOS_BY_REVISION || '/revisionesDocumentosByRevision',
     DOCUMENTOS_BY_DOCUMENTO: import.meta.env.VITE_REVISION_DOCUMENTOS_BY_DOCUMENTO || '/revisionesDocumentosByDocumento'
@@ -45,6 +47,11 @@ export const API_ENDPOINTS = {
   DASHBOARD: {
     ADMIN_DATA: import.meta.env.VITE_DASHBOARD_ADMIN_DATA || '/api/dashboard/getDashboardTramite',
     OPERADORES_DATA: import.meta.env.VITE_DASHBOARD_OPERADORES_DATA || '/api/dashboard/getDashboardRevisor'
+  },
+  FOTOS_ROSTRO: {
+    SUBIR: import.meta.env.VITE_FOTOS_ROSTRO_SUBIR || '/api/fotos-rostro/subir',
+    DESCARGAR: import.meta.env.VITE_FOTOS_ROSTRO_DESCARGAR || '/api/fotos-rostro/descargar',
+    URL: import.meta.env.VITE_FOTOS_ROSTRO_URL || '/api/fotos-rostro/url'
   }
 };
 

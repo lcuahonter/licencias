@@ -13,13 +13,13 @@ import DashboardScreen from './screens/DashboardScreen';
 import OperatorDashboardScreen from './screens/OperatorDashboardScreen';
 import AdminDashboardScreen from './screens/AdminDashboardScreen';
 import AppointmentScreen from './screens/AppointmentScreen';
-import PaymentScreen from './screens/PaymentScreen'; 
+import PaymentScreen from './screens/PaymentScreen';
 import SuccessScreen from './screens/SuccessScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.WELCOME);
-  
+
   // --- 1. NUEVO ESTADO: ID DE USUARIO ---
   // Aquí guardaremos el ID que recuperamos al hacer login
   const [userId, setUserId] = useState<number>(0);
@@ -28,11 +28,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const configStatusBar = async () => {
       try {
-        await StatusBar.setStyle({ style: Style.Light }); 
-        await StatusBar.setBackgroundColor({ color: '#FFFFFF' }); 
-        await StatusBar.setOverlaysWebView({ overlay: false }); 
+        await StatusBar.setStyle({ style: Style.Light });
+        await StatusBar.setBackgroundColor({ color: '#FFFFFF' });
+        await StatusBar.setOverlaysWebView({ overlay: false });
       } catch (e) {
-        // No estamos en móvil
+        // Silently fail on non-mobile platforms
       }
     };
     configStatusBar();
@@ -41,7 +41,7 @@ const App: React.FC = () => {
   const [userData, setUserData] = useState<UserData>({
     firstName: '', lastName: '', idNumber: '', email: '', birthDate: '',
     licenseType: 'Automovilista Particular', validityDuration: '3 Años',
-    bloodGroup: 'O+', organDonor: true, requests: [] 
+    bloodGroup: 'O+', organDonor: true, requests: []
   });
 
   // Token de sesión que se usará para llamadas autenticadas
@@ -57,94 +57,94 @@ const App: React.FC = () => {
   const updateUserData = (data: Partial<UserData>) => setUserData(prev => ({ ...prev, ...data }));
 
   const addRequest = (req: LicenseRequest) => {
-      setUserData(prev => ({ ...prev, requests: [...(prev.requests || []), req] }));
+    setUserData(prev => ({ ...prev, requests: [...(prev.requests || []), req] }));
   };
   const updateRequestData = (id: string, updates: Partial<LicenseRequest>) => {
-      setUserData(prev => ({ ...prev, requests: prev.requests?.map(req => req.id === id ? { ...req, ...updates } : req) }));
+    setUserData(prev => ({ ...prev, requests: prev.requests?.map(req => req.id === id ? { ...req, ...updates } : req) }));
   };
   const clearRequests = () => {
-      setUserData(prev => ({ ...prev, requests: [] }));
+    setUserData(prev => ({ ...prev, requests: [] }));
   };
 
   // --- RENDERIZADO DE PANTALLAS ---
   const renderScreen = () => {
     switch (currentStep) {
       case AppStep.WELCOME:
-        return <WelcomeScreen 
+        return <WelcomeScreen
           // Ajustamos onStart para recibir: datos, pantallaDestino e ID
           onStart={(loginData, nextScreen) => {
-              if (loginData) {
-                
-                // --- INTEGRACIÓN REAL ---
-                
-                // 1. Guardar el ID si viene del login real
-                if (loginData.idUsuario) {
-                    setUserId(loginData.idUsuario);
-                }
+            if (loginData) {
 
-                // 2. Guardar datos básicos (email, etc)
-                updateUserData(loginData);
+              // --- INTEGRACIÓN REAL ---
 
-                // 2.b Guardar token si viene
-                if ((loginData as any).token) {
-                    setAuthToken((loginData as any).token as string);
-                }
+              // 1. Guardar el ID si viene del login real
+              if (loginData.idUsuario) {
+                setUserId(loginData.idUsuario);
+              }
 
-                // 3. Decidir navegación basada en el token (Prioridad Alta)
-                if (nextScreen === 'Dashboard') {
-                    // Usuario con rol 2 va directo a Dashboard
-                    setCurrentStep(AppStep.DASHBOARD);
-                    return;
-                } else if (nextScreen === 'OperatorDashboard') {
-                    // Revisor -> panel del operador
-                    setCurrentStep(AppStep.OPERATOR_DASHBOARD);
-                    return;
-                } else if (nextScreen === 'AdminDashboard') {
-                    // Administrador -> panel admin
-                    setCurrentStep(AppStep.ADMIN_DASHBOARD);
-                    return;
-                } else {
-                  // Flujo normal de registro nuevo si no hay nextScreen
-                  setCurrentStep(AppStep.REGISTRATION);
-                }
+              // 2. Guardar datos básicos (email, etc)
+              updateUserData(loginData);
+
+              // 2.b Guardar token si viene
+              if ((loginData as any).token) {
+                setAuthToken((loginData as any).token as string);
+              }
+
+              // 3. Decidir navegación basada en el token (Prioridad Alta)
+              if (nextScreen === 'Dashboard') {
+                // Usuario con rol 2 va directo a Dashboard
+                setCurrentStep(AppStep.DASHBOARD);
+                return;
+              } else if (nextScreen === 'OperatorDashboard') {
+                // Revisor -> panel del operador
+                setCurrentStep(AppStep.OPERATOR_DASHBOARD);
+                return;
+              } else if (nextScreen === 'AdminDashboard') {
+                // Administrador -> panel admin
+                setCurrentStep(AppStep.ADMIN_DASHBOARD);
+                return;
               } else {
-                // Caso: Crear Cuenta Nueva
+                // Flujo normal de registro nuevo si no hay nextScreen
                 setCurrentStep(AppStep.REGISTRATION);
               }
-            }} 
+            } else {
+              // Caso: Crear Cuenta Nueva
+              setCurrentStep(AppStep.REGISTRATION);
+            }
+          }}
         />;
-            
+
       case AppStep.REGISTRATION: return <RegistrationScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.DOCUMENTS); }} />;
       case AppStep.DOCUMENTS: return <DocumentUploadScreen idUsuario={userId} token={authToken || undefined} idSolicitud={0} onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.BIOMETRICS); }} />;
       case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} />;
       case AppStep.REVIEW: return <ReviewScreen userData={userData} onBack={() => setCurrentStep(AppStep.BIOMETRICS)} onSend={() => setCurrentStep(AppStep.DASHBOARD)} onEdit={updateUserData} />;
-      
-      case AppStep.DASHBOARD: 
-        return <DashboardScreen 
-            userData={userData} 
-            idUsuario={userId}
-            token={authToken || undefined}
-            onGoToProfile={() => setCurrentStep(AppStep.COMPLETE_PROFILE)} 
-            onGoToDocuments={() => setCurrentStep(AppStep.DOCUMENTS)}
-            onContinueRequest={(req) => { updateUserData({ licenseType: req.type === 'Motociclista' ? 'Motociclista' : 'Automovilista Particular' }); setCurrentStep(AppStep.APPOINTMENT); }} 
-            onLogout={() => { 
-                setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); 
-                setUserId(0); // Limpiamos ID al salir
-                setAuthToken(null); // Limpiamos token
-                setCurrentStep(AppStep.WELCOME); 
-            }} 
+
+      case AppStep.DASHBOARD:
+        return <DashboardScreen
+          userData={userData}
+          idUsuario={userId}
+          token={authToken || undefined}
+          onGoToProfile={() => setCurrentStep(AppStep.COMPLETE_PROFILE)}
+          onGoToDocuments={() => setCurrentStep(AppStep.DOCUMENTS)}
+          onContinueRequest={(req) => { updateUserData({ licenseType: req.type === 'Motociclista' ? 'Motociclista' : 'Automovilista Particular' }); setCurrentStep(AppStep.APPOINTMENT); }}
+          onLogout={() => {
+            setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] });
+            setUserId(0); // Limpiamos ID al salir
+            setAuthToken(null); // Limpiamos token
+            setCurrentStep(AppStep.WELCOME);
+          }}
         />;
-      
-      case AppStep.COMPLETE_PROFILE: 
-        return <CompleteProfileScreen 
-            userData={userData} 
-            idUsuario={userId} // <--- 2. PASAMOS EL ID AL COMPONENTE
-            token={authToken || undefined}
-            onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }}
-            onBack={() => setCurrentStep(AppStep.DASHBOARD)} 
-            onSave={(data) => { updateUserData(data); setCurrentStep(AppStep.DASHBOARD); }} 
+
+      case AppStep.COMPLETE_PROFILE:
+        return <CompleteProfileScreen
+          userData={userData}
+          idUsuario={userId} // <--- 2. PASAMOS EL ID AL COMPONENTE
+          token={authToken || undefined}
+          onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }}
+          onBack={() => setCurrentStep(AppStep.DASHBOARD)}
+          onSave={(data) => { updateUserData(data); setCurrentStep(AppStep.DASHBOARD); }}
         />;
-      
+
       case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
@@ -160,38 +160,66 @@ const App: React.FC = () => {
     <div className="min-h-screen w-full bg-white dark:bg-background-dark">
       {isDashboard ? (
         <div className="w-full h-screen overflow-hidden flex flex-col animate-in fade-in bg-white dark:bg-background-dark">
-              <div className="flex-1 w-full h-full overflow-hidden flex flex-col safe-bottom">
-                  {renderScreen()}
-              </div>
+          <div className="flex-1 w-full h-full overflow-hidden flex flex-col safe-bottom">
+            {renderScreen()}
+          </div>
         </div>
       ) : (
         <div className="flex w-full h-screen">
-            <div className="hidden lg:flex w-1/2 bg-gray-900 relative items-center justify-center overflow-hidden">
-                <img src="https://images.unsplash.com/photo-1518134714589-940735760233?q=80&w=2000&auto=format&fit=crop" alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-40 mix-blend-overlay" />
-                <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent"></div>
-                <div className="relative z-10 p-16 text-white max-w-xl">
-                    <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/20 shadow-2xl">
-                        <span className="material-symbols-outlined text-5xl">verified_user</span>
-                    </div>
-                    <h1 className="text-5xl font-black mb-6 leading-tight">Tu Identidad Digital, <span className="text-primary-light text-blue-400">Segura.</span></h1>
-                    <p className="text-lg text-gray-300 leading-relaxed">Bienvenido a la plataforma oficial de Licencias Digitales del Estado de Durango.</p>
-                </div>
-            </div>
+          <div className="hidden lg:flex w-1/2 bg-gray-900 relative items-center justify-center overflow-hidden">
+            <img src="https://images.unsplash.com/photo-1518134714589-940735760233?q=80&w=2000&auto=format&fit=crop" alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-40 mix-blend-overlay" />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent"></div>
+            <div className="relative z-10 p-16 text-white max-w-xl">
+              <h2 className="text-4xl font-black mb-10 leading-tight">Obtén tu Licencia <br /><span className="text-blue-400">en 3 sencillos pasos:</span></h2>
 
-            <div className="w-full lg:w-1/2 flex flex-col bg-white dark:bg-background-dark relative">
-                <div className="flex-1 overflow-y-auto">
-                    <div className="min-h-full flex items-center justify-center p-4 sm:p-12 lg:p-16">
-                        <div className="w-full max-w-md animate-in slide-in-from-right-8 duration-500">
-                            {renderScreen()}
-                        </div>
-                    </div>
+              <div className="space-y-8">
+                <div className="flex gap-6 items-start">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0 border border-blue-400/30">
+                    <span className="material-symbols-outlined text-blue-300">person_add</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">1. Regístrate</h3>
+                    <p className="text-gray-400 text-sm leading-relaxed">Crea tu cuenta ingresando tu correo electrónico y validando tu CURP.</p>
+                  </div>
                 </div>
-                {currentStep === AppStep.WELCOME && (
-                    <div className="w-full p-4 text-center text-[10px] text-gray-400 lg:hidden bg-white dark:bg-background-dark pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-                        Gobierno del Estado de Durango &copy; 2025
-                    </div>
-                )}
+
+                <div className="flex gap-6 items-start">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0 border border-blue-400/30">
+                    <span className="material-symbols-outlined text-blue-300">upload_file</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">2. Valida</h3>
+                    <p className="text-gray-400 text-sm leading-relaxed">Sube tus documentos requeridos y realiza la validación biométrica.</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-6 items-start">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0 border border-blue-400/30">
+                    <span className="material-symbols-outlined text-blue-300">badge</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">3. Descarga</h3>
+                    <p className="text-gray-400 text-sm leading-relaxed">Obtén tu licencia digital oficial válida en todo el estado.</p>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+
+          <div className="w-full lg:w-1/2 flex flex-col bg-white dark:bg-background-dark relative">
+            <div className="flex-1 overflow-y-auto">
+              <div className={`min-h-full flex ${currentStep === AppStep.WELCOME ? 'flex-col items-stretch justify-start p-0' : 'items-center justify-center p-4 sm:p-12 lg:p-16'}`}>
+                <div className={`w-full ${currentStep === AppStep.WELCOME ? 'h-full' : 'max-w-md'} animate-in slide-in-from-right-8 duration-500`}>
+                  {renderScreen()}
+                </div>
+              </div>
+            </div>
+            {currentStep === AppStep.WELCOME && (
+              <div className="w-full p-4 text-center text-[10px] text-gray-400 lg:hidden bg-white dark:bg-background-dark pb-[calc(env(safe-area-inset-bottom)+2rem)]">
+                Gobierno del Estado de Durango &copy; 2025
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

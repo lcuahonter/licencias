@@ -1,6 +1,6 @@
-ï»¿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserData } from '../types';
-// Corregimos los imports para que sean relativos estÃ¡ndar
+// Corregimos los imports para que sean relativos estándar
 import { userService } from '../src/api/userService';
 import { catalogService } from '../src/api/catalogService';
 
@@ -48,7 +48,7 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
 
 const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error, innerRef }: any) => (
     <div className="col-span-2 space-y-1">
-        <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>TelÃ©fono</label>
+        <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>Teléfono</label>
         <div className="flex gap-2 relative">
             <div className="relative w-24">
                 <select 
@@ -56,10 +56,10 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                     onChange={(e) => onLadaChange(e.target.value)}
                     className="w-full h-12 pl-3 pr-1 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 appearance-none font-bold outline-none"
                 >
-                    <option value="+52">ðŸ‡²ðŸ‡½ +52</option>
-                    <option value="+1">ðŸ‡ºðŸ‡¸ +1</option>
+                    <option value="+52">???? +52</option>
+                    <option value="+1">???? +1</option>
                 </select>
-                <span className="absolute right-2 top-4 text-[8px] text-gray-400">â–¼</span>
+                <span className="absolute right-2 top-4 text-[8px] text-gray-400">?</span>
             </div>
             <input 
                 ref={innerRef}
@@ -68,7 +68,7 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                     const val = e.target.value.replace(/\D/g, ''); 
                     if (val.length <= 10) onPhoneChange(val);
                 }}
-                placeholder="10 DÃ­gitos"
+                placeholder="10 Dígitos"
                 inputMode="tel"
                 className={`flex-1 h-12 px-4 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold transition-all ${error ? 'border-red-500 text-red-900 focus:border-red-600' : 'border-gray-100 dark:border-gray-700 focus:border-primary'}`}
             />
@@ -107,11 +107,11 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     // Domicilio
     address: userData.address || '',
     zipCode: userData.zipCode || '',
-    colony: '',           // Ahora serÃ¡ el ID del catÃ¡logo
-    colonyId: 0,          // ID de la colonia seleccionada del catÃ¡logo
+    colony: '',           // Ahora será el ID del catálogo
+    colonyId: 0,          // ID de la colonia seleccionada del catálogo
     colonyName: userData.colony || '', // Nombre de la colonia
     municipality: userData.municipality || '',
-    locality: '',         // Ahora serÃ¡ campo de texto libre
+    locality: '',         // Ahora será campo de texto libre
     state: 'DURANGO',
     phoneLada: '+52',
     phone: userData.phone || '',
@@ -122,18 +122,18 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     emergMaternal: '',
     emergAddress: '',
     emergZipCode: '',
-    emergColony: '',      // Ahora serÃ¡ el ID del catÃ¡logo
+    emergColony: '',      // Ahora será el ID del catálogo
     emergColonyId: 0,     // ID de la colonia de emergencia
     emergColonyName: '',  // Nombre de la colonia
     emergMunicipality: '',
-    emergLocality: '',    // Ahora serÃ¡ campo de texto libre
+    emergLocality: '',    // Ahora será campo de texto libre
     emergPhoneLada: '+52',
     emergPhone: userData.emergencyPhone || ''
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
-  // Modal genÃ©rico para alertas
+  // Modal genérico para alertas
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
@@ -163,7 +163,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       
       setIsLoadingData(true);
       try {
-        // Usamos el servicio. Enviamos token si estÃ¡ disponible
+        // Usamos el servicio. Enviamos token si está disponible
         const json = await userService.getUsuarioById(idUsuario, token);
 
         if (json.data && json.data.usuario) {
@@ -181,7 +181,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
           }));
         }
       } catch (error) {
-        console.error("Error al obtener usuario:", error);
       } finally {
         setIsLoadingData(false);
       }
@@ -196,10 +195,10 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       value = value.replace(/['";\\]/g, "").replace(/--/g, "");
       let isValid = true;
       switch (type) {
-          case 'text': if (!/^[A-ZÃ‘\s]*$/.test(value)) isValid = false; break;
+          case 'text': if (!/^[A-ZÑ\s]*$/.test(value)) isValid = false; break;
           case 'numeric': if (!/^\d*$/.test(value)) isValid = false; break;
-          case 'address': if (!/^[A-Z0-9Ã‘\s#.\-\/]*$/.test(value)) isValid = false; break;
-          case 'alphanumeric': if (!/^[A-Z0-9Ã‘\s]*$/.test(value)) isValid = false; break;
+          case 'address': if (!/^[A-Z0-9Ñ\s#.\-\/]*$/.test(value)) isValid = false; break;
+          case 'alphanumeric': if (!/^[A-Z0-9Ñ\s]*$/.test(value)) isValid = false; break;
       }
       if (isValid) {
           setForm(prev => ({ ...prev, [field]: value }));
@@ -256,7 +255,6 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
               }
           }
       } catch (error) {
-          console.error("Error fetching CP:", error);
       }
   };
 
@@ -280,10 +278,10 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
 
   const validateRFC = (rfc: string) => {
       // Acepta 10 caracteres (sin homoclave) o 13 (con homoclave)
-      const rfcRegex = /^([A-ZÃ‘&]{3,4})(\d{6})([A-Z\d]{0,3})$/;
+      const rfcRegex = /^([A-ZÑ&]{3,4})(\d{6})([A-Z\d]{0,3})$/;
       if (!rfc) return "Requerido";
       if (rfc.length !== 10 && rfc.length !== 13) return "Debe tener 10 o 13 caracteres";
-      if (!rfcRegex.test(rfc)) return "Formato invÃ¡lido";
+      if (!rfcRegex.test(rfc)) return "Formato inválido";
       return null;
   };
 
@@ -322,19 +320,19 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
       
       if (step === 2) {
           if (!form.address.trim()) newErrors.address = 'Requerido';
-          if (!form.zipCode || form.zipCode.length !== 5) newErrors.zipCode = '5 dÃ­gitos';
+          if (!form.zipCode || form.zipCode.length !== 5) newErrors.zipCode = '5 dígitos';
           if (!form.colony) newErrors.colony = 'Requerido';
           if (!form.municipality.trim()) newErrors.municipality = 'Requerido';
           if (!form.locality.trim()) newErrors.locality = 'Requerido';
-          if (form.phone.length !== 10) newErrors.phone = '10 dÃ­gitos';
+          if (form.phone.length !== 10) newErrors.phone = '10 dígitos';
       }
 
       if (step === 3) {
           if (!form.emergFirstName.trim()) newErrors.emergFirstName = 'Requerido';
           if (!form.emergPaternal.trim()) newErrors.emergPaternal = 'Requerido';
-          if (!form.emergPhone.length || form.emergPhone.length !== 10) newErrors.emergPhone = '10 dÃ­gitos';
+          if (!form.emergPhone.length || form.emergPhone.length !== 10) newErrors.emergPhone = '10 dígitos';
           if (!form.emergAddress.trim()) newErrors.emergAddress = 'Requerido';
-          if (!form.emergZipCode || form.emergZipCode.length !== 5) newErrors.emergZipCode = '5 dÃ­gitos';
+          if (!form.emergZipCode || form.emergZipCode.length !== 5) newErrors.emergZipCode = '5 dígitos';
           if (!form.emergColony) newErrors.emergColony = 'Requerido';
           if (!form.emergLocality.trim()) newErrors.emergLocality = 'Requerido';
       }
@@ -409,12 +407,10 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             };
             onSave(payload);
           } catch (rferr) {
-            console.warn('No se pudo refrescar usuario tras actualizar perfil:', rferr);
             onSave(form);
           }
 
       } catch (error: any) {
-          console.error("Error Update:", error);
           setAlertMessage(error.message || 'Error al actualizar perfil');
           setAlertType('error');
           setShowAlertModal(true);
@@ -427,7 +423,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
     return (
       <div className="flex flex-col h-full bg-gray-50 dark:bg-background-dark items-center justify-center space-y-4">
          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-         <p className="text-sm font-bold text-gray-500 animate-pulse">Obteniendo informaciÃ³n del usuario...</p>
+         <p className="text-sm font-bold text-gray-500 animate-pulse">Obteniendo información del usuario...</p>
       </div>
     );
   }
@@ -489,19 +485,19 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 <div className="col-span-1 flex items-center h-full pt-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" checked={form.isDonor} onChange={(e) => setForm({...form, isDonor: e.target.checked})} className="w-5 h-5 rounded text-primary" />
-                        <span className="text-xs font-bold text-gray-600">Donador de Ã“rganos</span>
+                        <span className="text-xs font-bold text-gray-600">Donador de Órganos</span>
                     </label>
                 </div>
-                <InputField innerRef={inputRefs.workplace} label="Lugar de Trabajo (Opcional)" value={form.workplace} onChange={(val: string) => handleSafeInput('workplace', val, 'alphanumeric')} placeholder="Empresa o InstituciÃ³n" error={errors.workplace} />
+                <InputField innerRef={inputRefs.workplace} label="Lugar de Trabajo (Opcional)" value={form.workplace} onChange={(val: string) => handleSafeInput('workplace', val, 'alphanumeric')} placeholder="Empresa o Institución" error={errors.workplace} />
                 <InputField label="Restricciones" value={form.restrictions} onChange={(val: string) => handleSafeInput('restrictions', val, 'text')} placeholder="USA LENTES" />
-                <div className="col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Observaciones MÃ©dicas</label><textarea value={form.medicalNotes} onChange={(e) => handleSafeInput('medicalNotes', e.target.value, 'alphanumeric')} className="w-full h-20 p-3 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 outline-none font-bold uppercase resize-none" /></div>
+                <div className="col-span-2 space-y-1"><label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Observaciones Médicas</label><textarea value={form.medicalNotes} onChange={(e) => handleSafeInput('medicalNotes', e.target.value, 'alphanumeric')} className="w-full h-20 p-3 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 outline-none font-bold uppercase resize-none" /></div>
             </div>
         )}
 
         {currentStep === 2 && (
             <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-right">
-                <InputField innerRef={inputRefs.address} label="Calle y NÃºmero" value={form.address} onChange={(val: string) => handleSafeInput('address', val, 'address')} placeholder="AV. 20 DE NOVIEMBRE #123" error={errors.address} />
-                <InputField innerRef={inputRefs.zipCode} label="CÃ³digo Postal" value={form.zipCode} onChange={(val: string) => handleSafeInput('zipCode', val, 'numeric')} placeholder="34000" numeric width="half" max={5} error={errors.zipCode} />
+                <InputField innerRef={inputRefs.address} label="Calle y Número" value={form.address} onChange={(val: string) => handleSafeInput('address', val, 'address')} placeholder="AV. 20 DE NOVIEMBRE #123" error={errors.address} />
+                <InputField innerRef={inputRefs.zipCode} label="Código Postal" value={form.zipCode} onChange={(val: string) => handleSafeInput('zipCode', val, 'numeric')} placeholder="34000" numeric width="half" max={5} error={errors.zipCode} />
                 
                 {/* COLONIA - Ahora es SELECT */}
                 <div className="col-span-1 space-y-1">
@@ -550,7 +546,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 <InputField innerRef={inputRefs.emergPaternal} label="Apellido Paterno" value={form.emergPaternal} onChange={(val: string) => handleSafeInput('emergPaternal', val, 'text')} width="half" error={errors.emergPaternal} />
                 <InputField label="Apellido Materno" value={form.emergMaternal} onChange={(val: string) => handleSafeInput('emergMaternal', val, 'text')} width="half" />
                 <div className="col-span-2 border-t border-gray-100 my-2"></div>
-                <InputField innerRef={inputRefs.emergAddress} label="Calle y NÃºmero (Emergencia)" value={form.emergAddress} onChange={(val: string) => handleSafeInput('emergAddress', val, 'address')} error={errors.emergAddress} />
+                <InputField innerRef={inputRefs.emergAddress} label="Calle y Número (Emergencia)" value={form.emergAddress} onChange={(val: string) => handleSafeInput('emergAddress', val, 'address')} error={errors.emergAddress} />
                 <InputField innerRef={inputRefs.emergZipCode} label="C.P." value={form.emergZipCode} onChange={(val: string) => handleSafeInput('emergZipCode', val, 'numeric')} placeholder="34000" numeric width="half" max={5} error={errors.emergZipCode} />
                 
                 {/* COLONIA EMERGENCIA - Ahora es SELECT */}
@@ -601,7 +597,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         </button>
       </div>
 
-      {/* MODAL GENÃ‰RICO DE ALERTAS */}
+      {/* MODAL GENÉRICO DE ALERTAS */}
       {showAlertModal && (
         <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
@@ -625,10 +621,10 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 </span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                {alertType === 'success' ? 'Â¡Ã‰xito!' : 
+                {alertType === 'success' ? '¡Éxito!' : 
                  alertType === 'error' ? 'Error' : 
-                 alertType === 'warning' ? 'AtenciÃ³n' : 
-                 'InformaciÃ³n'}
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
               <button
