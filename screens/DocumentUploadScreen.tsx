@@ -54,7 +54,6 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
           setDocsCatalog(arr);
         }
       })
-      .catch(err => console.error('Error cargando catálogo de documentos:', err))
       .finally(() => mounted && setIsLoadingCatalog(false));
 
     return () => { mounted = false; };

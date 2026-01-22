@@ -1,22 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserData, LicenseRequest } from '../types';
 import durangoLogo from '../src/recursos/durangogob.svg';
 import marcaWatermark from '../src/recursos/marca.jpg';
+import { fotoService } from '../src/api/fotoService';
 
 interface DigitalLicenseModalProps {
     isOpen: boolean;
     onClose: () => void;
     license: LicenseRequest | null;
     userData: UserData; // This should be the fresh user data
+    token?: string;
 }
 
 const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
     isOpen,
     onClose,
     license,
-    userData
+    userData,
+    token
 }) => {
     const [isFlipped, setIsFlipped] = React.useState(false);
+    const [fotoRostroUrl, setFotoRostroUrl] = useState<string | null>(null);
+
+    // Cargar foto de rostro cuando se abre el modal
+    useEffect(() => {
+        const loadFotoRostro = async () => {
+            if (isOpen && license?.id) {
+                const solicitudId = Number(license.id);
+                if (solicitudId && token) {
+                    const url = await fotoService.descargarFotoRostro(solicitudId, token);
+                    setFotoRostroUrl(url);
+                }
+            }
+        };
+
+        loadFotoRostro();
+
+        // Limpiar blob URL al cerrar
+        return () => {
+            if (fotoRostroUrl && fotoRostroUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(fotoRostroUrl);
+            }
+        };
+    }, [isOpen, license?.id, token]);
 
     if (!isOpen || !license) return null;
 
@@ -39,7 +65,11 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
 
     const birthDate = user.fechanacimiento || user.birthDate || 'N/A';
     const bloodType = user.tiposangre || user.bloodGroup || 'N/A';
-    const donor = user.donadororg || user.organDonor ? 'SI' : 'NO';
+    const donor = user.donador === 'Si' || user.donadororg || user.organDonor ? 'SI' : 'NO';
+    const rfc = user.rfc || 'N/A';
+    const sexo = user.sexo || 'N/A';
+    const nacionalidad = user.nacionalidad || 'MEXICANA';
+    const emergencyPhone = user.conocido_telefono || user.telefono || '911';
     const address = user.direccion
         ? `${user.direccion}, ${user.colonia || ''}, ${user.municipio || ''}`
         : user.address || 'Durango, Dgo.';
@@ -48,17 +78,22 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
     const qrData = JSON.stringify({
         folio: licenseNo,
         nombre: fullName,
-        tipo: license.type,
+        rfc: rfc,
+        tipo_licencia: license.type,
+        expedicion: license.rawData?.expedicion ? new Date(license.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A',
         vigencia: validity,
         fecha_nacimiento: birthDate,
+        sexo: sexo,
+        nacionalidad: nacionalidad,
         tipo_sangre: bloodType,
         donador: donor,
+        telefono_emergencia: emergencyPhone,
         direccion: address
     });
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
             <div className="relative w-full max-w-[360px] flex flex-col items-center" onClick={e => e.stopPropagation()}>
 
                 {/* Close Button */}
@@ -96,7 +131,9 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 {/* Photo & Name */}
                                 <div className="flex flex-col items-center mb-4">
                                     <div className="w-32 h-40 rounded-xl bg-gray-200 overflow-hidden border-2 border-gray-300 shadow-lg relative mb-3">
-                                        {user.photo ? (
+                                        {fotoRostroUrl ? (
+                                            <img src={fotoRostroUrl} alt="Conductor" className="w-full h-full object-cover" />
+                                        ) : user.photo ? (
                                             <img src={user.photo} alt="Conductor" className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">
@@ -133,7 +170,7 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                     </div>
                                     <div>
                                         <label className="text-[10px] uppercase text-[#005c35] font-bold tracking-wider block">Nacionalidad</label>
-                                        <p className="text-sm font-bold text-black">MEXICANA</p>
+                                        <p className="text-sm font-bold text-black">{nacionalidad}</p>
                                     </div>
                                     <div>
                                         <label className="text-[10px] uppercase text-[#005c35] font-bold tracking-wider block">Tipo Sangre</label>
@@ -141,7 +178,7 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                     </div>
                                     <div>
                                         <label className="text-[10px] uppercase text-[#005c35] font-bold tracking-wider block">Sexo</label>
-                                        <p className="text-sm font-bold text-black">N/A</p>
+                                        <p className="text-sm font-bold text-black">{sexo}</p>
                                     </div>
                                 </div>
 
@@ -182,7 +219,7 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 {/* Additional Info */}
                                 <div className="w-full mb-6">
                                     <label className="text-[10px] uppercase text-[#005c35] font-bold tracking-wider block mb-1">RFC</label>
-                                    <p className="text-xs font-medium text-gray-700 leading-tight">N/A</p>
+                                    <p className="text-xs font-medium text-gray-700 leading-tight">{rfc}</p>
                                 </div>
 
                                 <div className="w-full grid grid-cols-2 gap-4 mb-6">
@@ -192,7 +229,7 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                     </div>
                                     <div>
                                         <label className="text-[10px] uppercase text-[#005c35] font-bold tracking-wider block">Emergencia</label>
-                                        <p className="text-sm font-bold text-black">911</p>
+                                        <p className="text-sm font-bold text-black">{emergencyPhone}</p>
                                     </div>
                                 </div>
 

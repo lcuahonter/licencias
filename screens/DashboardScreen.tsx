@@ -35,6 +35,7 @@ import { fotoService } from '../src/api/fotoService';
 import { userService } from '../src/api/userService';
 import { revisionService } from '../src/api/revisionService';
 import examService from '../src/api/examService';
+import { authService } from '../src/api/authService';
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({
   userData,
@@ -110,7 +111,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<{ base64: string; name: string; format: string } | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [solicitudesConFoto, setSolicitudesConFoto] = useState<Set<number>>(new Set());
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // --- FUNCIÓN DE LOGOUT ---
+  const handleLogout = async () => {
+    // Llamar al endpoint de logout antes de cerrar sesión
+    await authService.logout(token);
+    // Ejecutar el logout del componente padre (regresa al WelcomeScreen)
+    onLogout();
+  };
 
   // --- HELPERS ---
 
@@ -178,6 +188,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     if (file.size > MAX_FILE_SIZE) {
       setAlertMessage('La foto no puede pesar más de 5MB. Por favor selecciona una foto más pequeña.');
       setAlertType('error');
+      setShowPhotoModal(false); // Cerrar modal de foto para evitar sobreposición
       setShowAlertModal(true);
       e.target.value = '';
       return;
@@ -187,7 +198,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1];
       const format = file.name.split('.').pop() || 'jpg';
-      
+
       setPhotoFile({
         base64,
         name: file.name,
@@ -202,7 +213,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     // photoUrl es data:image/jpeg;base64,/9j/4AAQ...
     const base64 = photoUrl.split(',')[1];
     const format = 'jpg';
-    
+
     setPhotoFile({
       base64,
       name: 'foto_biometrica.jpg',
@@ -230,6 +241,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       setShowPhotoModal(false);
       setPhotoPreview(null);
       setPhotoFile(null);
+      // Marcar esta solicitud como que ya tiene foto
+      setSolicitudesConFoto(prev => new Set(prev).add(selectedSolicitudId));
       reloadSolicitudes();
     } catch (error: any) {
       setAlertMessage(error.message || 'Error al subir la foto');
@@ -239,6 +252,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       setIsUploadingPhoto(false);
     }
   };
+
+  // Función para verificar si una solicitud tiene foto subida
+  const verificarFotoExistente = async (solicitudId: number) => {
+    if (!token) return;
+    try {
+      const existe = await fotoService.verificarFotoExiste(solicitudId, token);
+      if (existe) {
+        // Si encontró foto, agregar al set
+        setSolicitudesConFoto(prev => new Set(prev).add(solicitudId));
+      }
+    } catch (error) {
+      // Error al verificar, no hacer nada
+    }
+  };
+
 
   // --- FUNCIÓN PARA RECARGAR SOLICITUDES ---
   const reloadSolicitudes = async () => {
@@ -349,6 +377,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         }
 
         setSolicitudesCargadas(solicitudesProcesadas);
+
+        // Verificar fotos existentes para solicitudes con idestatus 20
+        for (const req of solicitudesProcesadas) {
+          if (req.rawData?.idestatus === 20) {
+            await verificarFotoExistente(Number(req.id));
+          }
+        }
       }
     } catch (error) {
       // Error al cargar solicitudes
@@ -477,6 +512,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           }
 
           setSolicitudesCargadas(solicitudesProcesadas);
+
+          // Verificar fotos existentes para solicitudes con idestatus 20
+          for (const req of solicitudesProcesadas) {
+            if (req.rawData?.idestatus === 20) {
+              await verificarFotoExistente(Number(req.id));
+            }
+          }
         }
       } catch (error) {
         // Error al cargar solicitudes
@@ -738,7 +780,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             setAlertMessage('Sesión expirada durante la carga de documentos.');
             setAlertType('error');
             setShowAlertModal(true);
-            setTimeout(() => onLogout(), 2000);
+            setTimeout(() => handleLogout(), 2000);
             return;
           }
         }
@@ -828,7 +870,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       await reloadSolicitudes();
 
       setFixingRequest(null);
-      setCorrectionsMessage("✅ Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN esperando que el operador valide los nuevos documentos.");
+      setCorrectionsMessage("? Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN esperando que el operador valide los nuevos documentos.");
       setShowCorrectionsSuccessModal(true);
     } catch (error: any) {
       setCorrectionsMessage(`Error al enviar los documentos: ${error?.data?.message || error?.message || 'Error desconocido'}`);
@@ -853,7 +895,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </div>
           <div><h1 className="text-lg font-black text-gray-900 dark:text-white">Mis Licencias</h1><p className="text-xs text-gray-500">Licencias Digitales Durango</p></div>
         </div>
-        <button onClick={onLogout} className="text-gray-400 hover:text-red-500 bg-gray-100 p-2 rounded-full"><span className="material-symbols-outlined">logout</span></button>
+        <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 bg-gray-100 p-2 rounded-full"><span className="material-symbols-outlined">logout</span></button>
       </header>
 
       <main className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
@@ -963,14 +1005,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {/* Botón examen teórico - Solo mostrar cuando idestatus es 20 (Nueva solicitud sin examen) */}
                     {req.status !== 'rejected' && req.status !== 'completed' && idestatus === 20 && (
                       <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
-                        {/* Botón Subir Foto */}
-                        <button
-                          onClick={() => handleOpenPhotoModal(Number(req.id))}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-sm">photo_camera</span>
-                          Subir Foto para Licencia
-                        </button>
+                        {/* Botón Subir Foto - Solo mostrar si NO tiene foto subida */}
+                        {!solicitudesConFoto.has(Number(req.id)) && (
+                          <button
+                            onClick={() => handleOpenPhotoModal(Number(req.id))}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-sm">photo_camera</span>
+                            Subir Foto para Licencia
+                          </button>
+                        )}
+
+                        {/* Indicador de foto subida */}
+                        {solicitudesConFoto.has(Number(req.id)) && (
+                          <div className="w-full bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2">
+                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                            Foto Subida Correctamente
+                          </div>
+                        )}
 
                         {/* Botón Examen */}
                         <button
@@ -1002,8 +1054,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* MODAL 1: SELECCIÓN */}
       {showNewReqModal && (
-        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in slide-in-from-bottom-10 space-y-5">
+        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in fade-in space-y-5">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3"><h2 className="text-lg font-black">Nueva Solicitud</h2><button onClick={() => setShowNewReqModal(false)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
 
             <div className="space-y-2">
@@ -1054,8 +1106,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* MODAL 2: PAGO */}
       {showPaymentModal && (
-        <div className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 max-h-[85vh] flex flex-col">
+        <div className="absolute inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in fade-in max-h-[85vh] flex flex-col">
             <div className="bg-gray-900 text-white p-6 text-center relative shrink-0">
               <button onClick={() => paymentStep === 'select' ? setShowPaymentModal(false) : setPaymentStep('select')} className="absolute left-4 top-4 text-white/50 hover:text-white"><span className="material-symbols-outlined">arrow_back</span></button>
               <p className="text-xs uppercase tracking-widest opacity-70 mb-1">Tesorería Virtual</p>
@@ -1117,8 +1169,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* MODAL CORRECCIÓN DOCUMENTOS */}
       {fixingRequest && (
-        <div className="absolute inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in slide-in-from-bottom-10 flex flex-col max-h-[80vh]">
+        <div className="absolute inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in fade-in flex flex-col max-h-[80vh]">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4"><div><h2 className="text-lg font-black text-red-600">Corregir Documentos</h2><p className="text-xs text-gray-500">Sube nuevamente los archivos</p></div><button onClick={() => setFixingRequest(null)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
               {fixingRequest.rejectedDocuments?.map(docData => (
@@ -1174,7 +1226,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <DocumentUploadScreen
                 idUsuario={idUsuario}
                 token={token}
-                onSessionExpired={onLogout}
+                onSessionExpired={handleLogout}
                 isSubmittingRequest={isSubmittingRequest}
                 onBack={() => {
                   setShowDocumentsModal(false);
@@ -1406,11 +1458,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   </div>
                   <button
                     onClick={() => {
-                      if (Object.keys(respuestas).length < examPreguntas.length) {
-                        if (!confirm(`Solo has respondido ${Object.keys(respuestas).length} de ${examPreguntas.length} preguntas. ¿Deseas enviar de todas formas?`)) {
-                          return;
-                        }
-                      }
                       setShowConfirmSubmit(true);
                     }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl flex items-center justify-center gap-2"
@@ -1422,7 +1469,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </div>
             ) : (
               <div className="text-center py-12">
-                <div className="text-6xl mb-4">📝</div>
+                <div className="text-6xl mb-4">??</div>
                 <p className="text-gray-400">No se cargaron preguntas</p>
               </div>
             )}
@@ -1439,10 +1486,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <span className="material-symbols-outlined text-yellow-600 text-4xl">help</span>
               </div>
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                ¿Estás seguro de enviar el examen?
+                {Object.keys(respuestas).length < examPreguntas.length ? '¿Examen incompleto?' : '¿Estás seguro de enviar?'}
               </h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm">
-                Una vez enviado, no podrás modificar tus respuestas. Asegúrate de haber respondido todas las preguntas.
+                {Object.keys(respuestas).length < examPreguntas.length
+                  ? `Solo has respondido ${Object.keys(respuestas).length} de ${examPreguntas.length} preguntas. Las preguntas sin responder se marcarán como incorrectas.`
+                  : 'Una vez enviado, no podrás modificar tus respuestas. Asegúrate de haber respondido correctamente.'}
               </p>
             </div>
 
@@ -1486,6 +1535,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     setResultType('success');
                     setShowVerResultButton(true);
                     setShowResultModal(true);
+                    setShowPhotoModal(false); // Cierra el modal de la foto si está abierto
                   } catch (error: any) {
 
                     // Guardar idIntento para verificar después
@@ -1496,6 +1546,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     setResultType('success');
                     setShowVerResultButton(true);
                     setShowResultModal(true);
+                    setShowPhotoModal(false); // Cierra el modal de la foto si está abierto
                   }
 
                   // Cerrar todo (mantener selectedSolicitudId para Ver Resultado)
@@ -1794,156 +1845,156 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       {/* MODAL LICENCIA DIGITAL */}
       {showDigitalLicense && selectedLicense && (
         <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={(e) => e.target === e.currentTarget && setShowDigitalLicense(false)}>
-            <div className="w-full max-w-sm relative perspective-1000 animate-in zoom-in duration-300">
-                
-                {/* TARJETA DE LICENCIA - ESTILO REALISTA */}
-                <div className="relative bg-white rounded-2xl overflow-hidden shadow-2xl transform transition-transform border border-gray-200">
-                    
-                    {/* ENCABEZADO - GOBIERNO */}
-                    <div className="bg-[#1F2937] text-white p-4 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
-                        <div className="flex justify-between items-center relative z-10">
-                            <img src={durangoLogo} className="h-8 invert opacity-90" alt="Gobierno de Durango" />
-                            <div className="text-right">
-                                <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-gray-400">Estados Unidos Mexicanos</p>
-                                <p className="text-[10px] font-black uppercase tracking-wider">Gobierno del Estado de Durango</p>
-                            </div>
-                        </div>
-                    </div>
+          <div className="w-full max-w-sm relative perspective-1000 animate-in zoom-in duration-300">
 
-                    {/* CUERPO DE LA LICENCIA */}
-                    <div className="p-5 relative">
-                        {/* Marca de agua de seguridad */}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none z-0">
-                             <img src={durangoLogo} className="w-48 grayscale" />
-                        </div>
+            {/* TARJETA DE LICENCIA - ESTILO REALISTA */}
+            <div className="relative bg-white rounded-2xl overflow-hidden shadow-2xl transform transition-transform border border-gray-200">
 
-                        <div className="relative z-10 flex flex-col gap-4">
-                            {/* FOTO y TIPO */}
-                            <div className="flex justify-between items-start">
-                                <div className="w-32 h-40 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200 shadow-md relative">
-                                    {userDataFresh.photo ? (
-                                        <img src={userDataFresh.photo} className="w-full h-full object-cover" alt="Foto Conductor" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-50">
-                                            <span className="material-symbols-outlined text-6xl">person</span>
-                                        </div>
-                                    )}
-                                    <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-center py-1">
-                                        <p className="text-[10px] text-white font-bold uppercase tracking-wider">Conductor</p>
-                                    </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-2">
-                                     <div className="text-right">
-                                        <p className="text-[9px] font-bold text-red-600 uppercase tracking-wider mb-0.5">Tipo de Licencia</p>
-                                        <div className="bg-gray-900 text-white px-4 py-2 rounded-lg shadow-sm inline-block">
-                                             <span className="text-3xl font-black">{selectedLicense.type === 'Automovilista' ? 'A' : 'M'}</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-right mt-2">
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">No. de Licencia</p>
-                                        <p className="text-xl font-black text-gray-900 font-mono tracking-tight">{selectedLicense.folio || 'S/N'}</p>
-                                    </div>
-                                </div>
-                            </div>
+              {/* ENCABEZADO - GOBIERNO */}
+              <div className="bg-[#1F2937] text-white p-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
+                <div className="flex justify-between items-center relative z-10">
+                  <img src={durangoLogo} className="h-8 invert opacity-90" alt="Gobierno de Durango" />
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-gray-400">Estados Unidos Mexicanos</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider">Gobierno del Estado de Durango</p>
+                  </div>
+                </div>
+              </div>
 
-                            {/* DATOS */}
-                            <div className="space-y-3 pt-2">
-                                <div>
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Nombre</p>
-                                    <p className="text-lg font-bold text-gray-900 leading-tight uppercase">
-                                        {userDataFresh?.nombres} {userDataFresh?.apellidopaterno} {userDataFresh?.apellidomaterno}
-                                    </p>
-                                </div>
-                                
-                                <div className="grid grid-cols-3 gap-3 border-t border-gray-100 pt-3">
-                                    <div>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Nacionalidad</p>
-                                        <p className="text-sm font-bold text-gray-900">N/A</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Tipo Sangre</p>
-                                        <p className="text-sm font-bold text-gray-900 text-red-600">N/A</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">RFC</p>
-                                        <p className="text-xs font-bold text-gray-900">N/A</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4 border-t border-gray-100 pt-3 mt-1">
-                                    <div className="flex-1 space-y-3">
-                                        <div className="grid grid-cols-1 gap-0.5">
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Fecha de Expedición</p>
-                                            <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
-                                                {new Date(selectedLicense.rawData?.creacion || Date.now()).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})}
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-0.5">
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Vigencia</p>
-                                            <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
-                                                {selectedLicense.rawData?.vigencia 
-                                                    ? new Date(selectedLicense.rawData.vigencia).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})
-                                                    : new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})
-                                                }
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-1 gap-0.5">
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Antigüedad</p>
-                                            <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
-                                                {new Date(selectedLicense.rawData?.creacion || Date.now()).toLocaleDateString('es-MX', {day: 'numeric', month: 'long', year: 'numeric'})}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* QR CODE - ALADO DE FECHAS */}
-                                    <div className="flex-shrink-0 flex items-center justify-center pl-2 border-l border-gray-100">
-                                        <div className="w-28 h-28 bg-white p-1.5 rounded-lg border border-gray-200 shadow-sm">
-                                            <img 
-                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`LICENCIA-DGO:${selectedLicense.folio}|USR:${userDataFresh.id}|${userDataFresh.curp}`)}`} 
-                                                className="w-full h-full object-contain" 
-                                                alt="QR de Validación"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* FOOTER - SOLO FIRMAS */}
-                        <div className="mt-6 pt-4 border-t-2 border-dashed border-gray-100 flex items-end justify-between gap-8 relative z-10 px-4 pb-4">
-                            {/* FIRMA DIGITAL */}
-                            <div className="flex-1 flex flex-col items-center justify-end">
-                                <div className="h-16 w-full flex items-end justify-center pb-2 border-b border-gray-400 mb-1 relative">
-                                   <p className="text-4xl text-gray-800 text-center w-full transform -rotate-2" style={{ fontFamily: '"Monsieur La Doulaise", cursive', lineHeight: '1' }}>
-                                        {userDataFresh?.nombres?.split(' ')[0]} {userDataFresh?.apellidopaterno}
-                                   </p>
-                                </div>
-                                <p className="text-[7px] text-center font-bold text-gray-500 uppercase tracking-wider">Firma del Titular</p>
-                            </div>
-
-                            {/* FIRMA SECRETARIO */}
-                            <div className="flex-1 flex flex-col items-center justify-end">
-                                <div className="h-12 w-full flex items-end justify-center pb-1 border-b border-gray-400 mb-1 relative overflow-hidden">
-                                     <svg viewBox="0 0 140 50" className="w-full h-full opacity-80" preserveAspectRatio="none">
-                                        <path d="M10,40 C30,10 50,60 70,30 S110,10 130,40" stroke="#1f2937" strokeWidth="2" fill="none" />
-                                        <path d="M20,25 Q60,50 90,20" stroke="#1f2937" strokeWidth="1.5" fill="none" />
-                                     </svg>
-                                </div>
-                                <p className="text-[7px] text-center font-bold text-gray-500 uppercase tracking-wider">Secretario de Movilidad</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    {/* BANDA INFERIOR */}
-                    <div className="bg-[#B91C1C] h-3 w-full"></div>
+              {/* CUERPO DE LA LICENCIA */}
+              <div className="p-5 relative">
+                {/* Marca de agua de seguridad */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none z-0">
+                  <img src={durangoLogo} className="w-48 grayscale" />
                 </div>
 
-                {/* BOTÓN CERRAR */}
-                <button onClick={() => setShowDigitalLicense(false)} className="mt-6 w-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined">close</span> Cerrar Vista Previa
-                </button>
+                <div className="relative z-10 flex flex-col gap-4">
+                  {/* FOTO y TIPO */}
+                  <div className="flex justify-between items-start">
+                    <div className="w-32 h-40 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200 shadow-md relative">
+                      {userDataFresh.photo ? (
+                        <img src={userDataFresh.photo} className="w-full h-full object-cover" alt="Foto Conductor" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300 bg-gray-50">
+                          <span className="material-symbols-outlined text-6xl">person</span>
+                        </div>
+                      )}
+                      <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-sm text-center py-1">
+                        <p className="text-[10px] text-white font-bold uppercase tracking-widest">Conductor</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="text-right">
+                        <p className="text-[9px] font-bold text-red-600 uppercase tracking-wider mb-0.5">Tipo de Licencia</p>
+                        <div className="bg-gray-900 text-white px-4 py-2 rounded-lg shadow-sm inline-block">
+                          <span className="text-3xl font-black">{selectedLicense.type === 'Automovilista' ? 'A' : 'M'}</span>
+                        </div>
+                      </div>
+                      <div className="text-right mt-2">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">No. de Licencia</p>
+                        <p className="text-xl font-black text-gray-900 font-mono tracking-tight">{selectedLicense.folio || 'S/N'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DATOS */}
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Nombre</p>
+                      <p className="text-lg font-bold text-gray-900 leading-tight uppercase">
+                        {userDataFresh?.nombres} {userDataFresh?.apellidopaterno} {userDataFresh?.apellidomaterno}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 border-t border-gray-100 pt-3">
+                      <div>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Nacionalidad</p>
+                        <p className="text-sm font-bold text-gray-900">N/A</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Tipo Sangre</p>
+                        <p className="text-sm font-bold text-gray-900 text-red-600">N/A</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">RFC</p>
+                        <p className="text-xs font-bold text-gray-900">N/A</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 border-t border-gray-100 pt-3 mt-1">
+                      <div className="flex-1 space-y-3">
+                        <div className="grid grid-cols-1 gap-0.5">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Fecha de Expedición</p>
+                          <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
+                            {new Date(selectedLicense.rawData?.creacion || Date.now()).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-0.5">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Vigencia</p>
+                          <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
+                            {selectedLicense.rawData?.vigencia
+                              ? new Date(selectedLicense.rawData.vigencia).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+                              : new Date(new Date().setFullYear(new Date().getFullYear() + 3)).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+                            }
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-0.5">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Antigüedad</p>
+                          <p className="text-sm font-bold text-gray-900 capitalize leading-tight">
+                            {new Date(selectedLicense.rawData?.creacion || Date.now()).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* QR CODE - ALADO DE FECHAS */}
+                      <div className="flex-shrink-0 flex items-center justify-center pl-2 border-l border-gray-100">
+                        <div className="w-28 h-28 bg-white p-1.5 rounded-lg border border-gray-200 shadow-sm">
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`LICENCIA-DGO:${selectedLicense.folio}|USR:${userDataFresh.id}|${userDataFresh.curp}`)}`}
+                            className="w-full h-full object-contain"
+                            alt="QR de Validación"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FOOTER - SOLO FIRMAS */}
+                <div className="mt-6 pt-4 border-t-2 border-dashed border-gray-100 flex items-end justify-between gap-8 relative z-10 px-4 pb-4">
+                  {/* FIRMA DIGITAL */}
+                  <div className="flex-1 flex flex-col items-center justify-end">
+                    <div className="h-16 w-full flex items-end justify-center pb-2 border-b border-gray-400 mb-1 relative">
+                      <p className="text-4xl text-gray-800 text-center w-full transform -rotate-2" style={{ fontFamily: '"Monsieur La Doulaise", cursive', lineHeight: '1' }}>
+                        {userDataFresh?.nombres?.split(' ')[0]} {userDataFresh?.apellidopaterno}
+                      </p>
+                    </div>
+                    <p className="text-[7px] text-center font-bold text-gray-500 uppercase tracking-wider">Firma del Titular</p>
+                  </div>
+
+                  {/* FIRMA SECRETARIO */}
+                  <div className="flex-1 flex flex-col items-center justify-end">
+                    <div className="h-12 w-full flex items-end justify-center pb-1 border-b border-gray-400 mb-1 relative overflow-hidden">
+                      <svg viewBox="0 0 140 50" className="w-full h-full opacity-80" preserveAspectRatio="none">
+                        <path d="M10,40 C30,10 50,60 70,30 S110,10 130,40" stroke="#1f2937" strokeWidth="2" fill="none" />
+                        <path d="M20,25 Q60,50 90,20" stroke="#1f2937" strokeWidth="1.5" fill="none" />
+                      </svg>
+                    </div>
+                    <p className="text-[7px] text-center font-bold text-gray-500 uppercase tracking-wider">Secretario de Movilidad</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* BANDA INFERIOR */}
+              <div className="bg-[#B91C1C] h-3 w-full"></div>
             </div>
+
+            {/* BOTÓN CERRAR */}
+            <button onClick={() => setShowDigitalLicense(false)} className="mt-6 w-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/20 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined">close</span> Cerrar Vista Previa
+            </button>
+          </div>
         </div>
       )}
 
@@ -1953,6 +2004,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         onClose={() => setShowLicenseModal(false)}
         license={selectedLicense}
         userData={userDataFresh}
+        token={token}
       />
 
       {/* MODAL DE FOTO PARA LICENCIA */}
@@ -1970,7 +2022,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               {photoMode === 'select' && !photoPreview && (
                 <div className="space-y-4">
                   <p className="text-gray-600 dark:text-gray-400 text-center mb-6">Elige cómo deseas capturar tu foto para la licencia</p>
-                  
+
                   <button
                     onClick={() => {
                       photoInputRef.current?.click();

@@ -32,7 +32,7 @@ const App: React.FC = () => {
         await StatusBar.setBackgroundColor({ color: '#FFFFFF' });
         await StatusBar.setOverlaysWebView({ overlay: false });
       } catch (e) {
-        console.log("No estamos en móvil", e);
+        // Silently fail on non-mobile platforms
       }
     };
     configStatusBar();

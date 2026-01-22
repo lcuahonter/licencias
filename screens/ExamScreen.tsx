@@ -45,7 +45,6 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
       setExamData(data);
       setLoading(false);
     } catch (error: any) {
-      console.error('Error al cargar examen:', error);
       setAlertMessage('Error al cargar el examen: ' + (error.response?.data?.message || error.message));
       setAlertType('error');
       setShowAlertModal(true);
@@ -106,7 +105,6 @@ const ExamScreen: React.FC<ExamScreenProps> = ({ solicitudId, onClose }) => {
       setResultado(resultadoData);
       setExamSubmitted(true);
     } catch (error: any) {
-      console.error('Error al enviar examen:', error);
       setAlertMessage('Error al enviar el examen: ' + (error.response?.data?.message || error.message));
       setAlertType('error');
       setShowAlertModal(true);

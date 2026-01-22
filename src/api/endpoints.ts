@@ -1,6 +1,7 @@
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: import.meta.env.VITE_AUTH_LOGIN || '/auth/login',
+    LOGOUT: import.meta.env.VITE_AUTH_LOGOUT || '/auth/logout',
   },
   USUARIOS: {
     CREATE: import.meta.env.VITE_USUARIOS_CREATE || '/api/usuarios/createUsuario',
@@ -48,7 +49,9 @@ export const API_ENDPOINTS = {
     OPERADORES_DATA: import.meta.env.VITE_DASHBOARD_OPERADORES_DATA || '/api/dashboard/getDashboardRevisor'
   },
   FOTOS_ROSTRO: {
-    SUBIR: import.meta.env.VITE_FOTOS_ROSTRO_SUBIR || '/api/fotos-rostro/subir'
+    SUBIR: import.meta.env.VITE_FOTOS_ROSTRO_SUBIR || '/api/fotos-rostro/subir',
+    DESCARGAR: import.meta.env.VITE_FOTOS_ROSTRO_DESCARGAR || '/api/fotos-rostro/descargar',
+    URL: import.meta.env.VITE_FOTOS_ROSTRO_URL || '/api/fotos-rostro/url'
   }
 };
 
