@@ -303,7 +303,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Materno <span className="text-[9px] text-gray-300 normal-case">(Opcional)</span></label>
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Materno</label>
                 <input ref={inputRefs.maternalName} value={form.maternalName} onChange={e => handleNameInput('maternalName', e.target.value)} placeholder="Ej. García" className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all ${errors.maternalName ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
                 {errors.maternalName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.maternalName}</p>}
               </div>
