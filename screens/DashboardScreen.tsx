@@ -36,6 +36,11 @@ import { userService } from '../src/api/userService';
 import { revisionService } from '../src/api/revisionService';
 import examService from '../src/api/examService';
 import { authService } from '../src/api/authService';
+import JsBarcode from 'jsbarcode';
+import html2pdf from 'html2pdf.js';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { FileOpener } from '@capacitor-community/file-opener';
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({
   userData,
@@ -628,8 +633,322 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     setShowPaymentModal(true);
   };
 
+  // Función para generar folio único
+  const generateFolio = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const random = String(Math.floor(Math.random() * 99999)).padStart(5, '0');
+    return `DGO-${year}${month}${day}-${random}`;
+  };
+
+  // Función para generar PDF de comprobante de pago
+  const generatePaymentVoucherPDF = async () => {
+    const folio = generateFolio();
+    const currentDate = new Date().toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+
+    // Crear canvas para el código de barras
+    const barcodeCanvas = document.createElement('canvas');
+    JsBarcode(barcodeCanvas, folio, {
+      format: 'CODE128',
+      width: 2,
+      height: 60,
+      displayValue: false
+    });
+    const barcodeDataUrl = barcodeCanvas.toDataURL();
+
+    // Construir HTML del voucher
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            @page { margin: 20mm; }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+              font-family: 'Arial', sans-serif;
+              color: #333;
+              line-height: 1.6;
+            }
+            .header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 15px;
+              border-bottom: 3px solid #1F2937;
+              margin-bottom: 20px;
+            }
+            .header img {
+              height: 50px;
+              object-fit: contain;
+            }
+            .header-text {
+              text-align: right;
+              flex: 1;
+            }
+            .header-text h1 {
+              font-size: 22px;
+              font-weight: 900;
+              color: #1F2937;
+              margin: 0;
+            }
+            .voucher-title {
+              text-align: center;
+              background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+              color: white;
+              padding: 12px;
+              margin-bottom: 20px;
+              border-radius: 8px;
+            }
+            .voucher-title h2 {
+              font-size: 18px;
+              font-weight: bold;
+              margin: 0;
+            }
+            .section {
+              margin-bottom: 18px;
+              padding: 12px;
+              background: #f9fafb;
+              border-left: 4px solid #3b82f6;
+              border-radius: 4px;
+            }
+            .section-title {
+              font-size: 13px;
+              font-weight: bold;
+              color: #1F2937;
+              margin-bottom: 8px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .info-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 6px 0;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .info-row:last-child {
+              border-bottom: none;
+            }
+            .info-label {
+              font-weight: 600;
+              color: #6b7280;
+              font-size: 12px;
+            }
+            .info-value {
+              font-weight: 700;
+              color: #1F2937;
+              font-size: 12px;
+            }
+            .amount-box {
+              background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+              color: white;
+              padding: 15px;
+              text-align: center;
+              border-radius: 8px;
+              margin: 15px 0;
+            }
+            .amount-box .label {
+              font-size: 11px;
+              opacity: 0.9;
+              margin-bottom: 4px;
+            }
+            .amount-box .amount {
+              font-size: 32px;
+              font-weight: 900;
+            }
+            .barcode-section {
+              text-align: center;
+              margin: 20px 0;
+              padding: 15px;
+              background: white;
+              border: 2px dashed #d1d5db;
+              border-radius: 8px;
+            }
+            .barcode-section img {
+              display: block;
+              margin: 0 auto;
+              max-width: 100%;
+              height: auto;
+            }
+            .folio-text {
+              font-size: 16px;
+              font-weight: bold;
+              color: #1F2937;
+              margin-top: 8px;
+              letter-spacing: 2px;
+              font-family: 'Courier New', monospace;
+            }
+            .instructions {
+              background: #fef3c7;
+              border-left: 4px solid #f59e0b;
+              padding: 12px;
+              margin: 15px 0;
+              border-radius: 4px;
+            }
+            .instructions p {
+              font-size: 11px;
+              color: #92400e;
+              margin: 3px 0;
+            }
+            .footer {
+              text-align: center;
+              padding: 12px 20px;
+              border-top: 2px solid #e5e7eb;
+              margin-top: 20px;
+              font-size: 9px;
+              color: #6b7280;
+            }
+            .footer .page-number {
+              font-weight: bold;
+              margin-bottom: 3px;
+            }
+            .footer .legend {
+              font-weight: 600;
+              color: #1F2937;
+            }
+            .footer .date {
+              margin-top: 3px;
+            }
+          </style>
+        </head>
+        <body>
+          <!-- Header -->
+          <div class="header">
+            <img src="/logo-durango.png" alt="Logo Durango" />
+            <div class="header-text">
+              <h1>Licencias Durango</h1>
+            </div>
+          </div>
+
+          <!-- Título del Voucher -->
+          <div class="voucher-title">
+            <h2>COMPROBANTE DE PAGO - VENTANILLA</h2>
+          </div>
+
+          <!-- Información del Usuario -->
+          <div class="section">
+            <div class="section-title">Datos del Solicitante</div>
+            <div class="info-row">
+              <span class="info-label">Nombre Completo:</span>
+              <span class="info-value">${userDataFresh?.nombres || ''} ${userDataFresh?.apellidopaterno || ''} ${userDataFresh?.apellidomaterno || ''}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">CURP:</span>
+              <span class="info-value">${userDataFresh?.curp || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Correo Electrónico:</span>
+              <span class="info-value">${userDataFresh?.email || 'N/A'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Teléfono:</span>
+              <span class="info-value">${userDataFresh?.telefono || 'No registrado'}</span>
+            </div>
+          </div>
+
+          <!-- Información del Trámite -->
+          <div class="section">
+            <div class="section-title">Detalles del Trámite</div>
+            <div class="info-row">
+              <span class="info-label">Tipo de Licencia:</span>
+              <span class="info-value">${selectedType}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Tipo de Trámite:</span>
+              <span class="info-value">${hasLicenseForType(selectedType) ? 'Renovación' : 'Primera Vez'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Folio de Referencia:</span>
+              <span class="info-value">${folio}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Fecha de Emisión:</span>
+              <span class="info-value">${currentDate}</span>
+            </div>
+          </div>
+
+          <!-- Monto a Pagar -->
+          <div class="amount-box">
+            <div class="label">TOTAL A PAGAR</div>
+            <div class="amount">$${getCost(selectedType)}.00 MXN</div>
+          </div>
+
+          <!-- Código de Barras -->
+          <div class="barcode-section">
+            <img src="${barcodeDataUrl}" alt="Código de Barras" />
+            <div class="folio-text">${folio}</div>
+          </div>
+
+          <!-- Instrucciones -->
+          <div class="instructions">
+            <p><strong>INSTRUCCIONES DE PAGO:</strong></p>
+            <p>• Presente este comprobante en cualquier banco, tienda OXXO o kiosco autorizado.</p>
+            <p>• El pago debe realizarse por el monto exacto indicado.</p>
+            <p>• Conserve su comprobante de pago como respaldo.</p>
+            <p>• Una vez realizado el pago, continúe con la carga de documentos en la plataforma.</p>
+          </div>
+
+          <!-- Footer -->
+          <div class="footer">
+            <div class="page-number">Página 1 de 1</div>
+            <div class="legend">Gobierno del Estado de Durango - Secretaría de Movilidad y Transporte</div>
+            <div class="date">Fecha de emisión: ${currentDate}</div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Generar PDF
+    try {
+      const element = document.createElement('div');
+      element.innerHTML = htmlContent;
+      element.style.width = '210mm';
+      element.style.padding = '0';
+      document.body.appendChild(element);
+
+      const opt = {
+        margin: 0,
+        filename: `Comprobante-Pago-${folio}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+      };
+
+      if (Capacitor.isNativePlatform()) {
+        const pdfBase64 = await html2pdf().set(opt).from(element).outputPdf('datauristring');
+        const base64Data = pdfBase64.split(',')[1];
+        const savedFile = await Filesystem.writeFile({
+          path: opt.filename,
+          data: base64Data,
+          directory: Directory.Documents,
+        });
+        await FileOpener.open({ filePath: savedFile.uri, contentType: 'application/pdf' });
+      } else {
+        await html2pdf().set(opt).from(element).save();
+      }
+
+      document.body.removeChild(element);
+
+      setAlertMessage('Comprobante de pago generado correctamente. Por favor, descárguelo e imprímalo.');
+      setAlertType('success');
+      setShowAlertModal(true);
+    } catch (error) {
+      console.error('Error al generar PDF:', error);
+      setAlertMessage('Error al generar el comprobante de pago.');
+      setAlertType('error');
+      setShowAlertModal(true);
+    }
+  };
+
+
   // Nueva función: Proceder a subir documentos después de seleccionar método de pago
-  const handleProceedToDocuments = (method: 'card' | 'ventanilla') => {
+  const handleProceedToDocuments = async (method: 'card' | 'ventanilla') => {
     // Validaciones previas si es tarjeta
     if (method === 'card') {
       if (detectCardType(cardData.number) === 'unknown') {
@@ -644,6 +963,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         setShowAlertModal(true);
         return;
       }
+    }
+
+    // Si es pago en ventanilla, generar el comprobante de pago
+    if (method === 'ventanilla') {
+      await generatePaymentVoucherPDF();
     }
 
     // Guardamos el método de pago seleccionado

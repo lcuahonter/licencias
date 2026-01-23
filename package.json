@@ -20,6 +20,7 @@
     "crypto-js": "^4.2.0",
     "face-api.js": "^0.22.2",
     "html2pdf.js": "^0.12.1",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^4.0.0",
     "jwt-decode": "^4.0.0",
     "pdf-lib": "^1.17.1",
