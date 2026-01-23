@@ -383,9 +383,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         setSolicitudesCargadas(solicitudesProcesadas);
 
-        // Verificar fotos existentes para solicitudes con idestatus 20
+        // Verificar fotos existentes para solicitudes con idestatus 20 y 24
         for (const req of solicitudesProcesadas) {
-          if (req.rawData?.idestatus === 20) {
+          if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
             await verificarFotoExistente(Number(req.id));
           }
         }
@@ -518,9 +518,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           setSolicitudesCargadas(solicitudesProcesadas);
 
-          // Verificar fotos existentes para solicitudes con idestatus 20
+          // Verificar fotos existentes para solicitudes con idestatus 20 y 24
           for (const req of solicitudesProcesadas) {
-            if (req.rawData?.idestatus === 20) {
+            if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
               await verificarFotoExistente(Number(req.id));
             }
           }
@@ -1194,7 +1194,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       await reloadSolicitudes();
 
       setFixingRequest(null);
-      setCorrectionsMessage("? Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN esperando que el operador valide los nuevos documentos.");
+      setCorrectionsMessage("Documentos actualizados correctamente.\n\nTu solicitud ahora está EN REVISIÓN esperando que el operador valide los nuevos documentos.");
       setShowCorrectionsSuccessModal(true);
     } catch (error: any) {
       setCorrectionsMessage(`Error al enviar los documentos: ${error?.data?.message || error?.message || 'Error desconocido'}`);
@@ -1326,8 +1326,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </div>
                     )}
 
-                    {/* Botón examen teórico - Solo mostrar cuando idestatus es 20 (Nueva solicitud sin examen) */}
-                    {req.status !== 'rejected' && req.status !== 'completed' && idestatus === 20 && (
+                    {/* Botón examen teórico - Mostrar cuando idestatus es 20 (Nueva) o 24 (Documentos Aprobados) */}
+                    {req.status !== 'rejected' && req.status !== 'completed' && (idestatus === 20 || idestatus === 24) && (
                       <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
                         {/* Botón Subir Foto - Solo mostrar si NO tiene foto subida */}
                         {!solicitudesConFoto.has(Number(req.id)) && (

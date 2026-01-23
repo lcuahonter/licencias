@@ -55,8 +55,8 @@ export const fotoService = {
         token
       });
 
-      // Si retorna 200 y tiene data con urlFoto, existe la foto
-      return response?.data?.urlFoto ? true : false;
+      // Si responde exitosamente (200), asumimos que la foto existe
+      return true;
     } catch (error: any) {
       // Si retorna 404 o cualquier error, la foto no existe
       return false;
