@@ -336,7 +336,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
 
               /* REPORT TITLE BOX */
               #pdf-root .report-info {
-                  background-color: #f8f9fa;
+                  background-color: transparent;
                   border-radius: 12px;
                   padding: 20px;
                   margin-bottom: 30px;
@@ -351,10 +351,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
               #pdf-root table.data-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 30px; position: relative; z-index: 1; }
               #pdf-root table.data-table th, #pdf-root table.data-table td { border: 1px solid #e0e0e0; padding: 10px; text-align: left; }
               #pdf-root table.data-table th { background-color: #1565C0; color: white; text-transform: uppercase; font-size: 10px; font-weight: bold; letter-spacing: 0.5px; }
-              #pdf-root table.data-table tr:nth-child(even) { background-color: #f8f9fa; }
+              #pdf-root table.data-table tr:nth-child(even) { background-color: transparent; }
               
               /* KPIS */
-              #pdf-root .box { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; z-index: 1; }
+              #pdf-root .box { padding: 15px; margin-bottom: 15px; background: transparent; position: relative; z-index: 1; }
               #pdf-root .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
               
               /* FOOTER */
@@ -457,6 +457,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
     const b = s.breakdown;
     const body = `
         <h2 style="color: #4F46E5; margin-top:0;">${s.name}</h2>
+        <br>
         <div class="box">
             <h3 style="margin:0 0 10px 0; font-size:14px; border-bottom:1px solid #ddd;">Resumen</h3>
             <div class="row"><span>Total Trámites:</span> <span class="val">${s.total}</span></div>
