@@ -2348,30 +2348,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   <p className="text-gray-600 dark:text-gray-400 text-center mb-6">Elige cómo deseas capturar tu foto para la licencia</p>
 
                   <button
-                    onClick={() => {
-                      photoInputRef.current?.click();
-                    }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-3"
-                  >
-                    <span className="material-symbols-outlined text-3xl">upload_file</span>
-                    <span>Subir una Foto</span>
-                  </button>
-
-                  <button
                     onClick={() => setPhotoMode('scan')}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-3"
                   >
                     <span className="material-symbols-outlined text-3xl">face_retouching_natural</span>
                     <span>Escanear Rostro</span>
                   </button>
-
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFilePhotoChange}
-                    className="hidden"
-                  />
                 </div>
               )}
 
