@@ -525,7 +525,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             });
           } catch (openErr) {
             console.error(openErr);
-            setAlertMessage("Archivo .xlsx guardado en Documentos, pero no se pudo abrir automáticamente.");
+            setAlertMessage("Descarga exitosa. El archivo se guardó correctamente en Documentos, pero no se detectó una aplicación instalada para abrir hojas de cálculo.");
             setAlertType('warning');
             setShowAlertModal(true);
           }
