@@ -297,7 +297,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           let rejectedDocuments: any[] = [];
 
           // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-          if (idestatus === 26) {
+          // PRIORIDAD 1: Si ya tiene número de licencia asignado, está completamente aprobada
+          if (sol.numerolicencia) {
+            status = 'completed';
+          } else if (idestatus === 26) {
             // Estado 26 = Examen APROBADO confirmado por el backend
             status = 'completed';
           } else if (idestatus === 24) {
@@ -423,7 +426,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             let rejectedDocuments: any[] = [];
 
             // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-            if (idestatus === 26) {
+            // PRIORIDAD 1: Si ya tiene número de licencia asignado, está completamente aprobada
+            if (sol.numerolicencia) {
+              status = 'completed';
+            } else if (idestatus === 26) {
               // Estado 26 = Examen APROBADO confirmado por el backend
               status = 'completed';
             } else if (idestatus === 24) {
