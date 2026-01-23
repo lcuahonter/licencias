@@ -4,6 +4,7 @@ import html2pdf from 'html2pdf.js';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { FileOpener } from '@capacitor-community/file-opener';
 import MD5 from 'crypto-js/md5';
+import marcaWatermark from '../src/recursos/marca.jpg';
 import { userService } from '../src/api/userService';
 import { fetchCurpData } from '../src/utils/curpHelpers';
 import dashboardService, { DashboardTramiteResponse, OperadorData } from '../src/api/dashboardService';
@@ -43,7 +44,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
   // MODALES
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedMuni, setSelectedMuni] = useState<string | null>(null);
-  const [pdfPreview, setPdfPreview] = useState<{ show: boolean, html: string, title: string } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ show: boolean, html: string, htmlDownload?: string, title: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // INPUTS FORMULARIO OPERADOR
@@ -267,42 +268,138 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
   }, [operadoresData, operators, searchOp, filterOpStatus]);
 
   // --- HTML ESTRUCTURA ---
-  const generateHTMLStructure = (title: string, contentBody: string) => {
+  const generateHTMLStructure = (title: string, contentBody: string, includeHeaderText: boolean = true) => {
+    // 295mm para asegurar que el pie de página quede al final en el PDF (A4), 
+    // pero 100% para el preview del modal para evitar espacio en blanco excesivo.
+    const containerHeight = includeHeaderText ? '295mm' : '100%';
+
     return `
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body { font-family: 'Helvetica', sans-serif; padding: 20px; color: #333; background: white; font-size: 12px; }
-                .header-table { width: 100%; border-bottom: 2px solid #2c3e50; margin-bottom: 20px; padding-bottom: 10px; }
-                .header-title { font-size: 20px; color: #2c3e50; font-weight: bold; }
-                .header-meta { text-align: right; font-size: 10px; color: #666; }
-                table.data-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-                table.data-table th, table.data-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
-                table.data-table th { background-color: #2c3e50; color: white; }
-                table.data-table tr:nth-child(even) { background-color: #f9f9f9; }
-                .box { border: 1px solid #eee; padding: 10px; margin-bottom: 10px; border-radius: 8px; background: #fafafa; }
-                .row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-                .val { font-weight: bold; }
-                .footer { margin-top: 30px; font-size: 8px; color: #777; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
-            </style>
-        </head>
-        <body>
-            <table class="header-table">
-                <tr>
-                    <td class="header-title">${title}</td>
-                    <td class="header-meta">
-                        <strong>Fecha Emisión:</strong> ${formatDateMX(todayISO)}<br/>
-                        <strong>Rango:</strong> ${filterLabel}<br/>
-                        ${getRangeText()}
-                    </td>
-                </tr>
-            </table>
+        <div id="pdf-root" style="width: 100%; min-height: ${containerHeight}; position: relative; background: white; display: flex; flex-direction: column;">
+          <style>
+              @import url('https://fonts.googleapis.com/css2?family=Century+Gothic:wght@400;700&display=swap');
+              
+              #pdf-root { 
+                  font-family: 'Century Gothic', sans-serif; 
+                  padding: 40px; 
+                  color: #333; 
+                  font-size: 12px; 
+                  box-sizing: border-box;
+                  position: relative;
+                  /* Flex properties added inline above, ensuring height */
+              }
+              
+              #pdf-root * { box-sizing: border-box; }
+              
+              /* WATERMARK container */
+              #pdf-root .watermark-container {
+                  position: absolute;
+                  top: 0;
+                  left: 0;
+                  width: 100%;
+                  height: 100%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  z-index: 0;
+                  pointer-events: none;
+                  overflow: hidden;
+              }
+              
+              #pdf-root .watermark {
+                  width: 70%;
+                  opacity: 0.12;
+                  display: block;
+              }
+
+              /* HEADER */
+              #pdf-root .header-container {
+                  display: flex;
+                  justify-content: ${includeHeaderText ? 'space-between' : 'center'};
+                  align-items: center;
+                  border-bottom: 3px solid #1565C0;
+                  padding-bottom: 20px;
+                  margin-bottom: 40px;
+                  position: relative;
+                  z-index: 1;
+              }
+              #pdf-root .logo-img { height: 60px; width: auto; object-fit: contain; }
+              
+              #pdf-root .header-text { text-align: right; }
+              #pdf-root .header-title-main { 
+                  font-size: 22px; 
+                  font-weight: 900; 
+                  color: #1a1a1a; 
+                  margin: 0; 
+                  line-height: 1.2;
+                  letter-spacing: -0.5px;
+              }
+
+              /* REPORT TITLE BOX */
+              #pdf-root .report-info {
+                  background-color: #f8f9fa;
+                  border-radius: 12px;
+                  padding: 20px;
+                  margin-bottom: 30px;
+                  border-left: 6px solid #1565C0;
+                  position: relative;
+                  z-index: 1;
+              }
+              #pdf-root .report-title { font-size: 20px; font-weight: bold; color: #1565C0; margin: 0 0 8px 0; }
+              #pdf-root .report-meta { font-size: 11px; color: #555; }
+              
+              /* TABLES */
+              #pdf-root table.data-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 30px; position: relative; z-index: 1; }
+              #pdf-root table.data-table th, #pdf-root table.data-table td { border: 1px solid #e0e0e0; padding: 10px; text-align: left; }
+              #pdf-root table.data-table th { background-color: #1565C0; color: white; text-transform: uppercase; font-size: 10px; font-weight: bold; letter-spacing: 0.5px; }
+              #pdf-root table.data-table tr:nth-child(even) { background-color: #f8f9fa; }
+              
+              /* KPIS */
+              #pdf-root .box { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; z-index: 1; }
+              #pdf-root .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+              
+              /* FOOTER */
+              #pdf-root .footer {
+                  margin-top: auto;
+                  position: relative;
+                  width: 100%;
+                  text-align: center;
+                  font-size: 10px;
+                  color: #999;
+                  border-top: 1px solid #eee;
+                  padding-top: 15px;
+                  padding-bottom: 20px;
+                  background-color: white;
+                  z-index: 10;
+              }
+          </style>
+
+            <div class="watermark-container">
+                <img src="${marcaWatermark}" class="watermark" />
+            </div>
+
+            <div class="header-container">
+                <img src="/logo-durango.png" class="logo-img" alt="Logo" />
+                ${includeHeaderText ? `
+                <div class="header-text">
+                    <h1 class="header-title-main">Licencias Durango</h1>
+                </div>` : ''}
+            </div>
+
+            <div class="report-info">
+                <h2 class="report-title">${title}</h2>
+                <div class="report-meta">
+                    <strong>Fecha Emisión:</strong> ${formatDateMX(todayISO)} &nbsp;|&nbsp; 
+                    <strong>Periodo:</strong> ${filterLabel} (${getRangeText()})
+                </div>
+            </div>
+
             ${contentBody}
-            <div class="footer">Gobierno del Estado de Durango - Plataforma Digital Segura</div>
-        </body>
-        </html>
+
+            <div class="footer">
+                <p><strong>Secretaría de Finanzas y de Administración</strong></p>
+                <p>Plataforma Digital Segura | Documento Oficial</p>
+            </div>
+        </div>
     `;
   };
 
@@ -346,7 +443,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             </tbody>
         </table>
     `;
-    setPdfPreview({ show: true, html: generateHTMLStructure('Reporte Estatal Global', body), title: 'Reporte Global' });
+    setPdfPreview({
+      show: true,
+      html: generateHTMLStructure('Reporte Estatal Global', body, false), // Preview: No text
+      htmlDownload: generateHTMLStructure('Reporte Estatal Global', body, true), // Download: With text
+      title: 'Reporte Global'
+    });
   };
 
   const handlePreviewMuniPDF = () => {
@@ -365,7 +467,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             <div class="row"><span>Renovación:</span> <span class="val">${b.renovacion.count} (${b.renovacion.pct}%)</span></div>
         </div>
     `;
-    setPdfPreview({ show: true, html: generateHTMLStructure('Reporte Municipal', body), title: `Reporte - ${s.name}` });
+    setPdfPreview({
+      show: true,
+      html: generateHTMLStructure('Reporte Municipal', body, false), // Preview: No text
+      htmlDownload: generateHTMLStructure('Reporte Municipal', body, true), // Download: With text
+      title: `Reporte - ${s.name}`
+    });
   };
 
   const downloadExcel = async () => {
@@ -415,16 +522,17 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
     try {
       const element = document.createElement('div');
       element.innerHTML = pdfPreview.html;
-      element.style.width = '210mm';
-      element.style.padding = '20px';
-      element.style.fontSize = '14px';
+      // Ajustar ancho para considerar márgenes y evitar cortes
+      element.style.width = '190mm';
+      element.style.padding = '0';
+      element.style.margin = '0 auto';
       document.body.appendChild(element);
 
       const opt = {
-        margin: 5,
+        margin: [10, 10, 10, 10] as [number, number, number, number], // Top, Left, Bottom, Right
         filename: `Reporte_${Date.now()}.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
         jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
       };
 
@@ -1134,16 +1242,69 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             )}
             <div className="px-4 py-3 border-b flex justify-between items-center bg-gray-50">
               <h3 className="font-bold text-gray-700">{pdfPreview.title}</h3>
-              <button onClick={() => setPdfPreview(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500">
+              <button onClick={() => setPdfPreview(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-4 bg-gray-200">
-              <div className="bg-white shadow-xl min-h-full p-4 mx-auto w-full md:w-[21cm]" dangerouslySetInnerHTML={{ __html: pdfPreview.html }}></div>
+            <div className="flex-1 overflow-auto p-4 bg-gray-200/50">
+              {/* Use iframe to isolate styles completely in the preview */}
+              <iframe
+                srcDoc={pdfPreview.html}
+                className="w-full h-full shadow-xl mx-auto bg-white rounded-lg"
+                style={{ maxWidth: '210mm', height: '100%', border: 'none' }}
+                title="PDF Preview"
+              />
             </div>
             <div className="p-4 border-t bg-white flex justify-end gap-3 safe-bottom">
-              <button onClick={() => setPdfPreview(null)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg">Cerrar</button>
-              <button onClick={handleDownloadAndOpen} disabled={isGenerating} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50">
+              <button onClick={() => setPdfPreview(null)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg transition-colors">Cerrar</button>
+              <button
+                onClick={() => {
+                  const element = document.createElement('div');
+                  // Use htmlDownload if available, otherwise fallback to html
+                  element.innerHTML = pdfPreview.htmlDownload || pdfPreview.html;
+                  element.style.width = '190mm';
+                  element.style.padding = '0';
+                  element.style.margin = '0 auto';
+
+                  document.body.appendChild(element);
+
+                  const opt = {
+                    margin: [0, 0, 0, 0] as [number, number, number, number],
+                    filename: `Reporte_${Date.now()}.pdf`,
+                    image: { type: 'jpeg' as const, quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 800 },
+                    jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+                  };
+
+                  setIsGenerating(true);
+                  html2pdf().set(opt).from(element).save().then(async () => {
+                    document.body.removeChild(element);
+                    setIsGenerating(false);
+
+                    if (Capacitor.isNativePlatform()) {
+                      try {
+                        const pdfBase64 = await html2pdf().set(opt).from(element).outputPdf('datauristring');
+                        const base64Data = pdfBase64.split(',')[1];
+                        const savedFile = await Filesystem.writeFile({
+                          path: opt.filename,
+                          data: base64Data,
+                          directory: Directory.Documents,
+                        });
+                        await FileOpener.open({ filePath: savedFile.uri, contentType: 'application/pdf' });
+                      } catch (e) { console.error(e); }
+                    }
+                  }).catch((err: any) => {
+                    console.error(err);
+                    setIsGenerating(false);
+                    setAlertMessage('Error al generar PDF');
+                    setAlertType('error');
+                    setShowAlertModal(true);
+                    if (document.body.contains(element)) document.body.removeChild(element);
+                  });
+                }}
+                disabled={isGenerating}
+                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg shadow-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 transition-colors"
+              >
                 <span className="material-symbols-outlined">download</span> Descargar y Abrir
               </button>
             </div>
@@ -1152,83 +1313,87 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
       )}
 
       {/* MODAL DE CONFIRMACIÓN PARA CAMBIO DE ESTATUS */}
-      {showConfirmModal && confirmAction && (
-        <div className="absolute inset-0 z-[125] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-md w-full">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 bg-yellow-100">
-                <span className="material-symbols-outlined text-5xl text-yellow-600">warning</span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Confirmar Acción</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                ¿Estás seguro de que deseas <strong>{confirmAction.actionName.toLowerCase()}</strong> este operador?
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setConfirmAction(null);
-                  }}
-                  className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmStatusChange}
-                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700"
-                >
-                  Confirmar
-                </button>
+      {
+        showConfirmModal && confirmAction && (
+          <div className="absolute inset-0 z-[125] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 max-w-md w-full">
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 bg-yellow-100">
+                  <span className="material-symbols-outlined text-5xl text-yellow-600">warning</span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Confirmar Acción</h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  ¿Estás seguro de que deseas <strong>{confirmAction.actionName.toLowerCase()}</strong> este operador?
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowConfirmModal(false);
+                      setConfirmAction(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmStatusChange}
+                    className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700"
+                  >
+                    Confirmar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* MODAL GENÉRICO DE ALERTAS */}
-      {showAlertModal && (
-        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
-            <div className="text-center">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${alertType === 'success' ? 'bg-green-100' :
-                alertType === 'error' ? 'bg-red-100' :
-                  alertType === 'warning' ? 'bg-yellow-100' :
-                    'bg-blue-100'
-                }`}>
-                <span className={`material-symbols-outlined text-5xl ${alertType === 'success' ? 'text-green-600' :
-                  alertType === 'error' ? 'text-red-600' :
-                    alertType === 'warning' ? 'text-yellow-600' :
-                      'text-blue-600'
+      {
+        showAlertModal && (
+          <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+              <div className="text-center">
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${alertType === 'success' ? 'bg-green-100' :
+                  alertType === 'error' ? 'bg-red-100' :
+                    alertType === 'warning' ? 'bg-yellow-100' :
+                      'bg-blue-100'
                   }`}>
-                  {alertType === 'success' ? 'check_circle' :
-                    alertType === 'error' ? 'error' :
-                      alertType === 'warning' ? 'warning' :
-                        'info'}
-                </span>
+                  <span className={`material-symbols-outlined text-5xl ${alertType === 'success' ? 'text-green-600' :
+                    alertType === 'error' ? 'text-red-600' :
+                      alertType === 'warning' ? 'text-yellow-600' :
+                        'text-blue-600'
+                    }`}>
+                    {alertType === 'success' ? 'check_circle' :
+                      alertType === 'error' ? 'error' :
+                        alertType === 'warning' ? 'warning' :
+                          'info'}
+                  </span>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                  {alertType === 'success' ? '¡Éxito!' :
+                    alertType === 'error' ? 'Error' :
+                      alertType === 'warning' ? 'Atención' :
+                        'Información'}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+                <button
+                  onClick={() => setShowAlertModal(false)}
+                  className={`w-full px-6 py-3 text-white rounded-xl font-bold ${alertType === 'success' ? 'bg-green-600 hover:bg-green-700' :
+                    alertType === 'error' ? 'bg-red-600 hover:bg-red-700' :
+                      alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' :
+                        'bg-blue-600 hover:bg-blue-700'
+                    }`}
+                >
+                  Cerrar
+                </button>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                {alertType === 'success' ? '¡Éxito!' :
-                  alertType === 'error' ? 'Error' :
-                    alertType === 'warning' ? 'Atención' :
-                      'Información'}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
-              <button
-                onClick={() => setShowAlertModal(false)}
-                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${alertType === 'success' ? 'bg-green-600 hover:bg-green-700' :
-                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' :
-                    alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' :
-                      'bg-blue-600 hover:bg-blue-700'
-                  }`}
-              >
-                Cerrar
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-    </div>
+    </div >
   );
 };
 

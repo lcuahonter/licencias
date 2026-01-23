@@ -428,67 +428,64 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
 
-      {/* NAVBAR */}
-      <header className="bg-indigo-900 text-white px-4 py-3 flex justify-between items-center shadow-md sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
-            <span className="material-symbols-outlined">admin_panel_settings</span>
+      <header className="safe-top bg-indigo-900 text-white px-6 pb-5 shadow-lg sticky top-0 z-10 rounded-b-3xl">
+        <div className="flex justify-between items-center mb-4 pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/30">
+              <span className="material-symbols-outlined text-white">admin_panel_settings</span>
+            </div>
+            <div>
+              <h1 className="font-black text-lg leading-tight tracking-tight">Panel de Operador</h1>
+              <p className="text-[10px] opacity-70 uppercase tracking-wider font-bold">Licencias Durango</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-base leading-tight">Panel de Operador</h1>
-            <p className="text-[9px] opacity-70 uppercase tracking-wider">Licencias Durango.</p>
-          </div>
+          <button onClick={handleLogout} className="bg-white/10 hover:bg-red-500/80 p-2 rounded-xl transition-colors">
+            <span className="material-symbols-outlined text-sm">logout</span>
+          </button>
         </div>
-        <button onClick={handleLogout} className="bg-red-500/20 hover:bg-red-600 hover:text-white text-red-200 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
-          <span className="material-symbols-outlined text-sm">logout</span> Salir
-        </button>
-      </header>
-
-      {/* BUSCADOR Y TABS */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        {/* Tabs */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex p-1 rounded-xl" style={{ backgroundColor: 'rgba(0, 0, 0, 0.2)' }}>
           <button
             onClick={() => setActiveTab('pending')}
-            className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${activeTab === 'pending'
-              ? 'bg-primary text-white shadow-md'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-              }`}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`}
+            style={activeTab === 'pending' ? { color: '#1565C0' } : {}}
           >
-            <span className="flex items-center justify-center gap-2">
-              <span className="material-symbols-outlined text-sm">pending_actions</span>
-              Pendientes ({filteredSolicitudes.length})
-            </span>
+            <span className="material-symbols-outlined text-sm">pending_actions</span>
+            Pendientes ({filteredSolicitudes.length})
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${activeTab === 'history'
-              ? 'bg-primary text-white shadow-md'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-              }`}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'history' ? 'bg-white shadow-md' : 'text-white hover:bg-white/5'}`}
+            style={activeTab === 'history' ? { color: '#1565C0' } : {}}
           >
-            <span className="flex items-center justify-center gap-2">
-              <span className="material-symbols-outlined text-sm">history</span>
-              Historial ({solicitudesHistorial.length})
-            </span>
+            <span className="material-symbols-outlined text-sm">history</span>
+            Historial ({solicitudesHistorial.length})
           </button>
         </div>
+      </header>
 
-        {/* Buscador */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Buscar por nombre..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full h-10 pl-10 pr-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm focus:border-primary outline-none dark:bg-gray-800 dark:text-white text-sm"
-          />
-          <span className="material-symbols-outlined absolute left-3 top-2 text-gray-400 text-base">search</span>
-          {searchTerm && (
-            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2 text-gray-400 hover:text-gray-600">
-              <span className="material-symbols-outlined text-base">close</span>
-            </button>
-          )}
+      {/* SEARCH BAR CONTAINER */}
+      <div className="px-6 mt-6 mb-2">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-2">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Buscar por nombre..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-12 pl-12 pr-4 rounded-xl bg-gray-50 dark:bg-gray-900 border-none outline-none dark:text-white font-medium transition-all focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900"
+            />
+            <div className="absolute left-4 top-3.5 w-5 h-5 flex items-center justify-center">
+              <span className="material-symbols-outlined text-gray-400">search</span>
+            </div>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
