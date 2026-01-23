@@ -9,6 +9,7 @@ import { userService } from '../src/api/userService';
 import { fetchCurpData } from '../src/utils/curpHelpers';
 import dashboardService, { DashboardTramiteResponse, OperadorData } from '../src/api/dashboardService';
 import { authService } from '../src/api/authService';
+import * as XLSX from 'xlsx';
 
 interface AdminDashboardScreenProps {
   onLogout: () => void;
@@ -485,51 +486,60 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
     }
 
     try {
-      let csvContent = "\uFEFFID,Municipio,Total Tramites,Primera Vez,Renovacion,Recaudacion Estimada\n";
-      dashboardData.desglose.forEach((muniData, index) => {
+      // PREPARAR DATOS PARA SHEETJS
+      const dataForExcel = dashboardData.desglose.map((muniData, index) => {
         const stats = getMuniStats(muniData.municipio);
         const cash = stats.total * 900;
-        csvContent += `${index + 1},"${muniData.municipio}",${stats.total},${stats.breakdown.primera.count},${stats.breakdown.renovacion.count},"$${cash}"\n`;
+        return {
+          "ID": index + 1,
+          "Municipio": muniData.municipio,
+          "Total Trámites": stats.total,
+          "Primera Vez": stats.breakdown.primera.count,
+          "Renovación": stats.breakdown.renovacion.count,
+          "Recaudación Est.": cash // SheetJS manejará el formato numérico si se desea, o se puede formatear aquí
+        };
       });
-      const fileName = `Reporte_Durango_${Date.now()}.csv`;
+
+      // CREAR WORKBOOK Y SHEET
+      const ws = XLSX.utils.json_to_sheet(dataForExcel);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte Global");
+
+      const fileName = `Reporte_Durango_${Date.now()}.xlsx`;
 
       if (Capacitor.isNativePlatform()) {
         try {
-          // Generar base64 seguro para UTF-8
-          const base64Data = btoa(unescape(encodeURIComponent(csvContent)));
+          // GENERAR BASE64 DE XLSX
+          const excelBase64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
 
           const savedFile = await Filesystem.writeFile({
             path: fileName,
-            data: base64Data,
-            directory: Directory.Documents,
-            // recursive: true // No necesario para archivos simples, pero útil si hay carpetas
+            data: excelBase64,
+            directory: Directory.Documents
           });
 
           try {
-            await FileOpener.open({ filePath: savedFile.uri, contentType: 'text/csv' });
+            await FileOpener.open({
+              filePath: savedFile.uri,
+              contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
           } catch (openErr) {
             console.error(openErr);
-            setAlertMessage("Archivo guardado, pero no se pudo abrir automáticamente. Verifique su carpeta de Documentos.");
+            setAlertMessage("Archivo .xlsx guardado en Documentos, pero no se pudo abrir automáticamente.");
             setAlertType('warning');
             setShowAlertModal(true);
           }
 
         } catch (writeErr) {
           console.error(writeErr);
-          setAlertMessage("Error al guardar el archivo en el dispositivo.");
+          setAlertMessage("Error al guardar el archivo Excel en el dispositivo.");
           setAlertType('error');
           setShowAlertModal(true);
         }
 
       } else {
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", fileName);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // DESCARGA WEB
+        XLSX.writeFile(wb, fileName);
       }
     } catch (error) {
       console.error(error);
