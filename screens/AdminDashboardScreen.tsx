@@ -506,7 +506,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
           });
 
           try {
-            await FileOpener.open({ filePath: savedFile.uri, contentType: 'application/vnd.ms-excel' });
+            await FileOpener.open({ filePath: savedFile.uri, contentType: 'text/csv' });
           } catch (openErr) {
             console.error(openErr);
             setAlertMessage("Archivo guardado, pero no se pudo abrir automáticamente. Verifique su carpeta de Documentos.");
