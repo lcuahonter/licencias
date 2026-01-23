@@ -84,7 +84,15 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       }
       // Obtener solicitudes con idestatus 22 (sin asignar)
       const respSolicitudes22 = await solicitudService.getByEstatus(22, token);
-      const solicitudesSinAsignar = respSolicitudes22?.data?.solicitudesData || [];
+      const solicitudesSinAsignar22 = respSolicitudes22?.data?.solicitudesData || [];
+
+      // Obtener solicitudes con idestatus 20 (Nuevas) - TAMBIÉN MOSTRARLAS
+      // IMPORTANTE: El backend separa 20 y 22, pero para el operador ambas son "nuevas sin revisar"
+      const respSolicitudes20 = await solicitudService.getByEstatus(20, token);
+      const solicitudesSinAsignar20 = respSolicitudes20?.data?.solicitudesData || [];
+
+      // Combinar 20 y 22
+      const solicitudesSinAsignar = [...solicitudesSinAsignar20, ...solicitudesSinAsignar22];
 
       // Obtener revisiones asignadas al operador actual
       let revisionesDelOperador: any[] = [];
@@ -102,7 +110,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       // Para las revisiones, buscar las solicitudes completas
       const solicitudesConRevision = revisionesDelOperador.map(rev => {
         // Buscar la solicitud completa en las solicitudes en revisión (idestatus 23)
-        const solicitudCompleta = solicitudesEnRevision.find(s => s.id === rev.idsolicitud);
+        // Opcionalmente buscar en las de 20/22 si por error de sincronía siguen ahí
+        const solicitudCompleta = solicitudesEnRevision.find(s => s.id === rev.idsolicitud)
+          || solicitudesSinAsignar.find(s => s.id === rev.idsolicitud);
 
         if (solicitudCompleta) {
           // Si existe, usar esos datos pero marcar como asignada
@@ -138,7 +148,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         };
       });
 
-      // Las solicitudes sin asignar (idestatus 22) se muestran a todos los operadores
+      // Las solicitudes sin asignar (idestatus 20 y 22) se muestran a todos los operadores
       // Solo filtramos duplicados si el operador ya tiene una revisión de esa solicitud
       const solicitudesSinRevision = solicitudesSinAsignar.filter(sol => {
         return !revisionesDelOperador.some(rev => rev.idsolicitud === sol.id);
