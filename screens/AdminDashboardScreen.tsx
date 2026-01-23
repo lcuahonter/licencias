@@ -492,14 +492,35 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
         csvContent += `${index + 1},"${muniData.municipio}",${stats.total},${stats.breakdown.primera.count},${stats.breakdown.renovacion.count},"$${cash}"\n`;
       });
       const fileName = `Reporte_Durango_${Date.now()}.csv`;
+
       if (Capacitor.isNativePlatform()) {
-        const savedFile = await Filesystem.writeFile({
-          path: fileName,
-          data: csvContent,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8
-        });
-        await FileOpener.open({ filePath: savedFile.uri, contentType: 'text/csv' });
+        try {
+          // Generar base64 seguro para UTF-8
+          const base64Data = btoa(unescape(encodeURIComponent(csvContent)));
+
+          const savedFile = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Documents,
+            // recursive: true // No necesario para archivos simples, pero útil si hay carpetas
+          });
+
+          try {
+            await FileOpener.open({ filePath: savedFile.uri, contentType: 'text/csv' });
+          } catch (openErr) {
+            console.error(openErr);
+            setAlertMessage("Archivo guardado, pero no se pudo abrir automáticamente. Verifique su carpeta de Documentos.");
+            setAlertType('warning');
+            setShowAlertModal(true);
+          }
+
+        } catch (writeErr) {
+          console.error(writeErr);
+          setAlertMessage("Error al guardar el archivo en el dispositivo.");
+          setAlertType('error');
+          setShowAlertModal(true);
+        }
+
       } else {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
@@ -511,7 +532,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
         document.body.removeChild(link);
       }
     } catch (error) {
-      setAlertMessage("No se pudo descargar el archivo.");
+      console.error(error);
+      setAlertMessage("Error inesperado al generar el Excel.");
       setAlertType('error');
       setShowAlertModal(true);
     }
