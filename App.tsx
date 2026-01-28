@@ -109,6 +109,12 @@ const App: React.FC = () => {
               }
             } else {
               // Caso: Crear Cuenta Nueva
+              // Resetear datos del formulario de registro
+              setUserData({
+                firstName: '', lastName: '', idNumber: '', email: '', birthDate: '',
+                licenseType: 'Automovilista Particular', validityDuration: '3 Años',
+                bloodGroup: 'O+', organDonor: true, requests: []
+              });
               setCurrentStep(AppStep.REGISTRATION);
             }
           }}

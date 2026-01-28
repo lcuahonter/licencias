@@ -9,32 +9,35 @@ export const validateCurpFormat = (curp: string): boolean => {
 // Función auxiliar para decodificar fecha desde el string
 export const decodeCurpData = (curp: string) => {
   const c = curp.toUpperCase();
-  
+
   try {
-      // Extraer fecha (Formato YYMMDD)
-      const yearStr = c.substring(4, 6);
-      const month = c.substring(6, 8);
-      const day = c.substring(8, 10);
-      
-      // Calcular siglo (Lógica simple: >40 es 1900, si no 2000)
-      const yearInt = parseInt(yearStr);
-      const fullYear = yearInt > 40 ? `19${yearStr}` : `20${yearStr}`; 
-      
-      const birthDate = `${fullYear}-${month}-${day}`;
-    
-      return {
-        success: true,
-        data: {
-          firstName: '', 
-          lastName: '',
-          paternalName: '',
-          maternalName: '',
-          birthDate,
-          found: false
-        }
-      };
+    // Extraer fecha (Formato YYMMDD)
+    const yearStr = c.substring(4, 6);
+    const month = c.substring(6, 8);
+    const day = c.substring(8, 10);
+
+    // Calcular siglo usando el caracter 17 (índice 16)
+    // Si es número (0-9) -> 1900
+    // Si es letra (A-Z) -> 2000
+    const centuryChar = c.charAt(16);
+    const isDigit = /\d/.test(centuryChar);
+    const fullYear = isDigit ? `19${yearStr}` : `20${yearStr}`;
+
+    const birthDate = `${fullYear}-${month}-${day}`;
+
+    return {
+      success: true,
+      data: {
+        firstName: '',
+        lastName: '',
+        paternalName: '',
+        maternalName: '',
+        birthDate,
+        found: false
+      }
+    };
   } catch (e) {
-      return { success: false };
+    return { success: false };
   }
 };
 
@@ -47,7 +50,7 @@ export const fetchCurpData = async (curp: string) => {
 
   // Validar formato y extraer datos básicos
   if (validateCurpFormat(upperCurp)) {
-      return decodeCurpData(upperCurp);
+    return decodeCurpData(upperCurp);
   }
 
   // Si no es válida
