@@ -8,6 +8,18 @@ export const authService = {
       method: 'POST',
       body: payload
     });
+  },
+
+  logout: async (token?: string) => {
+    try {
+      return await apiRequest<any>(API_ENDPOINTS.AUTH.LOGOUT, {
+        method: 'POST',
+        token
+      });
+    } catch (error) {
+      // Siempre permitir logout aunque falle el backend
+      return null;
+    }
   }
 };
 

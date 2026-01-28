@@ -7,5 +7,19 @@ export const catalogService = {
       method: 'POST',
       body: { cp }
     });
+  },
+
+  getDocumentos: async () => {
+    // Devuelve el catálogo de documentos: { data: { catDocumentos: [...] } }
+    return await apiRequest<any>(API_ENDPOINTS.CATALOGOS.CAT_DOCUMENTOS, {
+      method: 'GET'
+    });
+  },
+
+  getUsuarios: async () => {
+    // Devuelve el catálogo de usuarios (roles): { data: { catUsuarios: [...] } }
+    return await apiRequest<any>(API_ENDPOINTS.CATALOGOS.CAT_USUARIOS, {
+      method: 'GET'
+    });
   }
 };

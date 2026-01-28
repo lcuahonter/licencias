@@ -23,7 +23,7 @@ export const generateFilledApplication = async (userData: UserData) => {
     const drawText = (text: string, x: number, y: number, size: number = 10) => {
       // Validamos que text no sea undefined/null para evitar errores
       const safeText = text ? text.toString().toUpperCase() : '';
-      
+
       firstPage.drawText(safeText, {
         x,
         y,
@@ -35,14 +35,14 @@ export const generateFilledApplication = async (userData: UserData) => {
 
     // --- COORDENADAS APROXIMADAS (Ajustar según tu PDF real de Durango) ---
     // El eje Y empieza abajo (0) y crece hacia arriba.
-    
+
     // FECHA (Arriba derecha)
     const date = new Date().toLocaleDateString('es-MX');
     drawText(date, 450, 700);
 
     // DATOS PERSONALES
     // Apellido Paterno (Asumiendo que es la primera palabra del apellido)
-    drawText(userData.lastName.split(' ')[0] || '', 120, 625); 
+    drawText(userData.lastName.split(' ')[0] || '', 120, 625);
     // Apellido Materno
     drawText(userData.lastName.split(' ')[1] || '', 300, 625);
     // Nombres
@@ -52,15 +52,15 @@ export const generateFilledApplication = async (userData: UserData) => {
     drawText(userData.birthDate || '', 120, 595);
     // CURP
     drawText(userData.idNumber, 350, 595);
-    
+
     // Tipo de Sangre (Campo Médico)
     drawText(userData.bloodGroup || '', 150, 500);
-    
+
     // Donador de Organos (Si/No)
     if (userData.organDonor) {
-        drawText('X', 400, 500); // Casilla SI
+      drawText('X', 400, 500); // Casilla SI
     } else {
-        drawText('X', 450, 500); // Casilla NO
+      drawText('X', 450, 500); // Casilla NO
     }
 
     // Tipo de Licencia (Marcar con X)
@@ -71,18 +71,16 @@ export const generateFilledApplication = async (userData: UserData) => {
 
     // 5. Guardar el PDF modificado
     const pdfBytes = await pdfDoc.save();
-    
-    // --- AQUÍ ESTÁ LA CORRECCIÓN DEL ERROR ---
+
     // Usamos `[pdfBytes as any]` para que TS no pelee por el tipo de ArrayBuffer
     const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
-    
+
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `Solicitud_Licencia_${userData.firstName.split(' ')[0]}.pdf`;
     link.click();
 
   } catch (error) {
-    console.error("Error al generar PDF", error);
-    alert("Error: Asegúrate de guardar el archivo 'solicitud.pdf' en la carpeta public de tu proyecto.");
+    throw new Error("Error: Asegúrate de guardar el archivo 'solicitud.pdf' en la carpeta public de tu proyecto.");
   }
 };

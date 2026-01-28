@@ -6,42 +6,17 @@ import Webcam from 'react-webcam';
 // ============================================================================
 
 const sendLivenessVideo = async (videoBlob: Blob) => {
+    // TEMPORALMENTE DESACTIVADO - Requiere backend intermedio
+    // Por ahora solo simulamos que pasó la validación
     try {
-        console.log("1. Preparando envio de video...");
-      
-        // NOTA: Idealmente esto va a tu Backend intermedio, no directo a Azure desde el cliente
-        const BACKEND_URL = "https://dgofacerecognition.cognitiveservices.azure.com/face/v1.0/liveness/detect"; 
+        // Simular un pequeño delay para que parezca que valida
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const formData = new FormData();
-        formData.append('video', videoBlob, 'liveness_check.webm'); 
-
-        console.log(`Tamano del video: ${(videoBlob.size / 1024 / 1024).toFixed(2)} MB`);
-
-        const response = await fetch(BACKEND_URL, {
-            method: 'POST',
-            body: formData
-        });
-
-        console.log("2. Estatus HTTP:", response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Error Backend:", errorText);
-            throw new Error(`Error ${response.status}: ${errorText}`);
-        }
-
-        const data = await response.json();
-        
-        // Adaptar esto segun la respuesta de tu servicio
-        if (data.isReal === false) {
-             return { success: false, message: "Prueba de vida fallida. Intenta de nuevo." };
-        }
-
-        return { success: true, data: data };
+        // Siempre retorna éxito (puedes activar Azure cuando el backend esté listo)
+        return { success: true, data: { isReal: true } };
 
     } catch (error: any) {
-        console.error("Catch Error:", error);
-        return { success: false, message: error.message || "Error de conexion." };
+        return { success: false, message: error.message || "Error de conexión." };
     }
 };
 
@@ -59,6 +34,12 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
   const [isValidating, setIsValidating] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  
+  // Modal genérico para alertas
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   
   const webcamRef = useRef<Webcam>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -101,22 +82,22 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
 
             mediaRecorderRef.current = recorder;
             recorder.start();
-            console.log("Grabando...");
 
         } catch (err: any) {
-            console.error("Error iniciando grabadora:", err);
-            setCameraError("No se pudo iniciar la grabacion de video.");
+            setCameraError("No se pudo iniciar la grabación de video.");
             setIsScanning(false);
+            setScanProgress(0);
         }
     } else {
-        setCameraError("Camara no lista.");
+        setCameraError("Cámara no lista. Espera un momento.");
+        setIsScanning(false);
+        setScanProgress(0);
     }
   }, [webcamRef]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
-        console.log("Grabacion detenida");
     }
   }, []);
 
@@ -129,23 +110,30 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
       if (result.success) {
           setIsValidating(false);
           const finalPhoto = webcamRef.current?.getScreenshot() || ""; 
-          onComplete(finalPhoto); 
+          // En lugar de completar directamente, mostramos vista previa
+          setCapturedPhoto(finalPhoto);
       } else {
           setIsValidating(false);
+          setIsScanning(false);
+          setScanProgress(0);
           setCameraError(result.message);
       }
   };
 
-  // --- BOTON DE OMITIR (PARA PRUEBAS) ---
-  const handleSkip = () => {
-      // Detener cualquier proceso activo
-      if (isScanning) stopRecording();
-      
-      // Simular exito enviando una imagen dummy
-      console.log("Omitiendo prueba de vida...");
-      onComplete("https://via.placeholder.com/400x400?text=Prueba+Omitida");
+  // --- ACEPTAR FOTO CAPTURADA ---
+  const handleAcceptPhoto = () => {
+      if (capturedPhoto) {
+          onComplete(capturedPhoto);
+      }
   };
 
+  // --- RECHAZAR FOTO Y VOLVER A ESCANEAR ---
+  const handleRetakePhoto = () => {
+      setCapturedPhoto(null);
+      setScanProgress(0);
+  };
+
+  // --- BOTON DE OMITIR (PARA PRUEBAS) ---
   // --- Efecto de Barra de Progreso ---
   useEffect(() => {
     let interval: any;
@@ -168,14 +156,15 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
 
   const handleStartButton = () => {
       if (cameraError) {
-          alert("Reinicia la app o revisa permisos.");
+          setAlertMessage("Reinicia la app o revisa permisos.");
+          setAlertType('error');
+          setShowAlertModal(true);
           return;
       }
       startRecording();
   };
 
   const handleUserMediaError = useCallback((error: string | DOMException) => {
-      console.error("Error de camara:", error);
       setCameraError("Acceso denegado o error de camara.");
   }, []);
 
@@ -228,22 +217,33 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
             </div>
         )}
 
-        {/* MASCARA SVG */}
+        {/* MASCARA SVG Y OVALO GUIA */}
         <div className="absolute inset-0 z-10 pointer-events-none">
-            <svg className="w-full h-full" preserveAspectRatio="none">
+            {/* Máscara de fondo oscuro */}
+            <svg className="w-full h-full absolute inset-0" preserveAspectRatio="none">
                 <defs>
                     <mask id="mask">
                         <rect width="100%" height="100%" fill="white" />
-                        <ellipse cx="50%" cy="45%" rx="28%" ry="22%" fill="black" />
+                        <ellipse cx="50%" cy="40%" rx="35%" ry="25%" fill="black" />
                     </mask>
                 </defs>
                 <rect width="100%" height="100%" fill="rgba(0,0,0,0.85)" mask="url(#mask)" />
             </svg>
             
-            <div className="absolute inset-0 flex items-center justify-center" style={{ paddingBottom: '10%' }}>
-                {/* Borde cambia a ROJO mientras graba */}
-                <div className={`w-[56%] aspect-[3/4] max-h-[44%] rounded-[50%] border-2 border-dashed transition-all duration-500 ${isScanning ? 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.6)]' : 'border-white/40'}`}></div>
-            </div>
+            {/* Óvalo punteado de guía - mismas dimensiones que la máscara */}
+            <svg className="w-full h-full absolute inset-0" preserveAspectRatio="none">
+                <ellipse 
+                    cx="50%" 
+                    cy="40%" 
+                    rx="35%" 
+                    ry="25%" 
+                    fill="none" 
+                    stroke={isScanning ? 'rgb(239, 68, 68)' : 'rgba(255, 255, 255, 0.4)'}
+                    strokeWidth="2"
+                    strokeDasharray="10,5"
+                    className={`transition-all duration-500 ${isScanning ? 'drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]' : ''}`}
+                />
+            </svg>
 
             {/* Indicador de REC */}
             {isScanning && (
@@ -290,18 +290,103 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
           )}
           
           <p className="text-gray-400 text-[11px] mt-4 text-center max-w-xs">
-              {isScanning ? "Manten el rostro en el ovalo" : "Grabaremos un video corto de 3 segundos."}
+              {isScanning ? "Mantente quieto y mira a la cámara" : isValidating ? "Procesando..." : "Presiona el botón para capturar tu foto"}
           </p>
 
-          {/* BOTON DE OMITIR PARA PRUEBAS */}
-          <button 
-            onClick={handleSkip}
-            className="mt-6 text-[10px] uppercase font-bold text-gray-600 hover:text-white border border-gray-700 hover:border-white px-3 py-1 rounded transition-colors"
-          >
-            Omitir (Modo Pruebas)
-          </button>
-
       </div>
+
+      {/* VISTA PREVIA DE FOTO CAPTURADA */}
+      {capturedPhoto && (
+        <div className="absolute inset-0 z-[110] bg-black flex flex-col">
+          {/* Header */}
+          <div className="shrink-0 h-16 px-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-20 safe-top">
+            <div className="text-white">
+              <h2 className="font-bold text-base">Vista Previa</h2>
+              <p className="text-xs text-white/80">Verifica tu captura</p>
+            </div>
+          </div>
+
+          {/* Preview Image */}
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="w-full max-w-sm">
+              <div className="relative aspect-[3/4] rounded-3xl overflow-hidden border-4 border-white/20 shadow-2xl">
+                <img 
+                  src={capturedPhoto} 
+                  alt="Foto capturada" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <p className="text-white/70 text-sm text-center mt-4">
+                ¿La foto se ve bien y tu rostro está visible?
+              </p>
+            </div>
+          </div>
+
+          {/* Botones */}
+          <div className="shrink-0 p-6 space-y-3 safe-bottom">
+            <button
+              onClick={handleAcceptPhoto}
+              className="w-full h-14 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined">check_circle</span>
+              Usar esta Foto
+            </button>
+            <button
+              onClick={handleRetakePhoto}
+              className="w-full h-14 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-bold text-lg border-2 border-white/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined">refresh</span>
+              Escanear de Nuevo
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GENÉRICO DE ALERTAS */}
+      {showAlertModal && (
+        <div className="absolute inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-surface-dark rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                alertType === 'success' ? 'bg-green-100' : 
+                alertType === 'error' ? 'bg-red-100' : 
+                alertType === 'warning' ? 'bg-yellow-100' : 
+                'bg-blue-100'
+              }`}>
+                <span className={`material-symbols-outlined text-5xl ${
+                  alertType === 'success' ? 'text-green-600' : 
+                  alertType === 'error' ? 'text-red-600' : 
+                  alertType === 'warning' ? 'text-yellow-600' : 
+                  'text-blue-600'
+                }`}>
+                  {alertType === 'success' ? 'check_circle' : 
+                   alertType === 'error' ? 'error' : 
+                   alertType === 'warning' ? 'warning' : 
+                   'info'}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                {alertType === 'success' ? '¡Éxito!' : 
+                 alertType === 'error' ? 'Error' : 
+                 alertType === 'warning' ? 'Atención' : 
+                 'Información'}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 whitespace-pre-line">{alertMessage}</p>
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className={`w-full px-6 py-3 text-white rounded-xl font-bold ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700' : 
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700' : 
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

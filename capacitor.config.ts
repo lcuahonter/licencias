@@ -10,13 +10,16 @@ const config: CapacitorConfig = {
   plugins: {
     StatusBar: {
       // "LIGHT" significa que el fondo es claro, por lo tanto pone los ICONOS OSCUROS (Negros)
-      style: 'LIGHT', 
-      
+      style: 'LIGHT',
+
       // Color de fondo blanco sólido
-      backgroundColor: '#FFFFFF', 
-      
+      backgroundColor: '#FFFFFF',
+
       // FALSE = La app empieza DEBAJO de la barra (no se encima)
-      overlaysWebView: false, 
+      overlaysWebView: false,
+    },
+    CapacitorHttp: {
+      enabled: true,
     },
   },
 };

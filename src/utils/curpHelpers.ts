@@ -6,79 +6,53 @@ export const validateCurpFormat = (curp: string): boolean => {
   return re.test(curp.toUpperCase());
 };
 
-// Base de Datos Simulada (Para la Demo)
-const MOCK_DB: Record<string, any> = {
-  // Datos de "Juan Pérez" (Usuario Existente)
-  'PEPJ880101HDFRXX05': {
-    firstName: 'JUAN',
-    lastName: 'PEREZ GARCIA',
-    birthDate: '1988-01-01',
-    gender: 'H',
-    state: 'DF'
-  },
-  // Otro ejemplo
-  'ROGA950520HDFRXX02': {
-    firstName: 'ROBERTO',
-    lastName: 'GOMEZ ARRIAGA',
-    birthDate: '1995-05-20',
-    gender: 'H',
-    state: 'DF'
-  }
-};
-
-// Función auxiliar para decodificar fecha desde el string (Tu lógica original mejorada)
+// Función auxiliar para decodificar fecha desde el string
 export const decodeCurpData = (curp: string) => {
   const c = curp.toUpperCase();
-  
+
   try {
-      // Extraer fecha (Formato YYMMDD)
-      const yearStr = c.substring(4, 6);
-      const month = c.substring(6, 8);
-      const day = c.substring(8, 10);
-      
-      // Calcular siglo (Lógica simple para demo: >40 es 1900, si no 2000)
-      const yearInt = parseInt(yearStr);
-      const fullYear = yearInt > 40 ? `19${yearStr}` : `20${yearStr}`; 
-      
-      const birthDate = `${fullYear}-${month}-${day}`;
-    
-      return {
-        success: true,
-        data: {
-          firstName: '', 
-          lastName: '',
-          birthDate,
-          found: false
-        }
-      };
+    // Extraer fecha (Formato YYMMDD)
+    const yearStr = c.substring(4, 6);
+    const month = c.substring(6, 8);
+    const day = c.substring(8, 10);
+
+    // Calcular siglo usando el caracter 17 (índice 16)
+    // Si es número (0-9) -> 1900
+    // Si es letra (A-Z) -> 2000
+    const centuryChar = c.charAt(16);
+    const isDigit = /\d/.test(centuryChar);
+    const fullYear = isDigit ? `19${yearStr}` : `20${yearStr}`;
+
+    const birthDate = `${fullYear}-${month}-${day}`;
+
+    return {
+      success: true,
+      data: {
+        firstName: '',
+        lastName: '',
+        paternalName: '',
+        maternalName: '',
+        birthDate,
+        found: false
+      }
+    };
   } catch (e) {
-      return { success: false };
+    return { success: false };
   }
 };
 
-// --- ESTA ES LA FUNCIÓN QUE TE FALTABA ---
+// Función para validar y extraer datos del CURP
 export const fetchCurpData = async (curp: string) => {
-  // 1. Simulamos tiempo de espera de red (1.5 segundos)
+  // Simulamos tiempo de espera de red
   await new Promise(resolve => setTimeout(resolve, 1500));
 
   const upperCurp = curp.toUpperCase().trim();
 
-  // 2. Buscamos en la Base de Datos Mock (Prioridad)
-  if (MOCK_DB[upperCurp]) {
-    return {
-      success: true,
-      data: {
-          ...MOCK_DB[upperCurp],
-          found: true
-      }
-    };
-  }
-
-  // 3. Si no está en la DB, usamos el decodificador para sacar al menos la fecha
+  // Validar formato y extraer datos básicos
   if (validateCurpFormat(upperCurp)) {
-      return decodeCurpData(upperCurp);
+    return decodeCurpData(upperCurp);
   }
 
-  // 4. Si no es válida
+  // Si no es válida
   return { success: false };
 };
