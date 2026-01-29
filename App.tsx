@@ -4,6 +4,7 @@ import { AppStep, UserData, LicenseRequest } from './types';
 import './index.css';
 import { LoadingProvider, useLoading } from './src/contexts/LoadingContext';
 import { setLoadingFunctions } from './src/api/apiClientWithLoading';
+import { setFotoLoadingFunctions } from './src/api/fotoService';
 
 // Importamos todas las pantallas
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -22,9 +23,10 @@ import CompleteProfileScreen from './screens/CompleteProfileScreen';
 const AppContent: React.FC = () => {
   const { setLoading, setLoadingMessage } = useLoading();
   
-  // Configurar las funciones de loading para el apiClient
+  // Configurar las funciones de loading para el apiClient y fotoService
   useEffect(() => {
     setLoadingFunctions({ setLoading, setLoadingMessage });
+    setFotoLoadingFunctions(setLoadingMessage, () => setLoading(false));
   }, [setLoading, setLoadingMessage]);
 
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.WELCOME);

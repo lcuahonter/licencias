@@ -1,6 +1,16 @@
 import { apiRequest, apiBlobRequest } from './apiClient';
+import { apiRequestWithLoading } from './apiClientWithLoading';
 import { API_ENDPOINTS } from './endpoints';
 import { buildApiUrl } from './urlBuilder';
+
+let showLoadingFn: ((message: string) => void) | null = null;
+let hideLoadingFn: (() => void) | null = null;
+
+// Función para inyectar las funciones del contexto
+export const setFotoLoadingFunctions = (show: (message: string) => void, hide: () => void) => {
+  showLoadingFn = show;
+  hideLoadingFn = hide;
+};
 
 export const fotoService = {
   subirFotoRostro: async (payload: {
@@ -9,15 +19,18 @@ export const fotoService = {
     nombreoriginal: string;
     formato: string;
   }, token?: string) => {
-    return await apiRequest<any>(API_ENDPOINTS.FOTOS_ROSTRO.SUBIR, {
+    return await apiRequestWithLoading<any>(API_ENDPOINTS.FOTOS_ROSTRO.SUBIR, {
       method: 'POST',
       body: payload,
-      token
+      token,
+      loadingMessage: 'Subiendo foto...'
     });
   },
 
   descargarFotoRostro: async (idsolicitud: number, token?: string): Promise<string | null> => {
     try {
+      if (showLoadingFn) showLoadingFn('Descargando foto...');
+      
       const url = buildApiUrl(`${API_ENDPOINTS.FOTOS_ROSTRO.DESCARGAR}/${idsolicitud}`);
 
       const headers: HeadersInit = {
@@ -45,14 +58,17 @@ export const fotoService = {
       return blobUrl;
     } catch (error) {
       return null;
+    } finally {
+      if (hideLoadingFn) hideLoadingFn();
     }
   },
 
   verificarFotoExiste: async (idsolicitud: number, token?: string): Promise<boolean> => {
     try {
-      const response = await apiRequest<any>(`${API_ENDPOINTS.FOTOS_ROSTRO.URL}/${idsolicitud}`, {
+      const response = await apiRequestWithLoading<any>(`${API_ENDPOINTS.FOTOS_ROSTRO.URL}/${idsolicitud}`, {
         method: 'GET',
-        token
+        token,
+        loadingMessage: 'Verificando foto...'
       });
 
       // Si responde exitosamente (200), asumimos que la foto existe
