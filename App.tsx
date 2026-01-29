@@ -2,6 +2,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { AppStep, UserData, LicenseRequest } from './types';
 import './index.css';
+import { LoadingProvider, useLoading } from './src/contexts/LoadingContext';
+import { setLoadingFunctions } from './src/api/apiClientWithLoading';
 
 // Importamos todas las pantallas
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -17,7 +19,14 @@ import PaymentScreen from './screens/PaymentScreen';
 import SuccessScreen from './screens/SuccessScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { setLoading, setLoadingMessage } = useLoading();
+  
+  // Configurar las funciones de loading para el apiClient
+  useEffect(() => {
+    setLoadingFunctions({ setLoading, setLoadingMessage });
+  }, [setLoading, setLoadingMessage]);
+
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.WELCOME);
 
   // --- 1. NUEVO ESTADO: ID DE USUARIO ---
@@ -223,6 +232,14 @@ const App: React.FC = () => {
         </div>
       )}
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <LoadingProvider>
+      <AppContent />
+    </LoadingProvider>
   );
 };
 
