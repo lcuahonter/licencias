@@ -28,7 +28,7 @@ jobs:
       - name: Build Application
         run: npm run build
         env:
-          VITE_API_URL: "https://57.151.37.202"
+          VITE_API_URL: "https://licenciasdurango.com"
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
