@@ -38,12 +38,13 @@ export const solicitudService = {
     });
   },
 
-  updateSolicitud: async (idsolicitud: number, idestatus: number, token?: string) => {
+  updateSolicitud: async (idsolicitud: number, idestatus: number, token?: string, showLoading?: boolean) => {
     return await apiRequestWithLoading<any>(API_ENDPOINTS.SOLICITUDES.UPDATE, {
       method: 'POST',
       body: { idsolicitud, idestatus },
       token,
-      loadingMessage: 'Actualizando solicitud...'
+      loadingMessage: 'Actualizando solicitud...',
+      showLoading
     });
   },
 

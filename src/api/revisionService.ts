@@ -84,12 +84,13 @@ export const revisionService = {
     });
   },
 
-  updateRevision: async (payload: { id: number; comentarios: string; idestatus: number }, token?: string) => {
+  updateRevision: async (payload: { id: number; comentarios: string; idestatus: number }, token?: string, showLoading?: boolean) => {
     return await apiRequestWithLoading<any>(API_ENDPOINTS.REVISION.UPDATE, {
       method: 'POST',
       body: payload,
       token,
-      loadingMessage: 'Actualizando revisión...'
+      loadingMessage: 'Actualizando revisión...',
+      showLoading
     });
   }
 };

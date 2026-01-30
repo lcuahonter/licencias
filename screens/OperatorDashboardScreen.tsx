@@ -3,6 +3,7 @@ import { solicitudService } from '../src/api/solicitudService';
 import { documentService } from '../src/api/documentService';
 import { revisionService } from '../src/api/revisionService';
 import { authService } from '../src/api/authService';
+import { useLoading } from '../src/contexts/LoadingContext';
 
 interface OperatorDashboardScreenProps {
   onLogout: () => void;
@@ -10,6 +11,7 @@ interface OperatorDashboardScreenProps {
 }
 
 const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLogout, token }) => {
+  const { setLoading, setLoadingMessage } = useLoading();
 
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [solicitudesHistorial, setSolicitudesHistorial] = useState<any[]>([]);
@@ -785,16 +787,18 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                   onClick={async () => {
                     if (!selectedSolicitud || !token || !revisionActual) return;
                     setIsEnviandoDictamen(true);
+                    setLoadingMessage('Aprobando dictamen...');
+                    setLoading(true);
                     try {
                       // Actualizar revisión con estado APROBADO (34)
                       await revisionService.updateRevision({
                         id: revisionActual.id,
                         comentarios: 'Completada',
                         idestatus: 34
-                      }, token);
+                      }, token, false);
 
                       // Actualizar solicitud con estado APROBADO (24)
-                      await solicitudService.updateSolicitud(selectedSolicitud.id, 24, token);
+                      await solicitudService.updateSolicitud(selectedSolicitud.id, 24, token, false);
 
                       setAlertMessage('Dictamen aprobado exitosamente');
                       setAlertType('success');
@@ -808,6 +812,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                       setShowAlertModal(true);
                     } finally {
                       setIsEnviandoDictamen(false);
+                      setLoading(false);
                     }
                   }}
                   disabled={isEnviandoDictamen || !documentos.every(doc => documentosRevision.find(dr => dr.iddocumento === doc.id && dr.idestatus === 14))}
@@ -822,16 +827,18 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                   onClick={async () => {
                     if (!selectedSolicitud || !token || !revisionActual) return;
                     setIsEnviandoDictamen(true);
+                    setLoadingMessage('Rechazando dictamen...');
+                    setLoading(true);
                     try {
                       // Actualizar revisión con estado RECHAZADO (35)
                       await revisionService.updateRevision({
                         id: revisionActual.id,
                         comentarios: 'Rechazado',
                         idestatus: 35
-                      }, token);
+                      }, token, false);
 
                       // Actualizar solicitud con estado RECHAZADO (25)
-                      await solicitudService.updateSolicitud(selectedSolicitud.id, 25, token);
+                      await solicitudService.updateSolicitud(selectedSolicitud.id, 25, token, false);
 
                       setAlertMessage('Dictamen rechazado exitosamente');
                       setAlertType('success');
@@ -845,6 +852,7 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
                       setShowAlertModal(true);
                     } finally {
                       setIsEnviandoDictamen(false);
+                      setLoading(false);
                     }
                   }}
                   disabled={isEnviandoDictamen}
