@@ -323,6 +323,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             // Examen teórico REPROBADO
             status = 'rejected';
           } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
+            // Si idestatus es 25, la solicitud fue RECHAZADA por dictamen (no solo documentos)
             status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
 
             try {
@@ -336,8 +337,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                 const rechazados = docs.filter((d: any) => d.idestatus === 15);
 
+                // Guardar documentos rechazados para mostrarlos al usuario
+                // PERO NO cambiar el status a 'rejected' si la solicitud sigue en proceso (idestatus 23)
+                // Solo las solicitudes con idestatus 25 son realmente rechazadas
                 if (rechazados.length > 0) {
-                  status = 'rejected';
                   rejectedDocuments = rechazados.map((d: any) => ({
                     iddocumento: d.iddocumento,
                     tipodocumento: d.tipodocumento || d.documento || 'Documento',
@@ -453,7 +456,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               status = 'rejected';
             } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
               // Para solicitudes rechazadas o en proceso, consultar documentos
-              // IMPORTANTE: NUNCA marcar como completed si idestatus no es 24
+              // IMPORTANTE: Solo marcar como rejected si idestatus es 25 (rechazada por dictamen)
               status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
 
               try {
@@ -471,8 +474,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   const actualizados = docs.filter((d: any) => d.idestatus === 13);
 
                   if (rechazados.length > 0) {
-                    // Si hay documentos rechazados, cambiar status a rejected
-                    status = 'rejected';
+                    // Guardar documentos rechazados para mostrarlos
+                    // NO cambiar status a 'rejected' - mantener como 'paid_pending_docs'
+                    // Solo idestatus 25 indica rechazo definitivo de la solicitud
                     rejectedDocuments = rechazados.map((d: any) => ({
                       iddocumento: d.iddocumento,
                       tipodocumento: d.tipodocumento || d.documento || 'Documento',
@@ -568,6 +572,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const activeProcessList = todasLasSolicitudes.filter(r =>
     r.status !== 'completed' && r.status !== 'replaced' && r.status !== 'archived'
   ) || [];
+  
+  // Separar solicitudes rechazadas para mostrarlas en su propia sección
+  const rejectedRequests = activeProcessList.filter(r => r.status === 'rejected') || [];
+  const processingRequests = activeProcessList.filter(r => r.status !== 'rejected') || [];
 
   const hasLicenseForType = (type: LicenseType) => {
     return activeLicenses.some(r => r.type === type);
@@ -625,8 +633,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   const handleProceedToPay = () => {
-    if (activeProcessList.some(r => r.type === selectedType)) {
-      setAlertMessage(`Ya tienes un trámite de ${selectedType} en curso.`);
+    // Solo verificar solicitudes en proceso (no rechazadas) para permitir crear nueva si hay una rechazada
+    if (processingRequests.some(r => r.type === selectedType)) {
+      setAlertMessage(`Ya tienes un trámite de ${selectedType} en curso. Complétalo antes de iniciar uno nuevo.`);
       setAlertType('warning');
       setShowAlertModal(true);
       return;
@@ -1283,11 +1292,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         <section>
           <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><span className="material-symbols-outlined text-sm">folder_open</span> Solicitudes en Proceso</h3>
-          {activeProcessList.length === 0 ? (
+          {processingRequests.length === 0 ? (
             <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center"><p className="text-xs text-gray-400 font-medium">No hay trámites pendientes.</p></div>
           ) : (
             <div className="space-y-3">
-              {activeProcessList.map((req) => {
+              {processingRequests.map((req) => {
                 const rawData = req.rawData;
                 const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
                 const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
@@ -1295,45 +1304,54 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 const idestatus = rawData?.idestatus;
 
                 // Determinar el texto del estado
-                const statusDisplay = req.status === 'rejected' ? (idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADO') :
-                  req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' :
+                const statusDisplay = req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' :
                     (idestatus === 20 ? 'EN ESPERA QUE REALICES TU EXAMEN' :
                       idestatus === 24 ? 'APROBADO - FALTA EXAMEN' :
                         idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
 
                 return (
-                  <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden ${req.status === 'rejected' ? 'border-red-500' : 'border-yellow-400'}`}>
+                  <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden border-yellow-400`}>
                     <div className="flex justify-between items-start">
                       <div>
-                        <div className="flex items-center gap-2 mb-1"><span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{statusDisplay}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
+                        <div className="flex items-center gap-2 mb-1"><span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-700">{statusDisplay}</span><span className="text-[10px] text-gray-400 font-mono">{req.folio}</span></div>
                         <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
                         <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
                       </div>
-                      <div className={`p-2 rounded-full ${req.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'}`}><span className="material-symbols-outlined">{req.status === 'rejected' ? 'block' : 'hourglass_top'}</span></div>
+                      <div className="p-2 rounded-full bg-yellow-50 text-yellow-600"><span className="material-symbols-outlined">hourglass_top</span></div>
                     </div>
-                    {req.status === 'rejected' && req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
-                      <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
+
+                    {/* Mostrar documentos rechazados si los hay (solicitud en proceso con documentos rechazados) */}
+                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                      <div className="mt-3 bg-orange-50 p-3 rounded-xl text-xs text-orange-800 border border-orange-200">
                         <div className="font-bold flex items-center gap-1 mb-1">
-                          <span className="material-symbols-outlined text-sm">error</span> Acción Requerida:
+                          <span className="material-symbols-outlined text-sm">warning</span> Documentos con Observaciones:
                         </div>
                         <ul className="list-disc list-inside font-bold space-y-1">
                           {req.rejectedDocuments.map(docData => (
                             <li key={docData.iddocumento}>
                               {docData.tipodocumento}
-                              {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                              {docData.comentarios && <span className="font-normal text-orange-600 ml-1">({docData.comentarios})</span>}
                             </li>
                           ))}
                         </ul>
                       </div>
                     )}
-                    {req.status === 'rejected' && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                        <button onClick={() => handleOpenFixModal(req)} className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">upload_file</span> Corregir Documentos</button>
+
+                    {/* Botón de corrección si hay documentos rechazados */}
+                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+                        <button 
+                          onClick={() => handleOpenFixModal(req)} 
+                          className="w-full bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-orange-700 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-sm">upload_file</span> 
+                          Corregir Documentos
+                        </button>
                       </div>
                     )}
 
                     {/* Botón examen teórico - Mostrar cuando idestatus es 20 (Nueva) o 24 (Documentos Aprobados) */}
-                    {req.status !== 'rejected' && req.status !== 'completed' && (idestatus === 20 || idestatus === 24) && (
+                    {(idestatus === 20 || idestatus === 24) && (
                       <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
                         {/* Botón Subir Foto - Solo mostrar si NO tiene foto subida */}
                         {!solicitudesConFoto.has(Number(req.id)) && (
@@ -1354,9 +1372,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           </div>
                         )}
 
-                        {/* Botón Examen */}
+                        {/* Botón Examen - Deshabilitado si no ha subido foto */}
                         <button
                           onClick={() => {
+                            if (!solicitudesConFoto.has(Number(req.id))) {
+                              setAlertMessage('Debes subir tu foto antes de realizar el examen teórico.');
+                              setAlertType('warning');
+                              setShowAlertModal(true);
+                              return;
+                            }
                             setSelectedSolicitudId(Number(req.id));
                             setShowExamModal(true);
                             setExamStarted(false);
@@ -1365,10 +1389,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             setTiemposRespuesta({});
                             setEnviandoExamen(false);
                           }}
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                          disabled={!solicitudesConFoto.has(Number(req.id))}
+                          className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                            solicitudesConFoto.has(Number(req.id))
+                              ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                              : 'bg-gray-300 cursor-not-allowed opacity-60'
+                          }`}
                         >
                           <span className="material-symbols-outlined text-sm">quiz</span>
-                          Realizar Examen Teórico
+                          {solicitudesConFoto.has(Number(req.id)) 
+                            ? 'Realizar Examen Teórico' 
+                            : 'Sube tu foto primero'}
                         </button>
                       </div>
                     )}
@@ -1378,6 +1409,91 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           )}
         </section>
+
+        {/* NUEVA SECCIÓN: SOLICITUDES RECHAZADAS */}
+        {rejectedRequests.length > 0 && (
+          <section>
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">block</span> Solicitudes Rechazadas
+            </h3>
+            <div className="space-y-3">
+              {rejectedRequests.map((req) => {
+                const rawData = req.rawData;
+                const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
+                const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
+                const idestatus = rawData?.idestatus;
+
+                const statusDisplay = idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADA';
+
+                return (
+                  <div key={req.id} className="p-5 rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
+                          <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                        </div>
+                        <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
+                        <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
+                      </div>
+                      <div className="p-2 rounded-full bg-red-50 text-red-500">
+                        <span className="material-symbols-outlined">block</span>
+                      </div>
+                    </div>
+
+                    {/* Mostrar documentos rechazados si los hay */}
+                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                      <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
+                        <div className="font-bold flex items-center gap-1 mb-1">
+                          <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                        </div>
+                        <ul className="list-disc list-inside font-bold space-y-1">
+                          {req.rejectedDocuments.map(docData => (
+                            <li key={docData.iddocumento}>
+                              {docData.tipodocumento}
+                              {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Botón de corrección solo si hay documentos rechazados Y NO es rechazo por dictamen (estatus 25) */}
+                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
+                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
+                        <button 
+                          onClick={() => handleOpenFixModal(req)} 
+                          className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-sm">upload_file</span> 
+                          Corregir Documentos
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Mensaje informativo cuando fue rechazada por dictamen final (idestatus 25) */}
+                    {idestatus === 25 && (
+                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+                        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-start gap-3">
+                            <span className="material-symbols-outlined text-gray-400">info</span>
+                            <div>
+                              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones. 
+                                Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </main>
 
       <button onClick={handleOpenNewReq} className="absolute bottom-6 right-6 w-14 h-14 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-20"><span className="material-symbols-outlined text-3xl">add</span></button>

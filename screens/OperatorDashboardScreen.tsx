@@ -90,11 +90,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
 
       // Obtener solicitudes con idestatus 20 (Nuevas) - TAMBIÉN MOSTRARLAS
       // IMPORTANTE: El backend separa 20 y 22, pero para el operador ambas son "nuevas sin revisar"
-      const respSolicitudes20 = await solicitudService.getByEstatus(20, token);
-      const solicitudesSinAsignar20 = respSolicitudes20?.data?.solicitudesData || [];
-
+    
       // Combinar 20 y 22
-      const solicitudesSinAsignar = [...solicitudesSinAsignar20, ...solicitudesSinAsignar22];
+      const solicitudesSinAsignar = [ ...solicitudesSinAsignar22];
 
       // Obtener revisiones asignadas al operador actual
       let revisionesDelOperador: any[] = [];
@@ -110,7 +108,13 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
 
       // Combinar solicitudes sin asignar con las revisiones asignadas a este operador
       // Para las revisiones, buscar las solicitudes completas
-      const solicitudesConRevision = revisionesDelOperador.map(rev => {
+      // IMPORTANTE: Filtrar solo revisiones de solicitudes en proceso (23), NO completadas (24, 25)
+      const solicitudesConRevision = revisionesDelOperador
+        .filter(rev => {
+          // Solo incluir revisiones de solicitudes que están en estado 23 (Pendiente revisión)
+          return solicitudesEnRevision.some(s => s.id === rev.idsolicitud);
+        })
+        .map(rev => {
         // Buscar la solicitud completa en las solicitudes en revisión (idestatus 23)
         // Opcionalmente buscar en las de 20/22 si por error de sincronía siguen ahí
         const solicitudCompleta = solicitudesEnRevision.find(s => s.id === rev.idsolicitud)
@@ -160,20 +164,17 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
       const solicitudesFinales = [...solicitudesSinRevision, ...solicitudesConRevision];
       setSolicitudes(solicitudesFinales);
 
-      // Cargar historial - Solicitudes completadas por este operador (estados 24, 26, 27)
+      // Cargar historial - Solicitudes completadas por este operador (estados 24 y 25)
       if (revisorId) {
         try {
           const respCompletas24 = await solicitudService.getByEstatus(24, token);
           const solicitudes24 = respCompletas24?.data?.solicitudesData || [];
 
-          const respCompletas26 = await solicitudService.getByEstatus(26, token);
-          const solicitudes26 = respCompletas26?.data?.solicitudesData || [];
-
-          const respCompletas27 = await solicitudService.getByEstatus(27, token);
-          const solicitudes27 = respCompletas27?.data?.solicitudesData || [];
-
+          const respCompletas25 = await solicitudService.getByEstatus(25, token);
+          const solicitudes25 = respCompletas25?.data?.solicitudesData || [];
+         
           // Combinar y filtrar solo las que tienen revisión de este operador
-          const todasCompletas = [...solicitudes24, ...solicitudes26, ...solicitudes27];
+          const todasCompletas = [...solicitudes24, ...solicitudes25];
           const completasDelOperador = todasCompletas.filter(sol => {
             return revisionesDelOperador.some(rev => rev.idsolicitud === sol.id);
           });
@@ -566,8 +567,8 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
           ) : (
             <div className="grid gap-3">
               {solicitudesHistorial.map(sol => {
-                const statusBadge = sol.idestatus === 26 ? 'APROBADA' : sol.idestatus === 27 ? 'REPROBADA' : 'COMPLETADA';
-                const statusColor = sol.idestatus === 26 ? 'bg-green-100 text-green-700' : sol.idestatus === 27 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700';
+                const statusBadge = sol.idestatus === 24 ? 'APROBADA' : sol.idestatus === 25 ? 'RECHAZADA' : 'COMPLETADA';
+                const statusColor = sol.idestatus === 24 ? 'bg-green-100 text-green-700' : sol.idestatus === 25 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700';
 
                 return (
                   <div key={sol.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
