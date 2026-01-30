@@ -21,7 +21,7 @@ export const LoadingProvider: React.FC<{ children: ReactNode }> = ({ children })
     <LoadingContext.Provider value={{ isLoading, setLoading, loadingMessage, setLoadingMessage }}>
       {children}
       {isLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-lg p-6 shadow-xl flex flex-col items-center space-y-4 max-w-xs mx-4">
             {/* Spinner */}
             <div className="relative w-16 h-16">
