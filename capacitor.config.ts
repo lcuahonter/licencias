@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.example.app',
-  appName: 'licencia-digital-mx',
+  appName: 'Licencias Durango',
   webDir: 'dist',
   server: {
     androidScheme: 'https' // Recomendado para evitar errores de red en Android
