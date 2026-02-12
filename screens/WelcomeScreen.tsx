@@ -116,11 +116,11 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-surface-dark relative">
       {/* Encabezado con Logo del Gobierno de Durango */}
-      <div className="bg-white px-6 py-4 shadow-md flex items-center gap-4 border-b border-gray-200">
+      <div className="bg-white px-6 pt-10 pb-4 md:py-4 shadow-md flex items-center gap-4 border-b border-gray-200">
         <img
           src="/logo-durango.png"
           alt="Logo Gobierno de Durango"
-          className="h-16 w-auto object-contain flex-shrink-0"
+          className="h-10 md:h-16 w-auto object-contain flex-shrink-0"
           onError={(e) => {
             e.currentTarget.style.display = 'none';
           }}
