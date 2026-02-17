@@ -318,13 +318,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                   justify-content: ${includeHeaderText ? 'space-between' : 'center'};
                   align-items: center;
                   border-bottom: 3px solid #1565C0;
-                  padding-bottom: 20px;
-                  margin-bottom: 40px;
+                  padding-bottom: 15px;
+                  margin-bottom: 30px;
                   position: relative;
                   z-index: 1;
               }
-              #pdf-root .logo-img { height: 60px; width: auto; object-fit: contain; }
-              
+              #pdf-root .logo-img { height: 45px; width: auto; object-fit: contain; }
               #pdf-root .header-text { text-align: right; }
               #pdf-root .header-title-main { 
                   font-size: 22px; 
@@ -382,7 +381,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                 <img src="/logo-durango.png" class="logo-img" alt="Logo" />
                 ${includeHeaderText ? `
                 <div class="header-text">
-                    <h1 class="header-title-main">Licencias Durango</h1>
+                    <img src="/Licencias-Durango-2-v.horizontal.png" style="height: 35px; width: auto; object-fit: contain;" alt="Licencias Durango Logo" />
                 </div>` : ''}
             </div>
 

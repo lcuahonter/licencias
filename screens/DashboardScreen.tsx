@@ -4,7 +4,7 @@ import DocumentUploadScreen from './DocumentUploadScreen';
 import DigitalLicenseModal from './DigitalLicenseModal';
 import BiometricScreen from './BiometricScreen';
 import durangoLogo from '../src/recursos/durangogob.svg';
-import logoDgo from '../src/recursos/logoDgo.jpg';
+import logoDgo from '../src/recursos/LogoD.png';
 
 interface DashboardScreenProps {
   userData: UserData;
@@ -572,7 +572,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const activeProcessList = todasLasSolicitudes.filter(r =>
     r.status !== 'completed' && r.status !== 'replaced' && r.status !== 'archived'
   ) || [];
-  
+
   // Separar solicitudes rechazadas para mostrarlas en su propia sección
   const rejectedRequests = activeProcessList.filter(r => r.status === 'rejected') || [];
   const processingRequests = activeProcessList.filter(r => r.status !== 'rejected') || [];
@@ -1229,7 +1229,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     <div className="flex flex-col h-full bg-gray-50 dark:bg-background-dark relative">
       <header className="px-6 pt-10 pb-6 flex items-center justify-between bg-white dark:bg-surface-dark shadow-sm sticky top-0 z-10">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-white overflow-hidden border-2 border-gray-200 shadow-sm flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center">
             <img src={logoDgo} className="w-10 h-10 object-contain" alt="Logo Durango" />
           </div>
           <div><h1 className="text-lg font-black text-gray-900 dark:text-white">Mis Licencias</h1><p className="text-xs text-gray-500">Licencias Digitales Durango</p></div>
@@ -1305,9 +1305,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                 // Determinar el texto del estado
                 const statusDisplay = req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' :
-                    (idestatus === 20 ? 'EN ESPERA QUE REALICES TU EXAMEN' :
-                      idestatus === 24 ? 'APROBADO - FALTA EXAMEN' :
-                        idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
+                  (idestatus === 20 ? 'EN ESPERA QUE REALICES TU EXAMEN' :
+                    idestatus === 24 ? 'APROBADO - FALTA EXAMEN' :
+                      idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
 
                 return (
                   <div key={req.id} className={`p-5 rounded-2xl border-l-4 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden border-yellow-400`}>
@@ -1340,11 +1340,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {/* Botón de corrección si hay documentos rechazados */}
                     {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
                       <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <button 
-                          onClick={() => handleOpenFixModal(req)} 
+                        <button
+                          onClick={() => handleOpenFixModal(req)}
                           className="w-full bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-orange-700 transition-colors"
                         >
-                          <span className="material-symbols-outlined text-sm">upload_file</span> 
+                          <span className="material-symbols-outlined text-sm">upload_file</span>
                           Corregir Documentos
                         </button>
                       </div>
@@ -1390,15 +1390,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             setEnviandoExamen(false);
                           }}
                           disabled={!solicitudesConFoto.has(Number(req.id))}
-                          className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                            solicitudesConFoto.has(Number(req.id))
-                              ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
-                              : 'bg-gray-300 cursor-not-allowed opacity-60'
-                          }`}
+                          className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${solicitudesConFoto.has(Number(req.id))
+                            ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                            : 'bg-gray-300 cursor-not-allowed opacity-60'
+                            }`}
                         >
                           <span className="material-symbols-outlined text-sm">quiz</span>
-                          {solicitudesConFoto.has(Number(req.id)) 
-                            ? 'Realizar Examen Teórico' 
+                          {solicitudesConFoto.has(Number(req.id))
+                            ? 'Realizar Examen Teórico'
                             : 'Sube tu foto primero'}
                         </button>
                       </div>
@@ -1461,11 +1460,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {/* Botón de corrección solo si hay documentos rechazados Y NO es rechazo por dictamen (estatus 25) */}
                     {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
                       <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                        <button 
-                          onClick={() => handleOpenFixModal(req)} 
+                        <button
+                          onClick={() => handleOpenFixModal(req)}
                           className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
                         >
-                          <span className="material-symbols-outlined text-sm">upload_file</span> 
+                          <span className="material-symbols-outlined text-sm">upload_file</span>
                           Corregir Documentos
                         </button>
                       </div>
@@ -1480,7 +1479,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             <div>
                               <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
                               <p className="text-xs text-gray-600 dark:text-gray-400">
-                                Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones. 
+                                Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
                                 Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
                               </p>
                             </div>
