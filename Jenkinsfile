@@ -8,9 +8,9 @@ pipeline {
     
     // Variables de entorno
     environment {
-        AZURE_SUBSCRIPTION_ID = credentials('azure-subscription-id')
-        AZURE_RESOURCE_GROUP = 'licencias-rg'
-        AZURE_STATIC_WEB_APP = 'licencias-durango'
+        // AZURE_SUBSCRIPTION_ID = credentials('azure-subscription-id')
+        // AZURE_RESOURCE_GROUP = 'licencias-rg'
+        // AZURE_STATIC_WEB_APP = 'licencias-durango'
         NODE_ENV = 'production'
     }
     
