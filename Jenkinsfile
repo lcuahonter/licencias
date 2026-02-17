@@ -53,7 +53,7 @@ pipeline {
         stage('🏗️ Build') {
             steps {
                 echo '🏗️ Construyendo aplicación...'
-                sh 'npm run build'
+                sh 'npx vite build'
             }
         }
         
