@@ -38,7 +38,7 @@ pipeline {
         stage('📦 Install Dependencies') {
             steps {
                 echo '📦 Instalando dependencias...'
-                sh 'npm ci' // más rápido y determinista que npm install
+                sh 'npm ci'
             }
         }
         
@@ -53,7 +53,7 @@ pipeline {
         stage('🏗️ Build') {
             steps {
                 echo '🏗️ Construyendo aplicación...'
-                sh './node_modules/.bin/vite build'
+                sh 'npm run build'
             }
         }
         
