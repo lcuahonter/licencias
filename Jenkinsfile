@@ -38,22 +38,28 @@ pipeline {
         stage('📦 Install Dependencies') {
             steps {
                 echo '📦 Instalando dependencias...'
-                sh 'npm ci' // más rápido y determinista que npm install
+                nodejs('NodeJS-18') {
+                    sh 'npm ci' // más rápido y determinista que npm install
+                }
             }
         }
         
         stage('🔎 Lint & Type Check') {
             steps {
                 echo '🔍 Verificando calidad de código...'
-                sh 'npm run lint || true' // Si tienes lint configurado
-                // sh 'npm run type-check || true' // Si tienes type-check
+                nodejs('NodeJS-18') {
+                    sh 'npm run lint || true' // Si tienes lint configurado
+                    // sh 'npm run type-check || true' // Si tienes type-check
+                }
             }
         }
         
         stage('🏗️ Build') {
             steps {
                 echo '🏗️ Construyendo aplicación...'
-                sh 'npm run build'
+                nodejs('NodeJS-18') {
+                    sh 'npm run build'
+                }
             }
         }
         
