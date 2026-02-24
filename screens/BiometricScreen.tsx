@@ -1,8 +1,6 @@
 ﻿import React, { useState } from 'react';
 import { vdidService } from '../src/api/vdidService';
-import VdidCaptureModal from '../components/src/VdidCaptureModal';
-
-interface BiometricScreenProps {
+import VdidCaptureModal from '../components/src/VdidCaptureModal';interface BiometricScreenProps {
   onBack: () => void;
   onComplete: (photoUrl: string) => void;
   token?: string;

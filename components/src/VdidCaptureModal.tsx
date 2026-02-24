@@ -32,32 +32,28 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
     title = 'Verificación de Identidad',
     description = 'Completa el proceso en la ventana y luego presiona "Listo".',
 }) => {
-    // true cuando Suma México notifica que el proceso terminó (postMessage)
     const [processFinished, setProcessFinished] = useState(false);
+    const [vdidMessages, setVdidMessages] = useState<{ origin: string; data: any; ts: string }[]>([]);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
-    // Escuchar mensajes del iframe de capturas.sumamexico.com
+    // Capturar y mostrar en pantalla todos los mensajes del iframe
     useEffect(() => {
         if (!isOpen) return;
-        setProcessFinished(false); // reset al abrir
+        setProcessFinished(false);
+        setVdidMessages([]);
 
         const handleMessage = (event: MessageEvent) => {
-            // Aceptar solo mensajes del dominio de Suma México
             if (!event.origin.includes('sumamexico.com') && !event.origin.includes('veridocid')) return;
-            // Cualquier mensaje del iframe se interpreta como finalización
-            setProcessFinished(true);
+            console.log('[VDID postMessage]', event.origin, event.data);
+            setVdidMessages(prev => [
+                ...prev,
+                { origin: event.origin, data: event.data, ts: new Date().toLocaleTimeString() },
+            ]);
         };
 
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
     }, [isOpen]);
-
-    // Auto-continuar 1.5 s después de recibir el mensaje de finalización
-    useEffect(() => {
-        if (!processFinished) return;
-        const timer = setTimeout(() => onCompleted(), 1500);
-        return () => clearTimeout(timer);
-    }, [processFinished, onCompleted]);
 
     if (!isOpen) return null;
 
@@ -109,16 +105,33 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
                 )}
             </div>
 
+            {/* ── DEBUG: mensajes del iframe ─────────────────────── */}
+            {vdidMessages.length > 0 && (
+                <div className="shrink-0 bg-black border-t border-yellow-500/30 px-3 py-2 max-h-40 overflow-y-auto">
+                    <p className="text-yellow-400 text-[10px] font-bold mb-1 uppercase tracking-wider">📨 postMessage del iframe ({vdidMessages.length})</p>
+                    {vdidMessages.map((m, i) => (
+                        <div key={i} className="mb-2 border border-white/10 rounded p-2">
+                            <p className="text-white/40 text-[9px] mb-1">{m.ts} · {m.origin}</p>
+                            <pre className="text-green-300 text-[10px] whitespace-pre-wrap break-all">
+                                {typeof m.data === 'string' ? m.data : JSON.stringify(m.data, null, 2)}
+                            </pre>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {/* ── FOOTER ───────────────────────────────────────────── */}
-            <div className="shrink-0 bg-gray-900 border-t border-white/10 px-4 py-3 flex items-center justify-center safe-bottom">
-                {processFinished ? (
-                    <div className="flex items-center gap-2">
-                        <span className="animate-spin h-4 w-4 border-2 border-green-400 border-t-transparent rounded-full" />
-                        <span className="text-green-400 text-xs font-medium">Cerrando...</span>
-                    </div>
-                ) : (
-                    <p className="text-white/30 text-[11px]">Sigue las instrucciones en pantalla</p>
-                )}
+            <div className="shrink-0 bg-gray-900 border-t border-white/10 px-4 py-4 flex flex-col gap-2 safe-bottom">
+                <button
+                    onClick={onCompleted}
+                    className="w-full h-13 bg-green-600 hover:bg-green-500 active:scale-95 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg py-3"
+                >
+                    <span className="material-symbols-outlined">check_circle</span>
+                    Ya terminé todos los pasos
+                </button>
+                <p className="text-white/30 text-[10px] text-center">
+                    Completa el documento <span className="text-white/50 font-bold">y la selfie</span> antes de presionar este botón
+                </p>
             </div>
         </div>
     );
