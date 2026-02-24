@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
+import { vdidService } from '../src/api/vdidService';
+import VdidCaptureModal from '../components/src/VdidCaptureModal';
 
 // ============================================================================
 // LOGICA DE ENVIO DE VIDEO (LIVENESS)
@@ -27,9 +29,67 @@ const sendLivenessVideo = async (videoBlob: Blob) => {
 interface BiometricScreenProps {
   onBack: () => void;
   onComplete: (photoUrl: string) => void;
+  /** Token de sesión para crear verificaciones VDID autenticadas (opcional). */
+  token?: string;
+  /** UUID de verificación VDID completada en el paso de documentos. */
+  vdidUuid?: string;
 }
 
-const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete }) => {
+const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete, token, vdidUuid }) => {
+
+  // ── Si la identidad ya fue verificada por VDID en el paso anterior, mostramos
+  //    pantalla de confirmación directamente ────────────────────────────────
+  if (vdidUuid) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-black h-[100dvh] w-screen overflow-hidden items-center justify-center px-8">
+        {/* Header */}
+        <div className="absolute top-0 left-0 right-0 h-16 px-6 flex justify-between items-center safe-top">
+          <button
+            onClick={onBack}
+            className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+          >
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <div className="text-right">
+            <h2 className="text-white font-bold text-base">Prueba de Vida</h2>
+            <p className="text-white/60 text-xs">Verificación Biométrica</p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex flex-col items-center text-center gap-6">
+          <div className="w-28 h-28 rounded-full bg-green-500/20 border-4 border-green-500 flex items-center justify-center">
+            <span className="material-symbols-outlined text-6xl text-green-400">verified_user</span>
+          </div>
+
+          <div>
+            <h2 className="text-white font-bold text-2xl mb-2">Identidad Verificada</h2>
+            <p className="text-white/70 text-sm leading-relaxed max-w-xs">
+              Tu documento y prueba de vida fueron validados exitosamente por Suma México.
+            </p>
+            <p className="text-white/30 text-[10px] font-mono mt-3 break-all">UUID: {vdidUuid}</p>
+          </div>
+
+          <div className="w-full flex flex-col gap-3 mt-4">
+            <button
+              onClick={() => onComplete('')}
+              className="w-full h-14 bg-green-600 hover:bg-green-500 active:scale-95 text-white rounded-2xl font-bold text-lg shadow-xl transition-all flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined">check_circle</span>
+              Continuar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Sin VDID: flujo biométrico normal con cámara ──────────────────────
+  const [showVdidModal, setShowVdidModal]   = useState(false);
+  const [vdidUrl, setVdidUrl]               = useState('');
+  const [vdidLoading, setVdidLoading]       = useState(false);
+  const [vdidError, setVdidError]           = useState<string | null>(null);
+
   const [isScanning, setIsScanning] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -168,6 +228,27 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
       setCameraError("Acceso denegado o error de camara.");
   }, []);
 
+  // ── VDID: lanzar verificación completa (documentos + prueba de vida) ──
+  const handleVdidLaunch = async () => {
+      if (!vdidService.isConfigured()) {
+          setVdidError('VITE_VDID_PUBLIC_KEY no está configurada en las variables de entorno.');
+          return;
+      }
+      setVdidError(null);
+      setVdidLoading(true);
+      try {
+          // Crear UUID para el flujo completo (documentos + liveness)
+          const uuid = await vdidService.createVerification(token);
+          const url  = vdidService.getFullVerificationUrl(uuid);
+          setVdidUrl(url);
+          setShowVdidModal(true);
+      } catch (err: any) {
+          setVdidError(err?.message || 'No se pudo iniciar VDID. Revisa tu VITE_VDID_PRIVATE_KEY.');
+      } finally {
+          setVdidLoading(false);
+      }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black h-[100dvh] w-screen overflow-hidden">
       
@@ -293,6 +374,27 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
               {isScanning ? "Mantente quieto y mira a la cámara" : isValidating ? "Procesando..." : "Presiona el botón para capturar tu foto"}
           </p>
 
+          {/* ── Opción VDID ───────────────────────────────── */}
+          {!isScanning && !isValidating && (
+              <div className="w-full max-w-xs mt-4">
+                  <div className="border-t border-white/10 pt-4">
+                      <p className="text-gray-500 text-[10px] text-center mb-2 uppercase tracking-wider">O verifica con</p>
+                      <button
+                          onClick={handleVdidLaunch}
+                          disabled={vdidLoading}
+                          className="w-full h-10 bg-blue-700/80 hover:bg-blue-600 active:scale-95 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
+                      >
+                          {vdidLoading
+                              ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> Iniciando...</>
+                              : <><span className="material-symbols-outlined text-base">verified_user</span> Prueba de Vida con VDID</>}
+                      </button>
+                      {vdidError && (
+                          <p className="text-red-400 text-[10px] text-center mt-1">{vdidError}</p>
+                      )}
+                  </div>
+              </div>
+          )}
+
       </div>
 
       {/* VISTA PREVIA DE FOTO CAPTURADA */}
@@ -341,6 +443,20 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete })
           </div>
         </div>
       )}
+
+      {/* ── MODAL VDID ───────────────────────────────────────────── */}
+      <VdidCaptureModal
+          isOpen={showVdidModal}
+          onClose={() => setShowVdidModal(false)}
+          onCompleted={() => {
+              setShowVdidModal(false);
+              // Avanzamos al paso siguiente; la foto real quedó en VDID
+              onComplete('');
+          }}
+          url={vdidUrl}
+          title="Prueba de Vida"
+          description="Sigue las instrucciones para capturar tu documento y verificar tu identidad."
+      />
 
       {/* MODAL GENÉRICO DE ALERTAS */}
       {showAlertModal && (

@@ -29,6 +29,7 @@
     "react-dom": "^19.2.3",
     "react-webcam": "^7.2.0",
     "typescript": "~5.8.2",
+    "vdid-sdk-web": "^2.1.4",
     "vite": "^6.2.0",
     "xlsx": "^0.18.5"
   },
