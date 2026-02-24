@@ -33,22 +33,19 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
     description = 'Completa el proceso en la ventana y luego presiona "Listo".',
 }) => {
     const [processFinished, setProcessFinished] = useState(false);
-    const [vdidMessages, setVdidMessages] = useState<{ origin: string; data: any; ts: string }[]>([]);
+    const [lastMessage, setLastMessage] = useState<{ origin: string; data: any; ts: string } | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
-    // Capturar y mostrar en pantalla todos los mensajes del iframe
+    // Capturar y mostrar en pantalla el último mensaje del iframe
     useEffect(() => {
         if (!isOpen) return;
         setProcessFinished(false);
-        setVdidMessages([]);
+        setLastMessage(null);
 
         const handleMessage = (event: MessageEvent) => {
             if (!event.origin.includes('sumamexico.com') && !event.origin.includes('veridocid')) return;
             console.log('[VDID postMessage]', event.origin, event.data);
-            setVdidMessages(prev => [
-                ...prev,
-                { origin: event.origin, data: event.data, ts: new Date().toLocaleTimeString() },
-            ]);
+            setLastMessage({ origin: event.origin, data: event.data, ts: new Date().toLocaleTimeString() });
         };
 
         window.addEventListener('message', handleMessage);
@@ -105,18 +102,18 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
                 )}
             </div>
 
-            {/* ── DEBUG: mensajes del iframe ─────────────────────── */}
-            {vdidMessages.length > 0 && (
-                <div className="shrink-0 bg-black border-t border-yellow-500/30 px-3 py-2 max-h-40 overflow-y-auto">
-                    <p className="text-yellow-400 text-[10px] font-bold mb-1 uppercase tracking-wider">📨 postMessage del iframe ({vdidMessages.length})</p>
-                    {vdidMessages.map((m, i) => (
-                        <div key={i} className="mb-2 border border-white/10 rounded p-2">
-                            <p className="text-white/40 text-[9px] mb-1">{m.ts} · {m.origin}</p>
-                            <pre className="text-green-300 text-[10px] whitespace-pre-wrap break-all">
-                                {typeof m.data === 'string' ? m.data : JSON.stringify(m.data, null, 2)}
-                            </pre>
-                        </div>
-                    ))}
+            {/* ── DEBUG: último mensaje del iframe ─────────────────────── */}
+            {lastMessage && (
+                <div className="shrink-0 bg-black border-t border-yellow-500/40 px-3 py-2">
+                    <p className="text-yellow-400 text-[10px] font-bold mb-1 uppercase tracking-wider">
+                        📨 Último mensaje — {lastMessage.ts}
+                    </p>
+                    <pre className="text-green-300 text-[11px] whitespace-pre-wrap break-all leading-relaxed">
+                        {typeof lastMessage.data === 'string'
+                            ? lastMessage.data
+                            : JSON.stringify(lastMessage.data, null, 2)}
+                    </pre>
+                    <p className="text-white/30 text-[9px] mt-1">{lastMessage.origin}</p>
                 </div>
             )}
 
@@ -124,7 +121,7 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
             <div className="shrink-0 bg-gray-900 border-t border-white/10 px-4 py-4 flex flex-col gap-2 safe-bottom">
                 <button
                     onClick={onCompleted}
-                    className="w-full h-13 bg-green-600 hover:bg-green-500 active:scale-95 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg py-3"
+                    className="w-full bg-green-600 hover:bg-green-500 active:scale-95 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg py-4"
                 >
                     <span className="material-symbols-outlined">check_circle</span>
                     Ya terminé todos los pasos

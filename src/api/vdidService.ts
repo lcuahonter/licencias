@@ -3,22 +3,24 @@
  *
  * Variables de entorno:
  *  - VITE_VDID_PUBLIC_KEY     → Clave pública del SDK (pk_test_...)
- *  - VITE_VDID_CLIENT_ID      → client_id  asignado por Suma México (OAuth)
- *  - VITE_VDID_CLIENT_SECRET  → client_secret asignado por Suma México (OAuth)
+ *  - VITE_VDID_API_KEY        → x-api-key para /v3/createVerification (puede ser
+ *                               la misma pk_test o una clave separada del panel Suma México)
+ *  - VITE_VDID_CLIENT_ID      → client_id OAuth (opcional, respaldo)
+ *  - VITE_VDID_CLIENT_SECRET  → client_secret OAuth (opcional, respaldo)
  *
- * Flujo completo (cuando CLIENT_ID y CLIENT_SECRET están configurados):
- *  1. login()          → POST /api/auth/token → JWT Bearer
- *  2. createVerification(jwt, ref) → POST /api/id/v3/verify → UUID real
- *  3. sdk.getUrl({ uuid }) → URL con flujo completo rastreado
+ * Flujo principal:
+ *  POST /api/id/v3/createVerification  →  UUID  →  sdk.getUrl({ uuid })
+ *  El flujo completo incluye: documento + selfie + liveness
  *
- * Flujo de respaldo (solo con PUBLIC_KEY):
- *  getUrlToOnlyCaptureImages() → captura sin UUID, no queda registrada.
+ * Flujo de respaldo (si falla todo):
+ *  getUrlToOnlyCaptureImages() → solo captura de documento, sin selfie
  *
  * SDK docs: https://www.npmjs.com/package/vdid-sdk-web
  */
 import { WebVerification } from 'vdid-sdk-web';
 
 const VDID_PUBLIC_KEY    = import.meta.env.VITE_VDID_PUBLIC_KEY    as string | undefined;
+const VDID_API_KEY       = import.meta.env.VITE_VDID_API_KEY       as string | undefined;
 const VDID_CLIENT_ID     = import.meta.env.VITE_VDID_CLIENT_ID     as string | undefined;
 const VDID_CLIENT_SECRET = import.meta.env.VITE_VDID_CLIENT_SECRET as string | undefined;
 const VDID_REST_BASE     = 'https://veridocid.azure-api.net/api';
@@ -85,52 +87,94 @@ export const vdidService = {
      * Flujo principal: hace login OAuth, crea la verificación en Suma México
      * y devuelve la URL del flujo completo con UUID real rastreado.
      *
-     * Usa POST /api/id/v2/createVerification → devuelve UUID para el SDK.
-     * Si el endpoint no está habilitado en el plan actual, cae automáticamente
-     * al flujo de respaldo (getUrlToOnlyCaptureImages).
+     * Intenta en orden:
+     *  1. POST /v3/createVerification con x-api-key (VDID_API_KEY o PUBLIC_KEY)
+     *     → incluye selfie + liveness
+     *  2. POST /v2/createVerification con Bearer JWT (OAuth)
+     *  3. Fallback: getUrlToOnlyCaptureImages (solo documento, sin selfie)
      *
      * @param userRef  Referencia interna (ej. "licencias-dgo-123")
      */
     async startTrackedVerification(userRef?: string): Promise<{ uuid: string | null; url: string }> {
         const sdk = getSdk();
+        const ref = userRef ?? `licencias-dgo-${Date.now()}`;
 
+        // ── Intento 1: /v3/createVerification con x-api-key ────────────────
+        //    Usa VITE_VDID_API_KEY si está definida, si no prueba con PUBLIC_KEY
+        const apiKey = VDID_API_KEY || VDID_PUBLIC_KEY;
+        if (apiKey) {
+            try {
+                const v3Res = await fetch(`${VDID_REST_BASE}/id/v3/createVerification`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key':    apiKey,
+                    },
+                    body: JSON.stringify({
+                        id: ref,
+                        options: {
+                            checks: {
+                                selfie:      true,
+                                verifyIp:    false,
+                                onlyVerifyID: false,
+                            },
+                            redirect_url: 'https://verificaciones.sumamexico.com/',
+                            language_sdk: 'es',
+                        },
+                    }),
+                });
+
+                if (v3Res.ok) {
+                    const raw  = await v3Res.text();
+                    const uuid = raw.replace(/^"|"$/g, '').trim();
+                    if (uuid) {
+                        console.log('[VDID] v3/createVerification OK, UUID:', uuid);
+                        const url = sdk.getUrl({ uuid });
+                        return { uuid, url };
+                    }
+                } else {
+                    const errText = await v3Res.text().catch(() => '');
+                    console.warn(`[VDID] v3/createVerification falló (${v3Res.status}):`, errText);
+                }
+            } catch (e) {
+                console.warn('[VDID] v3/createVerification error de red:', e);
+            }
+        }
+
+        // ── Intento 2: /v2/createVerification con Bearer JWT (OAuth) ────────
         try {
-            // 1. Obtener JWT
             const jwt = await getAuthToken();
-
-            // 2. Crear verificación → obtener UUID real
-            //    Endpoint correcto para el SDK: /id/v2/createVerification
-            const ref = userRef ?? `licencias-dgo-${Date.now()}`;
-            const verifyRes = await fetch(`${VDID_REST_BASE}/id/v2/createVerification`, {
+            const v2Res = await fetch(`${VDID_REST_BASE}/id/v2/createVerification`, {
                 method: 'POST',
                 headers: {
                     'Content-Type':  'application/json',
                     'Authorization': `Bearer ${jwt}`,
                 },
                 body: JSON.stringify({
-                    id:      1,
+                    id:      ref,
                     options: { selfie: true, verifyIp: false },
                 }),
             });
 
-            if (!verifyRes.ok) {
-                // 401 = cuenta sin acceso al endpoint → usar respaldo
-                throw new Error(`HTTP ${verifyRes.status}`);
+            if (v2Res.ok) {
+                const raw  = await v2Res.text();
+                const uuid = raw.replace(/^"|"$/g, '').trim();
+                if (uuid) {
+                    console.log('[VDID] v2/createVerification OK, UUID:', uuid);
+                    const url = sdk.getUrl({ uuid });
+                    return { uuid, url };
+                }
+            } else {
+                console.warn(`[VDID] v2/createVerification falló (${v2Res.status})`);
             }
-
-            const raw  = await verifyRes.text();
-            const uuid = raw.replace(/^"|"$/g, '').trim();
-            if (!uuid) throw new Error('UUID vacío');
-
-            // 3. Generar URL del flujo completo con el UUID real
-            const url = sdk.getUrl({ uuid, initAt: 'select-document' });
-            return { uuid, url };
-
-        } catch {
-            // Fallback: captura sin UUID (funciona siempre con solo la public key)
-            const url = sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
-            return { uuid: null, url };
+        } catch (e) {
+            console.warn('[VDID] v2/createVerification error:', e);
         }
+
+        // ── Fallback: solo captura de documento (sin selfie) ─────────────────
+        console.warn('[VDID] Usando fallback onlyCapture — sin selfie');
+        const url = sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
+        return { uuid: null, url };
     },
 
     /**
