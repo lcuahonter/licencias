@@ -104,11 +104,23 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
 
             {/* ── DEBUG: último mensaje del iframe ─────────────────────── */}
             {lastMessage && (
-                <div className="shrink-0 bg-black border-t border-yellow-500/40 px-3 py-2">
-                    <p className="text-yellow-400 text-[10px] font-bold mb-1 uppercase tracking-wider">
-                        📨 Último mensaje — {lastMessage.ts}
-                    </p>
-                    <pre className="text-green-300 text-[11px] whitespace-pre-wrap break-all leading-relaxed">
+                <div className="shrink-0 bg-gray-950 border-t-2 border-yellow-400 px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                        <p className="text-yellow-400 text-xs font-bold uppercase tracking-wider">
+                            📨 Mensaje del iframe — {lastMessage.ts}
+                        </p>
+                        <button
+                            onClick={() => navigator.clipboard.writeText(
+                                typeof lastMessage.data === 'string'
+                                    ? lastMessage.data
+                                    : JSON.stringify(lastMessage.data, null, 2)
+                            )}
+                            className="text-[10px] bg-yellow-400/20 hover:bg-yellow-400/40 text-yellow-300 px-2 py-1 rounded"
+                        >
+                            Copiar
+                        </button>
+                    </div>
+                    <pre className="text-green-300 text-xs whitespace-pre-wrap break-all leading-relaxed bg-black/60 rounded-lg p-3 max-h-48 overflow-y-auto">
                         {typeof lastMessage.data === 'string'
                             ? lastMessage.data
                             : JSON.stringify(lastMessage.data, null, 2)}
