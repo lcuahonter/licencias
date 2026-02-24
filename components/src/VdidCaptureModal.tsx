@@ -13,7 +13,7 @@
  *  - title         Título que se muestra en la barra superior.
  *  - description   Texto descriptivo opcional.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface VdidCaptureModalProps {
     isOpen: boolean;
@@ -32,22 +32,14 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
     title = 'Verificación de Identidad',
     description = 'Completa el proceso en la ventana y luego presiona "Listo".',
 }) => {
-    const [processFinished, setProcessFinished] = useState(false);
-    const [lastMessage, setLastMessage] = useState<{ origin: string; data: any; ts: string } | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
-    // Capturar y mostrar en pantalla el último mensaje del iframe
     useEffect(() => {
         if (!isOpen) return;
-        setProcessFinished(false);
-        setLastMessage(null);
-
         const handleMessage = (event: MessageEvent) => {
             if (!event.origin.includes('sumamexico.com') && !event.origin.includes('veridocid')) return;
             console.log('[VDID postMessage]', event.origin, event.data);
-            setLastMessage({ origin: event.origin, data: event.data, ts: new Date().toLocaleTimeString() });
         };
-
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
     }, [isOpen]);
@@ -101,33 +93,6 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
                     </div>
                 )}
             </div>
-
-            {/* ── DEBUG: último mensaje del iframe ─────────────────────── */}
-            {lastMessage && (
-                <div className="shrink-0 bg-gray-950 border-t-2 border-yellow-400 px-4 py-3">
-                    <div className="flex items-center justify-between mb-2">
-                        <p className="text-yellow-400 text-xs font-bold uppercase tracking-wider">
-                            📨 Mensaje del iframe — {lastMessage.ts}
-                        </p>
-                        <button
-                            onClick={() => navigator.clipboard.writeText(
-                                typeof lastMessage.data === 'string'
-                                    ? lastMessage.data
-                                    : JSON.stringify(lastMessage.data, null, 2)
-                            )}
-                            className="text-[10px] bg-yellow-400/20 hover:bg-yellow-400/40 text-yellow-300 px-2 py-1 rounded"
-                        >
-                            Copiar
-                        </button>
-                    </div>
-                    <pre className="text-green-300 text-xs whitespace-pre-wrap break-all leading-relaxed bg-black/60 rounded-lg p-3 max-h-48 overflow-y-auto">
-                        {typeof lastMessage.data === 'string'
-                            ? lastMessage.data
-                            : JSON.stringify(lastMessage.data, null, 2)}
-                    </pre>
-                    <p className="text-white/30 text-[9px] mt-1">{lastMessage.origin}</p>
-                </div>
-            )}
 
             {/* ── FOOTER ───────────────────────────────────────────── */}
             <div className="shrink-0 bg-gray-900 border-t border-white/10 px-4 py-4 flex flex-col gap-2 safe-bottom">

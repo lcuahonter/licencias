@@ -171,9 +171,11 @@ export const vdidService = {
             console.warn('[VDID] v2/createVerification error:', e);
         }
 
-        // ── Fallback: solo captura de documento (sin selfie) ─────────────────
-        console.warn('[VDID] Usando fallback onlyCapture — sin selfie');
-        const url = sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
+        // ── Fallback: flujo completo con identifier vacío — incluye selfie ──
+        // onlyCapture: false → el iframe muestra documento + selfie
+        // El UUID está vacío pero el flujo visual sí incluye la selfie
+        console.warn('[VDID] Usando fallback con getUrl vacío — incluye selfie');
+        const url = sdk.getUrl({ uuid: '' });
         return { uuid: null, url };
     },
 
@@ -198,12 +200,10 @@ export const vdidService = {
     },
 
     /**
-     * Flujo de respaldo (sin credenciales OAuth).
-     * Abre captura de documento + prueba de vida, pero NO queda registrada
-     * con UUID en los servidores de Suma México.
+     * URL de captura completa (documento + selfie) sin UUID.
      */
     getCaptureUrl(): string {
         const sdk = getSdk();
-        return sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
+        return sdk.getUrl({ uuid: '' });
     },
 };
