@@ -237,13 +237,11 @@ const BiometricScreen: React.FC<BiometricScreenProps> = ({ onBack, onComplete, t
       setVdidError(null);
       setVdidLoading(true);
       try {
-          // Crear UUID para el flujo completo (documentos + liveness)
-          const uuid = await vdidService.createVerification(token);
-          const url  = vdidService.getFullVerificationUrl(uuid);
+          const { url } = await vdidService.startTrackedVerification();
           setVdidUrl(url);
           setShowVdidModal(true);
       } catch (err: any) {
-          setVdidError(err?.message || 'No se pudo iniciar VDID. Revisa tu VITE_VDID_PRIVATE_KEY.');
+          setVdidError(err?.message || 'No se pudo iniciar VDID.');
       } finally {
           setVdidLoading(false);
       }
