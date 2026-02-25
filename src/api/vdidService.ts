@@ -184,6 +184,43 @@ export const vdidService = {
     },
 
     /**
+     * Valida una CURP contra el RENAPO via VeriDocID.
+     * Usa Bearer JWT (mismo flujo que documentos e imágenes).
+     * POST /api/gov/curp  { id: '01', curp: '...' }
+     */
+    async validateCurp(curp: string): Promise<{
+        nombre: string;
+        apellidoPaterno: string;
+        apellidoMaterno: string;
+        fechaNacimiento: string; // formato YYYY-MM-DD
+    }> {
+        const jwt = await getAuthToken();
+        const res = await fetch(`${VDID_REST_BASE}/gov/curp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${jwt}`,
+            },
+            body: JSON.stringify({ id: '01', curp }),
+        });
+        if (!res.ok) {
+            const msg = await res.text().catch(() => '');
+            throw new Error(`Error al validar CURP (HTTP ${res.status}): ${msg}`);
+        }
+        const data = await res.json();
+        if (data.estatus !== 'OK') throw new Error('CURP no encontrada en el RENAPO');
+        // Convertir DD/MM/YYYY → YYYY-MM-DD
+        const parts = (data.fechaNacimiento || '').split('/');
+        const fechaIso = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
+        return {
+            nombre:          (data.nombre          || '').trim(),
+            apellidoPaterno: (data.apellidoPaterno  || '').trim(),
+            apellidoMaterno: (data.apellidoMaterno  || '').trim(),
+            fechaNacimiento: fechaIso,
+        };
+    },
+
+    /**
      * Pre-carga el JWT de Suma México en segundo plano al hacer login.
      * Se llama desde App.tsx justo después de que el usuario inicia sesión.
      * Si falla no lanza error — simplemente el token se obtendrá cuando se necesite.

@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import MD5 from 'crypto-js/md5';
 import { UserData } from '../types';
 import { fetchCurpData } from '../src/utils/curpHelpers';
-import { userService } from '../src/api/userService'; // <--- SERVICIO CENTRALIZADO
+import { userService } from '../src/api/userService';
+import { vdidService } from '../src/api/vdidService';
 
 // --- TEXTO DE TÉRMINOS Y CONDICIONES ---
 const TERMS_TEXT = `
@@ -50,6 +51,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
   });
 
   const [loadingCurp, setLoadingCurp] = useState(false);
+  const [loadingVdidCurp, setLoadingVdidCurp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [lastFetchedCurp, setLastFetchedCurp] = useState('');
@@ -177,6 +179,31 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
     }
   };
 
+  const handleValidateCurp = async () => {
+    if (!CURP_REGEX.test(form.idNumber)) {
+      setErrors(prev => ({ ...prev, idNumber: 'Ingresa una CURP válida de 18 caracteres' }));
+      return;
+    }
+    setLoadingVdidCurp(true);
+    try {
+      const data = await vdidService.validateCurp(form.idNumber);
+      setForm(prev => ({
+        ...prev,
+        firstName:    data.nombre          || prev.firstName,
+        paternalName: data.apellidoPaterno  || prev.paternalName,
+        maternalName: data.apellidoMaterno  || prev.maternalName,
+        birthDate:    data.fechaNacimiento  || prev.birthDate,
+      }));
+      setErrors(prev => { const n = { ...prev }; delete n.idNumber; return n; });
+    } catch (e: any) {
+      setAlertMessage(e.message || 'No se pudo validar la CURP. Verifica que sea correcta.');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setLoadingVdidCurp(false);
+    }
+  };
+
   // Handler para detectar scroll al fondo del modal
   const handleScrollTerms = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -281,11 +308,27 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
           <section className="space-y-4">
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Datos Personales</h3>
 
-            <div className="space-y-1.5 relative">
+            <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">CURP</label>
-              <input ref={inputRefs.idNumber} value={form.idNumber} onChange={e => handleCurpInput(e.target.value)} onBlur={handleCurpBlur} maxLength={18} placeholder="ABCD990101H..." className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all uppercase font-mono ${errors.idNumber ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
-              {loadingCurp && <div className="absolute right-4 top-9 animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>}
-              {!errors.idNumber && CURP_REGEX.test(form.idNumber) && !loadingCurp && (<div className="absolute right-4 top-9 text-green-500"><span className="material-symbols-outlined">check_circle</span></div>)}
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 relative">
+                  <input ref={inputRefs.idNumber} value={form.idNumber} onChange={e => handleCurpInput(e.target.value)} onBlur={handleCurpBlur} maxLength={18} placeholder="ABCD990101H..." className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all uppercase font-mono ${errors.idNumber ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
+                  {(loadingCurp || loadingVdidCurp) && <div className="absolute right-4 top-4 animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>}
+                  {!errors.idNumber && CURP_REGEX.test(form.idNumber) && !loadingCurp && !loadingVdidCurp && (<div className="absolute right-4 top-4 text-green-500"><span className="material-symbols-outlined">check_circle</span></div>)}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleValidateCurp}
+                  disabled={loadingVdidCurp || form.idNumber.length !== 18}
+                  className="h-14 px-5 bg-primary text-white rounded-2xl font-bold text-sm shrink-0 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  {loadingVdidCurp
+                    ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    : <span className="material-symbols-outlined text-base">verified_user</span>
+                  }
+                  Validar
+                </button>
+              </div>
               {errors.idNumber && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.idNumber}</p>}
             </div>
 
