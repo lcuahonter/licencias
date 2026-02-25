@@ -39,10 +39,20 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
         const handleMessage = (event: MessageEvent) => {
             if (!event.origin.includes('sumamexico.com') && !event.origin.includes('veridocid')) return;
             console.log('[VDID postMessage]', event.origin, event.data);
+            // Auto-cierre al recibir la señal de proceso completado
+            const d = event.data;
+            if (
+                d?.completed === true ||
+                d?.completed === 'true' ||
+                d?.status === 'completed' ||
+                d?.type === 'completed'
+            ) {
+                onCompleted();
+            }
         };
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, [isOpen]);
+    }, [isOpen, onCompleted]);
 
     if (!isOpen) return null;
 

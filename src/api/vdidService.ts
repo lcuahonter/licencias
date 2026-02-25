@@ -119,11 +119,10 @@ export const vdidService = {
                         id: ref,
                         options: {
                             checks: {
-                                selfie:      true,
-                                verifyIp:    false,
+                                selfie:       true,
+                                verifyIp:     false,
                                 onlyVerifyID: false,
                             },
-                            redirect_url: 'https://verificaciones.sumamexico.com/',
                             language_sdk: 'es',
                         },
                     }),
