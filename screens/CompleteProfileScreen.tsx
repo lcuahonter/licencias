@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { UserData } from '../types';
 // Corregimos los imports para que sean relativos estándar
 import { userService } from '../src/api/userService';
@@ -97,8 +97,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         curp: userData.idNumber || '',
         email: userData.email || '',
         nationality: 'MEXICANA',
-        gender: 'M',
-        bloodType: 'O+',
+        gender: '',
+        bloodType: '',
         isDonor: false,
         workplace: '',
         restrictions: '',
@@ -176,7 +176,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                         rfc: userAPI.rfc || prev.rfc,
                         curp: userAPI.curp || prev.curp,
                         email: userAPI.email || prev.email,
-                        gender: userAPI.sexo === 'Femenino' ? 'F' : 'M',
+                        gender: userAPI.sexo === 'Femenino' ? 'F' : userAPI.sexo === 'Masculino' ? 'M' : prev.gender,
                         phone: userAPI.telefono || prev.phone,
                     }));
                 }
@@ -316,6 +316,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         if (step === 1) {
             const rfcError = validateRFC(form.rfc);
             if (rfcError) newErrors.rfc = rfcError;
+            if (!form.gender) newErrors.gender = 'Selecciona el sexo';
+            if (!form.bloodType) newErrors.bloodType = 'Selecciona el tipo de sangre';
         }
 
         if (step === 2) {
@@ -465,10 +467,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                         <InputField innerRef={inputRefs.rfc} label="RFC (Homoclave Opcional)" value={form.rfc} onChange={(val: string) => handleSafeInput('rfc', val, 'alphanumeric')} placeholder="AAAA990101 o AAAA990101XXX" width="half" max={13} error={errors.rfc} />
 
                         <div className="col-span-1 space-y-1">
-                            <label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Sexo</label>
-                            <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} className="w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 outline-none font-bold">
-                                <option value="F">FEMENINO</option><option value="M">MASCULINO</option>
+                            <label className={`text-[10px] font-bold uppercase ml-1 ${errors.gender ? 'text-red-500' : 'text-gray-500'}`}>Sexo</label>
+                            <select value={form.gender} onChange={(e) => { setForm({ ...form, gender: e.target.value }); if (errors.gender) setErrors(p => { const n = {...p}; delete n.gender; return n; }); }} className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold ${errors.gender ? 'border-red-500 text-red-900' : 'border-gray-100 dark:border-gray-700'}`}>
+                                <option value="" disabled>-- Selecciona --</option>
+                                <option value="F">FEMENINO</option>
+                                <option value="M">MASCULINO</option>
                             </select>
+                            {errors.gender && <p className="text-[9px] text-red-500 font-bold ml-2 animate-in slide-in-from-top-1">{errors.gender}</p>}
                         </div>
                         <div className="col-span-1 space-y-1">
                             <label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Nacionalidad</label>
@@ -477,10 +482,12 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                             </select>
                         </div>
                         <div className="col-span-1 space-y-1">
-                            <label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Tipo Sangre</label>
-                            <select value={form.bloodType} onChange={(e) => setForm({ ...form, bloodType: e.target.value })} className="w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 outline-none font-bold">
+                            <label className={`text-[10px] font-bold uppercase ml-1 ${errors.bloodType ? 'text-red-500' : 'text-gray-500'}`}>Tipo Sangre</label>
+                            <select value={form.bloodType} onChange={(e) => { setForm({ ...form, bloodType: e.target.value }); if (errors.bloodType) setErrors(p => { const n = {...p}; delete n.bloodType; return n; }); }} className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold ${errors.bloodType ? 'border-red-500 text-red-900' : 'border-gray-100 dark:border-gray-700'}`}>
+                                <option value="" disabled>-- Selecciona --</option>
                                 {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
+                            {errors.bloodType && <p className="text-[9px] text-red-500 font-bold ml-2 animate-in slide-in-from-top-1">{errors.bloodType}</p>}
                         </div>
                         <div className="col-span-1 flex items-center h-full pt-6">
                             <label className="flex items-center gap-2 cursor-pointer">
