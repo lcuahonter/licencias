@@ -196,6 +196,14 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
       }));
       setErrors(prev => { const n = { ...prev }; delete n.idNumber; return n; });
     } catch (e: any) {
+      // Limpiar campos para evitar datos de una validación anterior
+      setForm(prev => ({
+        ...prev,
+        firstName:    '',
+        paternalName: '',
+        maternalName: '',
+        birthDate:    '',
+      }));
       setAlertMessage(e.message || 'No se pudo validar la CURP. Verifica que sea correcta.');
       setAlertType('error');
       setShowAlertModal(true);
@@ -334,20 +342,29 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Nombre(s)</label>
-              <input ref={inputRefs.firstName} value={form.firstName} onChange={e => handleNameInput('firstName', e.target.value)} placeholder="Ej. Juan Carlos" className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all ${errors.firstName ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
+              <div className="relative">
+                <input ref={inputRefs.firstName} value={form.firstName} disabled readOnly placeholder="Se llena al validar CURP" className={`w-full h-14 bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-2xl px-4 outline-none text-gray-500 font-bold cursor-not-allowed ${errors.firstName ? 'border-red-400' : ''}`} />
+                <span className="material-symbols-outlined absolute right-4 top-4 text-gray-400 text-lg">lock</span>
+              </div>
               {errors.firstName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.firstName}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Paterno</label>
-                <input ref={inputRefs.paternalName} value={form.paternalName} onChange={e => handleNameInput('paternalName', e.target.value)} placeholder="Ej. Pérez" className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all ${errors.paternalName ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
+                <div className="relative">
+                  <input ref={inputRefs.paternalName} value={form.paternalName} disabled readOnly placeholder="Auto" className={`w-full h-14 bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-2xl px-4 outline-none text-gray-500 font-bold cursor-not-allowed ${errors.paternalName ? 'border-red-400' : ''}`} />
+                  <span className="material-symbols-outlined absolute right-4 top-4 text-gray-400 text-lg">lock</span>
+                </div>
                 {errors.paternalName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.paternalName}</p>}
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Apellido Materno</label>
-                <input ref={inputRefs.maternalName} value={form.maternalName} onChange={e => handleNameInput('maternalName', e.target.value)} placeholder="Ej. García" className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all ${errors.maternalName ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
+                <div className="relative">
+                  <input ref={inputRefs.maternalName} value={form.maternalName} disabled readOnly placeholder="Auto" className={`w-full h-14 bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-700 rounded-2xl px-4 outline-none text-gray-500 font-bold cursor-not-allowed ${errors.maternalName ? 'border-red-400' : ''}`} />
+                  <span className="material-symbols-outlined absolute right-4 top-4 text-gray-400 text-lg">lock</span>
+                </div>
                 {errors.maternalName && <p className="text-[10px] text-red-500 pl-1 font-bold animate-pulse">{errors.maternalName}</p>}
               </div>
             </div>
