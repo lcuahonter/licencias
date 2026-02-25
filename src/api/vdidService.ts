@@ -24,8 +24,9 @@ const VDID_API_KEY       = import.meta.env.VITE_VDID_API_KEY       as string | u
 const VDID_CLIENT_ID     = import.meta.env.VITE_VDID_CLIENT_ID     as string | undefined;
 const VDID_CLIENT_SECRET = import.meta.env.VITE_VDID_CLIENT_SECRET as string | undefined;
 
-// En web usa el proxy de Vite para evitar CORS; en Capacitor (Android/iOS) llama directo
-const VDID_REST_BASE = (typeof window !== 'undefined' && window.location.hostname === 'localhost' && !window.location.protocol.startsWith('capacitor'))
+// Proxy de Vite solo disponible en modo desarrollo (npm run dev)
+// En producción (APK Android/iOS) siempre llamar directo
+const VDID_REST_BASE = import.meta.env.DEV
     ? '/vdid-api'
     : 'https://veridocid.azure-api.net/api';
 
