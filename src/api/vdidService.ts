@@ -184,6 +184,82 @@ export const vdidService = {
     },
 
     /**
+     * Consulta si la verificación ya fue procesada por Suma México.
+     * POST /api/id/v2/status  { uuid }
+     * Retorna true cuando está lista (ya no dice "isn't ready").
+     */
+    async getStatus(uuid: string): Promise<boolean> {
+        const jwt = await getAuthToken();
+        const res = await fetch(`${VDID_REST_BASE}/id/v2/status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${jwt}`,
+            },
+            body: JSON.stringify({ uuid }),
+        });
+        if (!res.ok) return false;
+        const text = await res.text();
+        // Cuando NO está lista dice: "...isn't ready"
+        return !text.toLowerCase().includes("isn't ready") && !text.toLowerCase().includes('not ready');
+    },
+
+    /**
+     * Obtiene los resultados de la verificación incluyendo imágenes en base64.
+     * POST /api/id/v2/results  { uuid, includeImages: true }
+     * Retorna selfie y datos del documento.
+     */
+    async getResults(uuid: string): Promise<{
+        status: string;
+        selfieBase64: string | null;
+        frontBase64: string | null;
+        backBase64: string | null;
+        data: any;
+    }> {
+        const jwt = await getAuthToken();
+        const res = await fetch(`${VDID_REST_BASE}/id/v2/results`, {
+            method: 'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${jwt}`,
+            },
+            body: JSON.stringify({ uuid, includeImages: true }),
+        });
+        if (!res.ok) {
+            const msg = await res.text().catch(() => '');
+            throw new Error(`Error al obtener resultados VDID (HTTP ${res.status}): ${msg}`);
+        }
+        const data = await res.json();
+        return {
+            status:       data.status       || data.verificationStatus || 'unknown',
+            selfieBase64: data.images?.selfie || data.selfie            || null,
+            frontBase64:  data.images?.front  || data.front             || null,
+            backBase64:   data.images?.back   || data.back              || null,
+            data,
+        };
+    },
+
+    /**
+     * Polling de /id/v2/status hasta que esté listo o se agote el tiempo.
+     * @param uuid        UUID de la verificación
+     * @param maxWaitMs   Tiempo máximo a esperar (default 60s)
+     * @param intervalMs  Intervalo entre intentos (default 3s)
+     */
+    async waitForResults(uuid: string, maxWaitMs = 60_000, intervalMs = 3_000): Promise<boolean> {
+        const deadline = Date.now() + maxWaitMs;
+        while (Date.now() < deadline) {
+            try {
+                const ready = await this.getStatus(uuid);
+                if (ready) return true;
+            } catch {
+                // continuar intentando
+            }
+            await new Promise(r => setTimeout(r, intervalMs));
+        }
+        return false; // timeout
+    },
+
+    /**
      * Valida una CURP contra el RENAPO via VeriDocID.
      * Usa Bearer JWT (mismo flujo que documentos e imágenes).
      * POST /api/gov/curp  { id: '01', curp: '...' }

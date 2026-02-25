@@ -25,6 +25,42 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   const [vdidError, setVdidError]         = useState<string | null>(null);
   const [vdidVerified, setVdidVerified]   = useState(false);
   const [vdidUuid, setVdidUuid]           = useState<string | null>(null);
+  const [vdidPolling, setVdidPolling]     = useState(false);  // esperando resultados de Suma México
+  const [vdidSelfie, setVdidSelfie]       = useState<string | null>(null); // base64 selfie
+
+  /**
+   * Callback al completar el flujo VDID en el iframe.
+   * Cierra el modal y hace polling hasta obtener resultados (selfie incluida).
+   */
+  const handleVdidCompleted = async () => {
+      setShowVdidModal(false);
+      setVdidVerified(true); // marcar ya verificado aunque el polling falle
+
+      const currentUuid = vdidUuid;
+      if (!currentUuid || currentUuid.startsWith('local-')) return; // sin UUID real, no hay nada que consultar
+
+      setVdidPolling(true);
+      try {
+          const ready = await vdidService.waitForResults(currentUuid, 60_000, 3_000);
+          if (ready) {
+              const results = await vdidService.getResults(currentUuid);
+              console.log('[VDID] Resultados:', results.status, 'selfie:', !!results.selfieBase64);
+              if (results.selfieBase64) {
+                  // Normalizar: asegurarse que tenga el prefijo data:image
+                  const selfie = results.selfieBase64.startsWith('data:')
+                      ? results.selfieBase64
+                      : `data:image/jpeg;base64,${results.selfieBase64}`;
+                  setVdidSelfie(selfie);
+              }
+          } else {
+              console.warn('[VDID] Timeout esperando resultados para UUID:', currentUuid);
+          }
+      } catch (e) {
+          console.warn('[VDID] Error obteniendo resultados:', e);
+      } finally {
+          setVdidPolling(false);
+      }
+  };
 
   /**
    * Inicia la verificación de identidad con Suma México.
@@ -43,9 +79,9 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
           // si el endpoint no está habilitado en el plan, cae automáticamente
           // a captura sin UUID (uuid === null).
           const { uuid, url } = await vdidService.startTrackedVerification(
-              `licencias-dgo-${idUsuario ?? Date.now()}`
+              `licencias-dgo-${idUsuario ?? 'u0'}-${idSolicitud ?? Date.now()}`
           );
-          setVdidUuid(uuid ?? `local-${idUsuario ?? Date.now()}`);
+          setVdidUuid(uuid ?? `local-${idUsuario ?? 'u0'}-${idSolicitud ?? Date.now()}`);
           setVdidUrl(url);
           setShowVdidModal(true);
       } catch (err: any) {
@@ -298,6 +334,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       catalog: docsCatalog,
       vdidUuid,          // UUID de la verificación Suma México
       vdidVerified,      // flag: identidad verificada
+      vdidSelfie,        // base64 selfie obtenida de /id/v2/results
     });
   };
 
@@ -327,16 +364,30 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                {vdidVerified ? (
                  /* Estado: verificación completada */
                  <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
-                   <span className="material-symbols-outlined text-5xl text-green-500">verified_user</span>
+                   {/* Selfie obtenida de Suma México */}
+                   {vdidSelfie ? (
+                     <img src={vdidSelfie} alt="Selfie verificada" className="w-20 h-20 rounded-full object-cover border-4 border-green-400 shadow-md" />
+                   ) : (
+                     <span className="material-symbols-outlined text-5xl text-green-500">verified_user</span>
+                   )}
                    <div>
                      <p className="font-bold text-green-700 dark:text-green-400 text-base">Identidad Verificada</p>
-                     <p className="text-green-600 dark:text-green-500 text-xs mt-1">Tu documento fue validado correctamente por Suma México.</p>
+                     {vdidPolling ? (
+                       <p className="text-green-600 dark:text-green-500 text-xs mt-1 flex items-center justify-center gap-1">
+                         <span className="animate-spin inline-block h-3 w-3 border-2 border-green-500 border-t-transparent rounded-full"></span>
+                         Obteniendo resultados de Suma México…
+                       </p>
+                     ) : (
+                       <p className="text-green-600 dark:text-green-500 text-xs mt-1">
+                         {vdidSelfie ? 'Selfie y documento obtenidos correctamente.' : 'Tu documento fue validado correctamente por Suma México.'}
+                       </p>
+                     )}
                      {vdidUuid && (
                        <p className="text-gray-400 text-[10px] mt-2 font-mono break-all">UUID: {vdidUuid}</p>
                      )}
                    </div>
                    <button
-                     onClick={() => { setVdidVerified(false); setVdidUuid(null); }}
+                     onClick={() => { setVdidVerified(false); setVdidUuid(null); setVdidSelfie(null); }}
                      className="text-[11px] text-gray-500 underline"
                    >Volver a verificar</button>
                  </div>
@@ -498,11 +549,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       <VdidCaptureModal
           isOpen={showVdidModal}
           onClose={() => setShowVdidModal(false)}
-          onCompleted={() => {
-              setShowVdidModal(false);
-              // Marcar como verificado — el usuario completó el flujo de Suma México
-              setVdidVerified(true);
-          }}
+          onCompleted={handleVdidCompleted}
           url={vdidUrl}
           title={'Verificar Identidad'}
           description={'Captura tu documento y realiza la prueba de vida. Al terminar presiona "Listo".'}
