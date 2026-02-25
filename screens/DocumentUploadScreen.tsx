@@ -229,16 +229,18 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
     if (!docsCatalog || docsCatalog.length === 0) return true;
 
-    // Validar documentos requeridos adicionales (no son de identificación)
-    for (const item of docsCatalog) {
-      // Saltamos documentos de identificación (ya validados en isIdComplete)
-      if ([8, 9, 11, 12].includes(Number(item.id))) continue;
-      
-      // Si es obligatorio y no está habilitado como opcional, requiere archivo
-      if (isTypeMandatory(item.id)) {
-        const k = keyForItem(item);
-        if (!docs[k]) return false;
-      }
+    // Solo valida docs visibles en pantalla: activos (idestatus 8/9) + no de identidad VDID.
+    // Evita que documentos ocultos del catálogo bloqueen el botón.
+    const visibleMandatory = docsCatalog.filter(
+      (it) =>
+        ![8, 9, 11, 12].includes(Number(it.id)) &&
+        isDocumentActive(it) &&
+        isTypeMandatory(it.id)
+    );
+
+    for (const item of visibleMandatory) {
+      const k = keyForItem(item);
+      if (!docs[k]) return false;
     }
 
     // Validar documentos opcionales habilitados

@@ -39,10 +39,20 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
         const handleMessage = (event: MessageEvent) => {
             if (!event.origin.includes('sumamexico.com') && !event.origin.includes('veridocid')) return;
             console.log('[VDID postMessage]', event.origin, event.data);
+            // Auto-cierre al recibir la señal de proceso completado
+            const d = event.data;
+            if (
+                d?.completed === true ||
+                d?.completed === 'true' ||
+                d?.status === 'completed' ||
+                d?.type === 'completed'
+            ) {
+                onCompleted();
+            }
         };
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, [isOpen]);
+    }, [isOpen, onCompleted]);
 
     if (!isOpen) return null;
 
@@ -94,19 +104,7 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
                 )}
             </div>
 
-            {/* ── FOOTER ───────────────────────────────────────────── */}
-            <div className="shrink-0 bg-gray-900 border-t border-white/10 px-4 py-4 flex flex-col gap-2 safe-bottom">
-                <button
-                    onClick={onCompleted}
-                    className="w-full bg-green-600 hover:bg-green-500 active:scale-95 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg py-4"
-                >
-                    <span className="material-symbols-outlined">check_circle</span>
-                    Ya terminé todos los pasos
-                </button>
-                <p className="text-white/30 text-[10px] text-center">
-                    Completa el documento <span className="text-white/50 font-bold">y la selfie</span> antes de presionar este botón
-                </p>
-            </div>
+
         </div>
     );
 };
