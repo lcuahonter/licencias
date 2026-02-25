@@ -1230,13 +1230,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       // -------------------------------------------------------------------
       // PASO 4: SUBIR DOCUMENTOS
       // -------------------------------------------------------------------
-      const userDocs = documentsData?.documents || [];
+      const userDocs = (documentsData?.documents || []).filter((d: any) => !!d.archivoBase64);
+
+      console.log(`[Docs] Total a subir: ${userDocs.length}`, userDocs.map((d: any) => ({ id: d.idtipodocumento, formato: d.formato })));
 
       let docsOk = 0;
+      const docErrors: string[] = [];
 
       for (const doc of userDocs) {
-        if (!doc.archivoBase64) continue;
-
         const payloadDoc = {
           idusuario: idUsuario,
           idsolicitud: idSolicitudReal,
@@ -1251,7 +1252,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           await documentService.createDocumento(payloadDoc, token);
           docsOk++;
         } catch (derr: any) {
-          // Error subiendo documento
+          console.error(`[Docs] Error subiendo doc tipo ${doc.idtipodocumento}:`, derr);
           if (derr.isAuthError) {
             setAlertMessage('Sesión expirada durante la carga de documentos.');
             setAlertType('error');
@@ -1259,15 +1260,26 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             setTimeout(() => handleLogout(), 2000);
             return;
           }
+          const msg = derr?.message || derr?.error || JSON.stringify(derr);
+          docErrors.push(`Tipo ${doc.idtipodocumento}: ${msg}`);
         }
       }
 
-      if (docsOk > 0) {
-        setAlertMessage(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
+      if (userDocs.length === 0) {
+        // No había documentos que subir (solo INE que maneja VDID)
+        setAlertMessage('Solicitud creada exitosamente.');
         setAlertType('success');
         setShowAlertModal(true);
+      } else if (docsOk === userDocs.length) {
+        setAlertMessage(`Solicitud creada exitosamente. Se subieron ${docsOk} documento${docsOk !== 1 ? 's' : ''}.`);
+        setAlertType('success');
+        setShowAlertModal(true);
+      } else if (docsOk > 0) {
+        setAlertMessage(`Solicitud creada. Se subieron ${docsOk} de ${userDocs.length} documentos.\n\nErrores:\n${docErrors.join('\n')}`);
+        setAlertType('warning');
+        setShowAlertModal(true);
       } else {
-        setAlertMessage("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
+        setAlertMessage(`Solicitud creada pero no se pudieron subir los documentos.\n\nError: ${docErrors[0] || 'Error desconocido'}`);
         setAlertType('warning');
         setShowAlertModal(true);
       }
