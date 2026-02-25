@@ -36,6 +36,8 @@ import { userService } from '../src/api/userService';
 import { revisionService } from '../src/api/revisionService';
 import examService from '../src/api/examService';
 import { authService } from '../src/api/authService';
+import { vdidService } from '../src/api/vdidService';
+import VdidCaptureModal from '../components/src/VdidCaptureModal';
 import JsBarcode from 'jsbarcode';
 import html2pdf from 'html2pdf.js';
 import { Capacitor } from '@capacitor/core';
@@ -118,6 +120,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [solicitudesConFoto, setSolicitudesConFoto] = useState<Set<number>>(new Set());
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // --- VDID PER-SOLICITUD STATES ---
+  /** UUID por idSolicitud, puede venir de rawData.uuid (backend) o guardarse localmente */
+  const [vdidUuids, setVdidUuids] = useState<Record<string, string>>({});
+  /** Estado de verificación VDID por solicitud */
+  const [vdidStatuses, setVdidStatuses] = useState<Record<string, 'pending' | 'passed' | 'failed'>>({});
+  const [vdidFailReasons, setVdidFailReasons] = useState<Record<string, string>>({});
+  // Modal re-scan
+  const [showRescanModal, setShowRescanModal] = useState(false);
+  const [rescanSolicitudId, setRescanSolicitudId] = useState<number | null>(null);
+  const [rescanUrl, setRescanUrl] = useState('');
+  const [rescanUuid, setRescanUuid] = useState<string | null>(null);
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [rescanPolling, setRescanPolling] = useState(false);
 
   // --- FUNCIÓN DE LOGOUT ---
   const handleLogout = async () => {
@@ -272,6 +288,90 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     }
   };
 
+  // --- VDID: VERIFICAR ESTADO DE UNA VERIFICACIÓN ---
+  const checkVdidStatus = async (solicitudId: string, uuid: string) => {
+    try {
+      const ready = await vdidService.getStatus(uuid);
+      if (!ready) {
+        setVdidStatuses(prev => ({ ...prev, [solicitudId]: 'pending' }));
+        return;
+      }
+      const results = await vdidService.getResults(uuid);
+      const gr = results.globalResult?.toLowerCase() ?? '';
+      const passed = gr === 'passed' || gr === 'ok';
+      setVdidStatuses(prev => ({ ...prev, [solicitudId]: passed ? 'passed' : 'failed' }));
+      if (!passed) {
+        setVdidFailReasons(prev => ({
+          ...prev,
+          [solicitudId]: results.globalResultDescription || 'Verificación no aprobada por Suma México.',
+        }));
+      }
+    } catch {
+      setVdidStatuses(prev => ({ ...prev, [solicitudId]: 'pending' }));
+    }
+  };
+
+  // --- VDID: ABRIR MODAL RE-SCAN ---
+  const handleOpenRescan = async (solicitudId: number) => {
+    if (!vdidService.isConfigured()) {
+      setAlertMessage('La verificación de identidad no está configurada.');
+      setAlertType('error');
+      setShowAlertModal(true);
+      return;
+    }
+    setRescanSolicitudId(solicitudId);
+    setRescanLoading(true);
+    try {
+      const { uuid, url } = await vdidService.startTrackedVerification(
+        `licencias-dgo-${idUsuario ?? 'u0'}-${solicitudId}`
+      );
+      setRescanUuid(uuid ?? null);
+      setRescanUrl(url);
+      setShowRescanModal(true);
+    } catch (err: any) {
+      setAlertMessage(err?.message || 'No se pudo iniciar la verificación de identidad.');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setRescanLoading(false);
+    }
+  };
+
+  // --- VDID: COMPLETAR RE-SCAN (POLLING + UUID EN BACKEND) ---
+  const handleRescanCompleted = async () => {
+    setShowRescanModal(false);
+    const solId = rescanSolicitudId;
+    const uuid = rescanUuid;
+    if (!solId || !uuid || uuid.startsWith('local-')) return;
+    const solIdStr = String(solId);
+    setVdidUuids(prev => ({ ...prev, [solIdStr]: uuid }));
+    setVdidStatuses(prev => ({ ...prev, [solIdStr]: 'pending' }));
+    // Actualizar UUID en el backend (no bloquea)
+    try { await solicitudService.updateUuid(solId, uuid, token); } catch { /* no fatal */ }
+    setRescanPolling(true);
+    try {
+      const ready = await vdidService.waitForResults(uuid, 120_000, 5_000);
+      if (ready) {
+        const results = await vdidService.getResults(uuid);
+        const gr = results.globalResult?.toLowerCase() ?? '';
+        const passed = gr === 'passed' || gr === 'ok';
+        setVdidStatuses(prev => ({ ...prev, [solIdStr]: passed ? 'passed' : 'failed' }));
+        if (!passed) {
+          setVdidFailReasons(prev => ({
+            ...prev,
+            [solIdStr]: results.globalResultDescription || 'Tu identificación no pudo ser verificada.',
+          }));
+        }
+      } else {
+        setVdidStatuses(prev => ({ ...prev, [solIdStr]: 'failed' }));
+        setVdidFailReasons(prev => ({ ...prev, [solIdStr]: 'Tiempo de espera agotado. Intenta de nuevo.' }));
+      }
+    } catch {
+      setVdidStatuses(prev => ({ ...prev, [solIdStr]: 'pending' }));
+    } finally {
+      setRescanPolling(false);
+    }
+  };
 
   // --- FUNCIÓN PARA RECARGAR SOLICITUDES ---
   const reloadSolicitudes = async () => {
@@ -393,6 +493,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         for (const req of solicitudesProcesadas) {
           if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
             await verificarFotoExistente(Number(req.id));
+          }
+        }
+        // Disparar comprobación VDID para solicitudes que traigan uuid del backend
+        for (const req of solicitudesProcesadas) {
+          const uuid = req.rawData?.uuid || vdidUuids[req.id];
+          if (uuid && !String(uuid).startsWith('local-') && !vdidStatuses[req.id]) {
+            checkVdidStatus(req.id, uuid);
           }
         }
       }
@@ -534,6 +641,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               await verificarFotoExistente(Number(req.id));
             }
           }
+          // Disparar comprobación VDID para solicitudes que traigan uuid del backend
+          for (const req of solicitudesProcesadas) {
+            const uuid = req.rawData?.uuid || vdidUuids[req.id];
+            if (uuid && !String(uuid).startsWith('local-') && !vdidStatuses[req.id]) {
+              checkVdidStatus(req.id, uuid);
+            }
+          }
         }
       } catch (error) {
         // Error al cargar solicitudes
@@ -564,6 +678,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [examStarted, timeRemaining]); // Remover dependencias innecesarias
+
+  // --- VDID: POLLING AUTOMÁTICO PARA SOLICITUDES PENDIENTES ---
+  useEffect(() => {
+    const pendingEntries = Object.entries(vdidStatuses).filter(([, s]) => s === 'pending');
+    if (pendingEntries.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const [solId] of pendingEntries) {
+        const uuid = vdidUuids[solId] || solicitudesCargadas.find(s => s.id === solId)?.rawData?.uuid;
+        if (uuid) await checkVdidStatus(solId, uuid);
+      }
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [vdidStatuses]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- LICENCIAS Y TRÁMITES ---
   // Combinar solicitudes del prop userData.requests con las cargadas del backend
@@ -1020,7 +1147,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const payload = {
       idusuario: idUsuario,
       idtipolicencia,
-      idmetodopago
+      idmetodopago,
+      uuid: (documentsData?.vdidUuid && !String(documentsData.vdidUuid).startsWith('local-'))
+        ? documentsData.vdidUuid
+        : null,
     };
 
     try {
@@ -1089,6 +1219,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       // Agregar al estado local
       setSolicitudesCargadas(prev => [...prev, newRequest]);
+
+      // Guardar UUID VDID localmente y disparar primera comprobación
+      if (documentsData?.vdidUuid && !String(documentsData.vdidUuid).startsWith('local-')) {
+        const solIdStr = String(idSolicitudReal);
+        setVdidUuids(prev => ({ ...prev, [solIdStr]: documentsData.vdidUuid }));
+        checkVdidStatus(solIdStr, documentsData.vdidUuid);
+      }
 
       // -------------------------------------------------------------------
       // PASO 4: SUBIR DOCUMENTOS
@@ -1350,58 +1487,87 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </div>
                     )}
 
-                    {/* Botón examen teórico - Mostrar cuando idestatus es 20 (Nueva) o 24 (Documentos Aprobados) */}
-                    {(idestatus === 20 || idestatus === 24) && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
-                        {/* Botón Subir Foto - Solo mostrar si NO tiene foto subida */}
-                        {!solicitudesConFoto.has(Number(req.id)) && (
-                          <button
-                            onClick={() => handleOpenPhotoModal(Number(req.id))}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
-                          >
-                            <span className="material-symbols-outlined text-sm">photo_camera</span>
-                            Subir Foto para Licencia
-                          </button>
-                        )}
+                    {/* Foto + Examen (idestatus 20 o 24) */}
+                    {(idestatus === 20 || idestatus === 24) && (() => {
+                      const solicUuid  = rawData?.uuid || vdidUuids[req.id];
+                      const vdidSt     = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
+                      // Bloquear foto/examen SOLO si la verificación fue explícitamente rechazada
+                      const vdidFailed = vdidSt === 'failed';
+                      return (
+                        <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
 
-                        {/* Indicador de foto subida */}
-                        {solicitudesConFoto.has(Number(req.id)) && (
-                          <div className="w-full bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2">
-                            <span className="material-symbols-outlined text-sm">check_circle</span>
-                            Foto Subida Correctamente
-                          </div>
-                        )}
+                          {/* Estado VDID: rechazado — reemplaza botón de foto */}
+                          {vdidFailed ? (
+                            <div className="space-y-1.5">
+                              <div className="w-full bg-red-50 border border-red-300 text-red-700 text-[11px] px-4 py-2 rounded-xl text-center space-y-1">
+                                <span className="font-bold block">Verificación de identidad rechazada</span>
+                                <span className="font-normal block">{vdidFailReasons[req.id] || 'Tu identificación no fue aprobada.'}</span>
+                                <p className="font-mono text-[10px] text-red-500 break-all select-all">{solicUuid}</p>
+                              </div>
+                              <button
+                                onClick={() => handleOpenRescan(Number(req.id))}
+                                disabled={rescanLoading && rescanSolicitudId === Number(req.id)}
+                                className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+                              >
+                                {(rescanLoading && rescanSolicitudId === Number(req.id))
+                                  ? <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                                  : <span className="material-symbols-outlined text-sm">refresh</span>}
+                                Volver a Escanear Identificación
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Botón Escanear Rostro / Subir Foto para Licencia */}
+                              {!solicitudesConFoto.has(Number(req.id)) && (
+                                <button
+                                  onClick={() => handleOpenPhotoModal(Number(req.id))}
+                                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                                >
+                                  <span className="material-symbols-outlined text-sm">face_retouching_natural</span>
+                                  Escanear Rostro para Licencia
+                                </button>
+                              )}
 
-                        {/* Botón Examen - Deshabilitado si no ha subido foto */}
-                        <button
-                          onClick={() => {
-                            if (!solicitudesConFoto.has(Number(req.id))) {
-                              setAlertMessage('Debes subir tu foto antes de realizar el examen teórico.');
-                              setAlertType('warning');
-                              setShowAlertModal(true);
-                              return;
-                            }
-                            setSelectedSolicitudId(Number(req.id));
-                            setShowExamModal(true);
-                            setExamStarted(false);
-                            setTimeRemaining(900);
-                            setRespuestas({});
-                            setTiemposRespuesta({});
-                            setEnviandoExamen(false);
-                          }}
-                          disabled={!solicitudesConFoto.has(Number(req.id))}
-                          className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${solicitudesConFoto.has(Number(req.id))
-                            ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
-                            : 'bg-gray-300 cursor-not-allowed opacity-60'
-                            }`}
-                        >
-                          <span className="material-symbols-outlined text-sm">quiz</span>
-                          {solicitudesConFoto.has(Number(req.id))
-                            ? 'Realizar Examen Teórico'
-                            : 'Sube tu foto primero'}
-                        </button>
-                      </div>
-                    )}
+                              {/* Indicador de foto subida */}
+                              {solicitudesConFoto.has(Number(req.id)) && (
+                                <div className="w-full bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2">
+                                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                                  Foto Subida Correctamente
+                                </div>
+                              )}
+
+                              {/* Botón Examen */}
+                              <button
+                                onClick={() => {
+                                  if (!solicitudesConFoto.has(Number(req.id))) {
+                                    setAlertMessage('Debes subir tu foto antes de realizar el examen teórico.');
+                                    setAlertType('warning');
+                                    setShowAlertModal(true);
+                                    return;
+                                  }
+                                  setSelectedSolicitudId(Number(req.id));
+                                  setShowExamModal(true);
+                                  setExamStarted(false);
+                                  setTimeRemaining(900);
+                                  setRespuestas({});
+                                  setTiemposRespuesta({});
+                                  setEnviandoExamen(false);
+                                }}
+                                disabled={!solicitudesConFoto.has(Number(req.id))}
+                                className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                                  solicitudesConFoto.has(Number(req.id))
+                                    ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                                    : 'bg-gray-300 cursor-not-allowed opacity-60'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-sm">quiz</span>
+                                Realizar Examen Teórico
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -2464,24 +2630,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
 
             <div className="p-6">
-              {photoMode === 'select' && !photoPreview && (
-                <div className="space-y-4">
-                  <p className="text-gray-600 dark:text-gray-400 text-center mb-6">Elige cómo deseas capturar tu foto para la licencia</p>
-
-                  <button
-                    onClick={() => setPhotoMode('scan')}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-3"
-                  >
-                    <span className="material-symbols-outlined text-3xl">face_retouching_natural</span>
-                    <span>Escanear Rostro</span>
-                  </button>
-                </div>
-              )}
-
-              {photoMode === 'scan' && !photoPreview && (
+              {(photoMode === 'select' || photoMode === 'scan') && !photoPreview && (
                 <div className="space-y-4">
                   <BiometricScreen
-                    onBack={() => setPhotoMode('select')}
+                    onBack={() => setShowPhotoModal(false)}
                     onComplete={handleBiometricComplete}
                   />
                 </div>
@@ -2529,6 +2681,26 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
+      {/* MODAL RE-SCAN VDID — nueva verificación desde el Dashboard */}
+      <VdidCaptureModal
+        isOpen={showRescanModal}
+        onClose={() => { setShowRescanModal(false); setRescanUuid(null); setRescanSolicitudId(null); }}
+        onCompleted={handleRescanCompleted}
+        url={rescanUrl}
+        title="Verificar Identidad"
+        description="Escanea tu identificación oficial y realiza la prueba de vida."
+      />
+
+      {/* Overlay de espera post-rescan */}
+      {rescanPolling && (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+          <span className="animate-spin h-12 w-12 border-4 border-amber-400 border-t-transparent rounded-full" />
+          <p className="text-white font-bold text-lg">Validando identidad…</p>
+          <p className="text-gray-300 text-sm text-center max-w-xs">
+            Suma México está revisando tu identificación. Esto puede tardar unos minutos.
+          </p>
         </div>
       )}
     </div>

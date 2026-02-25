@@ -23,7 +23,9 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   const [vdidUrl, setVdidUrl]             = useState('');
   const [vdidLoading, setVdidLoading]     = useState(false);
   const [vdidError, setVdidError]         = useState<string | null>(null);
-  const [vdidVerified, setVdidVerified]   = useState(false);
+  /** null = aún no verificado, 'passed' = aprobado, 'failed' = rechazado */
+  const [vdidResult, setVdidResult]       = useState<null | 'passed' | 'failed'>(null);
+  const [vdidFailReason, setVdidFailReason] = useState<string | null>(null);
   const [vdidUuid, setVdidUuid]           = useState<string | null>(null);
   const [vdidPolling, setVdidPolling]     = useState(false);  // esperando resultados de Suma México
   const [vdidSelfie, setVdidSelfie]       = useState<string | null>(null); // base64 selfie
@@ -34,29 +36,53 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
    */
   const handleVdidCompleted = async () => {
       setShowVdidModal(false);
-      setVdidVerified(true); // marcar ya verificado aunque el polling falle
+      // NO marcamos como verificado aún — esperamos el resultado real de Suma México
 
       const currentUuid = vdidUuid;
-      if (!currentUuid || currentUuid.startsWith('local-')) return; // sin UUID real, no hay nada que consultar
+      if (!currentUuid || currentUuid.startsWith('local-')) {
+          // Sin UUID real no podemos validar; fallar con aviso
+          setVdidResult('failed');
+          setVdidFailReason('No se pudo obtener un identificador de verificación. Intenta de nuevo.');
+          return;
+      }
 
       setVdidPolling(true);
+      setVdidResult(null); // limpiar resultado anterior
+      setVdidFailReason(null);
       try {
-          const ready = await vdidService.waitForResults(currentUuid, 60_000, 3_000);
+          const ready = await vdidService.waitForResults(currentUuid, 120_000, 5_000);
           if (ready) {
               const results = await vdidService.getResults(currentUuid);
-              console.log('[VDID] Resultados:', results.status, 'selfie:', !!results.selfieBase64);
-              if (results.selfieBase64) {
-                  // Normalizar: asegurarse que tenga el prefijo data:image
-                  const selfie = results.selfieBase64.startsWith('data:')
-                      ? results.selfieBase64
-                      : `data:image/jpeg;base64,${results.selfieBase64}`;
-                  setVdidSelfie(selfie);
+              console.log('[VDID] globalResult:', results.globalResult, 'status:', results.status);
+
+              const gr = results.globalResult?.toLowerCase() ?? '';
+              const passed = gr === 'passed' || gr === 'ok';
+
+              if (passed) {
+                  setVdidResult('passed');
+                  if (results.selfieBase64) {
+                      const selfie = results.selfieBase64.startsWith('data:')
+                          ? results.selfieBase64
+                          : `data:image/jpeg;base64,${results.selfieBase64}`;
+                      setVdidSelfie(selfie);
+                  }
+              } else {
+                  // globalResult 'Failed', 'Warning', etc.
+                  setVdidResult('failed');
+                  setVdidFailReason(
+                      results.globalResultDescription ||
+                      'Tu identificación no pudo ser verificada.'
+                  );
               }
           } else {
-              console.warn('[VDID] Timeout esperando resultados para UUID:', currentUuid);
+              // Timeout: no hubo respuesta en 2 minutos
+              setVdidResult('failed');
+              setVdidFailReason('El tiempo de espera se agotó. Vuelve a escanear tu identificación.');
           }
-      } catch (e) {
+      } catch (e: any) {
           console.warn('[VDID] Error obteniendo resultados:', e);
+          setVdidResult('failed');
+          setVdidFailReason('Ocurrió un error al obtener los resultados. Intenta de nuevo.');
       } finally {
           setVdidPolling(false);
       }
@@ -260,8 +286,8 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   };
 
   const isComplete = () => {
-    // Requiere verificación VDID completada
-    if (!vdidVerified) return false;
+    // Requiere verificación VDID aprobada por Suma México
+    if (vdidResult !== 'passed') return false;
 
     if (!docsCatalog || docsCatalog.length === 0) return true;
 
@@ -332,9 +358,9 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       hasDisability,
       optionalEnabled,
       catalog: docsCatalog,
-      vdidUuid,          // UUID de la verificación Suma México
-      vdidVerified,      // flag: identidad verificada
-      vdidSelfie,        // base64 selfie obtenida de /id/v2/results
+      vdidUuid,                          // UUID de la verificación Suma México
+      vdidVerified: vdidResult === 'passed', // flag: identidad verificada
+      vdidSelfie,                            // base64 selfie obtenida de /id/v2/results
     });
   };
 
@@ -361,10 +387,23 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
              <div className="space-y-4">
                <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Verificación de Identidad</h3>
 
-               {vdidVerified ? (
-                 /* Estado: verificación completada */
+               {/* ── Estado: validando (polling activo) ── */}
+               {vdidPolling ? (
+                 <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
+                   <span className="animate-spin h-10 w-10 border-4 border-amber-400 border-t-transparent rounded-full" />
+                   <div>
+                     <p className="font-bold text-amber-700 dark:text-amber-300 text-base">Validando identidad…</p>
+                     <p className="text-amber-600 dark:text-amber-400 text-xs mt-1">
+                       Suma México está revisando tu identificación. Espera un momento.
+                     </p>
+                     {vdidUuid && (
+                       <p className="text-amber-600 dark:text-amber-500 text-[10px] font-mono break-all mt-2 select-all">UUID: {vdidUuid}</p>
+                     )}
+                   </div>
+                 </div>
+               ) : vdidResult === 'passed' ? (
+                 /* Estado: verificación aprobada */
                  <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
-                   {/* Selfie obtenida de Suma México */}
                    {vdidSelfie ? (
                      <img src={vdidSelfie} alt="Selfie verificada" className="w-20 h-20 rounded-full object-cover border-4 border-green-400 shadow-md" />
                    ) : (
@@ -372,24 +411,39 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                    )}
                    <div>
                      <p className="font-bold text-green-700 dark:text-green-400 text-base">Identidad Verificada</p>
-                     {vdidPolling ? (
-                       <p className="text-green-600 dark:text-green-500 text-xs mt-1 flex items-center justify-center gap-1">
-                         <span className="animate-spin inline-block h-3 w-3 border-2 border-green-500 border-t-transparent rounded-full"></span>
-                         Obteniendo resultados de Suma México…
-                       </p>
-                     ) : (
-                       <p className="text-green-600 dark:text-green-500 text-xs mt-1">
-                         {vdidSelfie ? 'Selfie y documento obtenidos correctamente.' : 'Tu documento fue validado correctamente por Suma México.'}
-                       </p>
-                     )}
+                     <p className="text-green-600 dark:text-green-500 text-xs mt-1">
+                       {vdidSelfie ? 'Selfie y documento obtenidos correctamente.' : 'Tu documento fue validado correctamente por Suma México.'}
+                     </p>
                      {vdidUuid && (
                        <p className="text-gray-400 text-[10px] mt-2 font-mono break-all">UUID: {vdidUuid}</p>
                      )}
                    </div>
                    <button
-                     onClick={() => { setVdidVerified(false); setVdidUuid(null); setVdidSelfie(null); }}
+                     onClick={() => { setVdidResult(null); setVdidUuid(null); setVdidSelfie(null); setVdidFailReason(null); }}
                      className="text-[11px] text-gray-500 underline"
                    >Volver a verificar</button>
+                 </div>
+               ) : vdidResult === 'failed' ? (
+                 /* Estado: verificación rechazada */
+                 <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-500 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
+                   <span className="material-symbols-outlined text-5xl text-red-500">gpp_bad</span>
+                   <div>
+                     <p className="font-bold text-red-700 dark:text-red-400 text-base">Verificación Rechazada</p>
+                     <p className="text-red-600 dark:text-red-400 text-xs mt-1">
+                       {vdidFailReason || 'Tu identificación no pudo ser verificada por Suma México.'}
+                     </p>
+                     <p className="text-gray-500 text-xs mt-2">Debes volver a escanear tu identificación oficial.</p>
+                     {vdidUuid && (
+                       <p className="text-red-400 dark:text-red-500 text-[10px] font-mono break-all mt-2 select-all">UUID: {vdidUuid}</p>
+                     )}
+                   </div>
+                   <button
+                     onClick={() => { setVdidResult(null); setVdidUuid(null); setVdidSelfie(null); setVdidFailReason(null); handleVdidDocumentScan(); }}
+                     className="w-full max-w-xs h-11 bg-red-600 hover:bg-red-500 active:scale-95 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-md"
+                   >
+                     <span className="material-symbols-outlined text-lg">refresh</span>
+                     Volver a Escanear
+                   </button>
                  </div>
                ) : (
                  /* Estado: pendiente de verificación */

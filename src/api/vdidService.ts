@@ -210,6 +210,8 @@ export const vdidService = {
      */
     async getResults(uuid: string): Promise<{
         status: string;
+        globalResult: string;          // 'Passed' | 'Failed' | 'Warning' | etc.
+        globalResultDescription: string;
         selfieBase64: string | null;
         frontBase64: string | null;
         backBase64: string | null;
@@ -230,10 +232,12 @@ export const vdidService = {
         }
         const data = await res.json();
         return {
-            status:       data.status       || data.verificationStatus || 'unknown',
-            selfieBase64: data.images?.selfie || data.selfie            || null,
-            frontBase64:  data.images?.front  || data.front             || null,
-            backBase64:   data.images?.back   || data.back              || null,
+            status:                  data.status                  || data.verificationStatus || 'unknown',
+            globalResult:            data.globalResult            || 'unknown',
+            globalResultDescription: data.globalResultDescription || data.expertComments || '',
+            selfieBase64: data.images?.selfie || data.selfie || null,
+            frontBase64:  data.images?.front  || data.front  || null,
+            backBase64:   data.images?.back   || data.back   || null,
             data,
         };
     },
