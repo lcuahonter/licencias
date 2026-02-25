@@ -39,20 +39,10 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
         const handleMessage = (event: MessageEvent) => {
             if (!event.origin.includes('sumamexico.com') && !event.origin.includes('veridocid')) return;
             console.log('[VDID postMessage]', event.origin, event.data);
-            // Auto-cierre al recibir la señal de proceso completado
-            const d = event.data;
-            if (
-                d?.completed === true ||
-                d?.completed === 'true' ||
-                d?.status === 'completed' ||
-                d?.type === 'completed'
-            ) {
-                onCompleted();
-            }
         };
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, [isOpen, onCompleted]);
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -62,7 +52,10 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
             style={{ WebkitOverflowScrolling: 'touch' }}
         >
             {/* ── HEADER ───────────────────────────────────────────── */}
-            <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-white/10 safe-top">
+            <div
+                className="shrink-0 flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-white/10 safe-top"
+                style={{ paddingTop: 'calc(env(safe-area-inset-top) + 28px)' }}
+            >
                 <button
                     onClick={onClose}
                     className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
@@ -104,7 +97,12 @@ const VdidCaptureModal: React.FC<VdidCaptureModalProps> = ({
                 )}
             </div>
 
-
+            {/* ── FOOTER ───────────────────────────────────────────── */}
+            <div className="shrink-0 bg-gray-900 border-t border-white/10 px-4 py-4 flex flex-col gap-2 safe-bottom">
+                <p className="text-white/30 text-[10px] text-center">
+                    Completa el documento <span className="text-white/50 font-bold">y la selfie</span> antes de cerrar la ventana
+                </p>
+            </div>
         </div>
     );
 };
