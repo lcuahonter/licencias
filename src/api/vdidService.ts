@@ -23,7 +23,11 @@ const VDID_PUBLIC_KEY    = import.meta.env.VITE_VDID_PUBLIC_KEY    as string | u
 const VDID_API_KEY       = import.meta.env.VITE_VDID_API_KEY       as string | undefined;
 const VDID_CLIENT_ID     = import.meta.env.VITE_VDID_CLIENT_ID     as string | undefined;
 const VDID_CLIENT_SECRET = import.meta.env.VITE_VDID_CLIENT_SECRET as string | undefined;
-const VDID_REST_BASE     = 'https://veridocid.azure-api.net/api';
+
+// En web usa el proxy de Vite para evitar CORS; en Capacitor (Android/iOS) llama directo
+const VDID_REST_BASE = (typeof window !== 'undefined' && window.location.hostname === 'localhost' && !window.location.protocol.startsWith('capacitor'))
+    ? '/vdid-api'
+    : 'https://veridocid.azure-api.net/api';
 
 // Singleton del SDK
 let _sdk: WebVerification | null = null;
@@ -171,11 +175,10 @@ export const vdidService = {
             console.warn('[VDID] v2/createVerification error:', e);
         }
 
-        // ── Fallback: flujo completo con identifier vacío — incluye selfie ──
-        // onlyCapture: false → el iframe muestra documento + selfie
-        // El UUID está vacío pero el flujo visual sí incluye la selfie
-        console.warn('[VDID] Usando fallback con getUrl vacío — incluye selfie');
-        const url = sdk.getUrl({ uuid: '' });
+        // ── Fallback: solo captura de documento (sin selfie) ─────────────────
+        // Nota: getUrl({uuid:''}) rompe el iframe — usar onlyCapture como respaldo seguro
+        console.warn('[VDID] Usando fallback onlyCapture (sin selfie) — activa sk_test_ para selfie');
+        const url = sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
         return { uuid: null, url };
     },
 
@@ -204,6 +207,6 @@ export const vdidService = {
      */
     getCaptureUrl(): string {
         const sdk = getSdk();
-        return sdk.getUrl({ uuid: '' });
+        return sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
     },
 };
