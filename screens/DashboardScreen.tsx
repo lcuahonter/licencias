@@ -1677,7 +1677,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div className="flex justify-between items-center border-b border-gray-100 pb-3"><h2 className="text-lg font-black">Nueva Solicitud</h2><button onClick={() => setShowNewReqModal(false)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => handleTypeSelect('Automovilista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Automovilista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                   <span className="material-symbols-outlined text-2xl">directions_car</span>
                   <span className="text-[10px] font-bold">Auto</span>
@@ -1685,10 +1685,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <button onClick={() => handleTypeSelect('Motociclista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Motociclista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                   <span className="material-symbols-outlined text-2xl">two_wheeler</span>
                   <span className="text-[10px] font-bold">Moto</span>
-                </button>
-                <button onClick={() => handleTypeSelect('Transporte Público')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Transporte Público' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
-                  <span className="material-symbols-outlined text-2xl">directions_bus</span>
-                  <span className="text-[10px] font-bold text-center leading-tight">Transporte<br />Público</span>
                 </button>
               </div>
             </div>
