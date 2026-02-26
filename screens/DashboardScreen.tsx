@@ -390,21 +390,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         for (const sol of solicitudes) {
           const idestatus = sol.idestatus;
 
-          // Solo mostrar: 20 (Nueva), 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
-          if (![20, 22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+          // Solo mostrar estados válidos de solicitudes_licencias
+          if (![20, 22, 23, 24, 25].includes(idestatus)) continue;
 
           let status: any = 'pending';
           let rejectedDocuments: any[] = [];
 
-          // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-          // PRIORIDAD 1: Si ya tiene número de licencia asignado, está completamente aprobada
-          if (sol.numerolicencia) {
-            status = 'completed';
-          } else if (idestatus === 26) {
-            // Estado 26 = Examen APROBADO confirmado por el backend
-            status = 'completed';
-          } else if (idestatus === 24) {
-            // Solicitud APROBADA (documentos OK) - verificar examen usando API de verificación
+          // FUENTE DE VERDAD: idestatus de solicitudes_licencias
+          // SOLO idestatus 24 (Aprobada por operador) habilita verificación de examen
+          if (idestatus === 24) {
+            // Operador ya aprobó documentos → verificar si el ciudadano ya pasó el examen
             try {
               const resultadoExamen = await examService.verificarAprobacion(sol.id, token);
               const examenAprobado = resultadoExamen?.aprobo === true;
@@ -412,18 +407,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               if (examenAprobado) {
                 status = 'completed';
               } else {
-                // Documentos aprobados pero examen pendiente o reprobado
+                // Aprobada pero examen pendiente
                 status = 'paid_pending_docs';
               }
             } catch (err) {
-              // Si hay error al verificar, mantener como pendiente
               status = 'paid_pending_docs';
             }
-          } else if (idestatus === 27) {
-            // Examen teórico REPROBADO
-            status = 'rejected';
-          } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
-            // Si idestatus es 25, la solicitud fue RECHAZADA por dictamen (no solo documentos)
+          } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 20) {
+            // 25 = Rechazada definitiva
+            // 20/22/23 = en espera / en revisión por operador
             status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
 
             try {
@@ -437,9 +429,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                 const rechazados = docs.filter((d: any) => d.idestatus === 15);
 
-                // Guardar documentos rechazados para mostrarlos al usuario
-                // PERO NO cambiar el status a 'rejected' si la solicitud sigue en proceso (idestatus 23)
-                // Solo las solicitudes con idestatus 25 son realmente rechazadas
                 if (rechazados.length > 0) {
                   rejectedDocuments = rechazados.map((d: any) => ({
                     iddocumento: d.iddocumento,
@@ -489,9 +478,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         setSolicitudesCargadas(solicitudesProcesadas);
 
-        // Verificar fotos existentes para solicitudes con idestatus 20 y 24
+        // Verificar fotos existentes solo para solicitudes con idestatus 24 (Aprobada por operador)
         for (const req of solicitudesProcesadas) {
-          if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
+          if (req.rawData?.idestatus === 24) {
             await verificarFotoExistente(Number(req.id));
           }
         }
@@ -529,21 +518,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           for (const sol of solicitudes) {
             const idestatus = sol.idestatus;
 
-            // Solo mostrar: 20 (Nueva), 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
-            if (![20, 22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+            // Solo mostrar estados válidos de solicitudes_licencias
+            if (![20, 22, 23, 24, 25].includes(idestatus)) continue;
 
             let status: any = 'pending';
             let rejectedDocuments: any[] = [];
 
-            // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-            // PRIORIDAD 1: Si ya tiene número de licencia asignado, está completamente aprobada
-            if (sol.numerolicencia) {
-              status = 'completed';
-            } else if (idestatus === 26) {
-              // Estado 26 = Examen APROBADO confirmado por el backend
-              status = 'completed';
-            } else if (idestatus === 24) {
-              // Solicitud APROBADA (documentos OK) - verificar examen usando API de verificación
+            // FUENTE DE VERDAD: idestatus de solicitudes_licencias
+            // SOLO idestatus 24 (Aprobada por operador) habilita verificación de examen
+            if (idestatus === 24) {
+              // Operador ya aprobó documentos → verificar si el ciudadano ya pasó el examen
               try {
                 const resultadoExamen = await examService.verificarAprobacion(sol.id, token);
                 const examenAprobado = resultadoExamen?.aprobo === true;
@@ -551,19 +535,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 if (examenAprobado) {
                   status = 'completed';
                 } else {
-                  // Documentos aprobados pero examen pendiente o reprobado
+                  // Aprobada pero examen pendiente
                   status = 'paid_pending_docs';
                 }
               } catch (err) {
-                // Si hay error al verificar, mantener como pendiente
                 status = 'paid_pending_docs';
               }
-            } else if (idestatus === 27) {
-              // Examen teórico REPROBADO
-              status = 'rejected';
-            } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
-              // Para solicitudes rechazadas o en proceso, consultar documentos
-              // IMPORTANTE: Solo marcar como rejected si idestatus es 25 (rechazada por dictamen)
+            } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 20) {
+              // 25 = Rechazada definitiva
+              // 20/22/23 = en espera / en revisión por operador
               status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
 
               try {
@@ -635,9 +615,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           setSolicitudesCargadas(solicitudesProcesadas);
 
-          // Verificar fotos existentes para solicitudes con idestatus 20 y 24
+          // Verificar fotos existentes solo para solicitudes con idestatus 24 (Aprobada por operador)
           for (const req of solicitudesProcesadas) {
-            if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
+            if (req.rawData?.idestatus === 24) {
               await verificarFotoExistente(Number(req.id));
             }
           }
@@ -1232,27 +1212,41 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       // -------------------------------------------------------------------
       const userDocs = (documentsData?.documents || []).filter((d: any) => !!d.archivoBase64);
 
-      console.log(`[Docs] Total a subir: ${userDocs.length}`, userDocs.map((d: any) => ({ id: d.idtipodocumento, formato: d.formato })));
+      console.log(`[Docs] Total a subir: ${userDocs.length}`, userDocs.map((d: any) => ({ id: d.idtipodocumento, formato: d.formato, tamanio: d.tamanio, nombreoriginal: d.nombreoriginal })));
 
       let docsOk = 0;
       const docErrors: string[] = [];
 
       for (const doc of userDocs) {
+        // Normalizar formato: 'jpeg' → 'jpg', valores vacíos → 'jpg'
+        const rawFormato = doc.formato || '';
+        const formato = rawFormato === 'jpeg' ? 'jpg' : (rawFormato || 'jpg');
+
         const payloadDoc = {
           idusuario: idUsuario,
           idsolicitud: idSolicitudReal,
           idtipodocumento: doc.idtipodocumento,
-          formato: doc.formato || 'jpg',
-          nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}`,
-          tamanio: doc.tamanio || 0,
+          formato,
+          nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}.${formato}`,
+          tamanio: doc.tamanio || 1,
           archivoBase64: doc.archivoBase64
         };
+
+        console.log(`[Docs] Enviando tipo ${doc.idtipodocumento}:`, {
+          idusuario: payloadDoc.idusuario,
+          idsolicitud: payloadDoc.idsolicitud,
+          idtipodocumento: payloadDoc.idtipodocumento,
+          formato: payloadDoc.formato,
+          nombreoriginal: payloadDoc.nombreoriginal,
+          tamanio: payloadDoc.tamanio,
+          base64Length: payloadDoc.archivoBase64?.length
+        });
 
         try {
           await documentService.createDocumento(payloadDoc, token);
           docsOk++;
         } catch (derr: any) {
-          console.error(`[Docs] Error subiendo doc tipo ${doc.idtipodocumento}:`, derr);
+          console.error(`[Docs] Error subiendo doc tipo ${doc.idtipodocumento}:`, derr, 'data:', derr?.data);
           if (derr.isAuthError) {
             setAlertMessage('Sesión expirada durante la carga de documentos.');
             setAlertType('error');
@@ -1260,8 +1254,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             setTimeout(() => handleLogout(), 2000);
             return;
           }
-          const msg = derr?.message || derr?.error || JSON.stringify(derr);
-          docErrors.push(`Tipo ${doc.idtipodocumento}: ${msg}`);
+          const serverDetail = JSON.stringify(derr?.data || '');
+          const msg = derr?.message || derr?.error || 'Error desconocido';
+          docErrors.push(`Tipo ${doc.idtipodocumento}: ${msg}${serverDetail !== '""' ? ` | ${serverDetail}` : ''}`);
         }
       }
 
@@ -1454,7 +1449,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                 // Determinar el texto del estado
                 const statusDisplay = req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' :
-                  (idestatus === 20 ? 'EN ESPERA QUE REALICES TU EXAMEN' :
+                  (idestatus === 20 ? 'EN ESPERA DE VALIDACIÓN DE DOCUMENTOS' :
                     idestatus === 24 ? 'APROBADO - FALTA EXAMEN' :
                       idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
 
@@ -1499,8 +1494,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </div>
                     )}
 
-                    {/* Foto + Examen (idestatus 20 o 24) */}
-                    {(idestatus === 20 || idestatus === 24) && (() => {
+                    {/* Foto + Examen solo cuando el operador aprobó (idestatus 24) */}
+                    {idestatus === 24 && (() => {
                       const solicUuid  = rawData?.uuid || vdidUuids[req.id];
                       const vdidSt     = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
                       // Bloquear foto/examen SOLO si la verificación fue explícitamente rechazada
@@ -2243,14 +2238,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setResultType(aprobado ? 'success' : 'error');
                         setShowVerResultButton(false);
 
-                        // Si aprobó el examen, actualizar solicitud a estado 22
-                        if (aprobado && selectedSolicitudId) {
-                          try {
-                            await solicitudService.updateSolicitud(selectedSolicitudId, 22, token || '');
-                          } catch (updateErr) {
-                            // Error al actualizar solicitud, pero continuar
-                          }
-                        }
+                        // La solicitud permanece en idestatus 24 (Aprobada).
+                        // El resultado del examen se consulta via examService.verificarAprobacion al recargar.
 
                         // Recargar solicitudes para actualizar el estado (aprobado o reprobado)
                         await wait(1000);
