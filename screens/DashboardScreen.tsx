@@ -2234,8 +2234,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setResultType(aprobado ? 'success' : 'error');
                         setShowVerResultButton(false);
 
-                        // La solicitud permanece en idestatus 24 (Aprobada).
-                        // El resultado del examen se consulta via examService.verificarAprobacion al recargar.
+                        // Solo si aprobó el examen, marcar como Completa (idestatus 22) para que el operador la vea
+                        if (aprobado) {
+                          try {
+                            await solicitudService.updateSolicitud(selectedSolicitudId!, 22, token || '');
+                          } catch { /* no fatal */ }
+                        }
 
                         // Recargar solicitudes para actualizar el estado (aprobado o reprobado)
                         await wait(1000);
