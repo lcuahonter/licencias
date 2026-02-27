@@ -478,9 +478,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         setSolicitudesCargadas(solicitudesProcesadas);
 
-        // Verificar fotos existentes solo para solicitudes con idestatus 24 (Aprobada por operador)
+        // Verificar fotos existentes para solicitudes con idestatus 20 (nueva)
         for (const req of solicitudesProcesadas) {
-          if (req.rawData?.idestatus === 24) {
+          if (req.rawData?.idestatus === 20) {
             await verificarFotoExistente(Number(req.id));
           }
         }
@@ -615,9 +615,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           setSolicitudesCargadas(solicitudesProcesadas);
 
-          // Verificar fotos existentes solo para solicitudes con idestatus 24 (Aprobada por operador)
+          // Verificar fotos existentes para solicitudes con idestatus 20 (nueva)
           for (const req of solicitudesProcesadas) {
-            if (req.rawData?.idestatus === 24) {
+            if (req.rawData?.idestatus === 20) {
               await verificarFotoExistente(Number(req.id));
             }
           }
@@ -1494,8 +1494,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </div>
                     )}
 
-                    {/* Foto + Examen solo cuando el operador aprobó (idestatus 24) */}
-                    {idestatus === 24 && (() => {
+                    {/* Foto + Examen solo cuando idestatus 20 (nueva) */}
+                    {idestatus === 20 && (() => {
                       const solicUuid  = rawData?.uuid || vdidUuids[req.id];
                       const vdidSt     = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
                       // Bloquear foto/examen SOLO si la verificación fue explícitamente rechazada
