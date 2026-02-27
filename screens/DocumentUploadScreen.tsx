@@ -27,12 +27,14 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
   const [vdidResult, setVdidResult]       = useState<null | 'passed' | 'failed'>(null);
   const [vdidFailReason, setVdidFailReason] = useState<string | null>(null);
   const [vdidUuid, setVdidUuid]           = useState<string | null>(null);
-  const [vdidPolling, setVdidPolling]     = useState(false);  // esperando resultados de Suma México
+  const [vdidPolling, setVdidPolling]     = useState<false | 'scanning' | 'waiting'>(false);  // esperando resultados de Suma México
   const [vdidSelfie, setVdidSelfie]       = useState<string | null>(null); // base64 selfie
 
   /**
    * Callback al completar el flujo VDID en el iframe.
-   * Cierra el modal y hace polling hasta obtener resultados (selfie incluida).
+   * Cierra el modal y hace polling a /id/v2/results cada 5 s hasta obtener
+   * un resultado definitivo (Passed / Failed) o agotar 2 minutos.
+   * Si la respuesta dice "isn't ready" muestra "En espera" y reintenta.
    */
   const handleVdidCompleted = async () => {
       setShowVdidModal(false);
@@ -40,22 +42,33 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
       const currentUuid = vdidUuid;
       if (!currentUuid || currentUuid.startsWith('local-')) {
-          // Sin UUID real no podemos validar; fallar con aviso
           setVdidResult('failed');
           setVdidFailReason('No se pudo obtener un identificador de verificación. Intenta de nuevo.');
           return;
       }
 
-      setVdidPolling(true);
-      setVdidResult(null); // limpiar resultado anterior
+      setVdidPolling('scanning');
+      setVdidResult(null);
       setVdidFailReason(null);
-      try {
-          const ready = await vdidService.waitForResults(currentUuid, 120_000, 5_000);
-          if (ready) {
-              const results = await vdidService.getResults(currentUuid);
-              console.log('[VDID] globalResult:', results.globalResult, 'status:', results.status);
 
-              const gr = results.globalResult?.toLowerCase() ?? '';
+      const POLL_INTERVAL = 5_000;   // 5 segundos
+      const MAX_WAIT      = 600_000; // 10 minutos (el experto de Suma México puede tardar ~5 min)
+      const deadline      = Date.now() + MAX_WAIT;
+
+      while (Date.now() < deadline) {
+          try {
+              const results = await vdidService.getResults(currentUuid);
+              console.log('[VDID] status:', results.status, 'globalResult:', results.globalResult);
+
+              // Suma México aún no terminó de procesar — seguir esperando
+              if (results.status === 'not_ready' || results.globalResult === 'not_ready') {
+                  setVdidPolling('waiting');
+                  await new Promise(r => setTimeout(r, POLL_INTERVAL));
+                  continue;
+              }
+
+              // Resultado definitivo
+              const gr     = results.globalResult?.toLowerCase() ?? '';
               const passed = gr === 'passed' || gr === 'ok';
 
               if (passed) {
@@ -67,25 +80,26 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                       setVdidSelfie(selfie);
                   }
               } else {
-                  // globalResult 'Failed', 'Warning', etc.
                   setVdidResult('failed');
                   setVdidFailReason(
                       results.globalResultDescription ||
                       'Tu identificación no pudo ser verificada.'
                   );
               }
-          } else {
-              // Timeout: no hubo respuesta en 2 minutos
-              setVdidResult('failed');
-              setVdidFailReason('El tiempo de espera se agotó. Vuelve a escanear tu identificación.');
+              setVdidPolling(false);
+              return;
+
+          } catch (e: any) {
+              console.warn('[VDID] Error consultando resultados, reintentando en 5s:', e);
+              setVdidPolling('waiting');
+              await new Promise(r => setTimeout(r, POLL_INTERVAL));
           }
-      } catch (e: any) {
-          console.warn('[VDID] Error obteniendo resultados:', e);
-          setVdidResult('failed');
-          setVdidFailReason('Ocurrió un error al obtener los resultados. Intenta de nuevo.');
-      } finally {
-          setVdidPolling(false);
       }
+
+      // Timeout: 10 minutos sin respuesta definitiva
+      setVdidResult('failed');
+      setVdidFailReason('El tiempo de espera se agotó (10 min). Vuelve a escanear tu identificación.');
+      setVdidPolling(false);
   };
 
   /**
@@ -389,15 +403,35 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
 
                {/* ── Estado: validando (polling activo) ── */}
                {vdidPolling ? (
-                 <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
-                   <span className="animate-spin h-10 w-10 border-4 border-amber-400 border-t-transparent rounded-full" />
+                 <div className={`border-2 rounded-2xl p-5 flex flex-col items-center gap-3 text-center transition-colors duration-500 ${
+                   vdidPolling === 'waiting'
+                     ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400'
+                     : 'bg-amber-50 dark:bg-amber-900/20 border-amber-400'
+                 }`}>
+                   <span className={`animate-spin h-10 w-10 border-4 border-t-transparent rounded-full ${
+                     vdidPolling === 'waiting' ? 'border-blue-400' : 'border-amber-400'
+                   }`} />
                    <div>
-                     <p className="font-bold text-amber-700 dark:text-amber-300 text-base">Validando identidad…</p>
-                     <p className="text-amber-600 dark:text-amber-400 text-xs mt-1">
-                       Suma México está revisando tu identificación. Espera un momento.
-                     </p>
+                     {vdidPolling === 'waiting' ? (
+                       <>
+                         <p className="font-bold text-blue-700 dark:text-blue-300 text-base">En espera de resultados…</p>
+                         <p className="text-blue-600 dark:text-blue-400 text-xs mt-1">
+                           El servidor todavía está procesando tu verificación.
+                           Reintentando automáticamente cada 5 segundos.
+                         </p>
+                       </>
+                     ) : (
+                       <>
+                         <p className="font-bold text-amber-700 dark:text-amber-300 text-base">Validando identidad…</p>
+                         <p className="text-amber-600 dark:text-amber-400 text-xs mt-1">
+                           Suma México está revisando tu identificación. Espera un momento.
+                         </p>
+                       </>
+                     )}
                      {vdidUuid && (
-                       <p className="text-amber-600 dark:text-amber-500 text-[10px] font-mono break-all mt-2 select-all">UUID: {vdidUuid}</p>
+                       <p className={`text-[10px] font-mono break-all mt-2 select-all ${
+                         vdidPolling === 'waiting' ? 'text-blue-500 dark:text-blue-400' : 'text-amber-600 dark:text-amber-500'
+                       }`}>UUID: {vdidUuid}</p>
                      )}
                    </div>
                  </div>

@@ -209,8 +209,8 @@ export const vdidService = {
      * Retorna selfie y datos del documento.
      */
     async getResults(uuid: string): Promise<{
-        status: string;
-        globalResult: string;          // 'Passed' | 'Failed' | 'Warning' | etc.
+        status: string;   // 'not_ready' cuando aún no está procesado
+        globalResult: string;          // 'Ok' | 'Failed' | 'Warning' | 'not_ready' | etc.  (Suma México devuelve 'Ok', no 'Passed')
         globalResultDescription: string;
         selfieBase64: string | null;
         frontBase64: string | null;
@@ -226,11 +226,36 @@ export const vdidService = {
             },
             body: JSON.stringify({ uuid, includeImages: true }),
         });
-        if (!res.ok) {
-            const msg = await res.text().catch(() => '');
-            throw new Error(`Error al obtener resultados VDID (HTTP ${res.status}): ${msg}`);
+
+        // Leer el cuerpo como texto primero para poder detectar mensajes especiales
+        const text = await res.text().catch(() => '');
+
+        // Suma México devuelve un mensaje de texto plano cuando aún no está lista:
+        // "Id Verification with uuid "..." isn't ready"
+        if (
+            text.toLowerCase().includes("isn't ready") ||
+            text.toLowerCase().includes('not ready')
+        ) {
+            return {
+                status:                  'not_ready',
+                globalResult:            'not_ready',
+                globalResultDescription: '',
+                selfieBase64: null,
+                frontBase64:  null,
+                backBase64:   null,
+                data:         {},
+            };
         }
-        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(`Error al obtener resultados VDID (HTTP ${res.status}): ${text}`);
+        }
+
+        let data: any = {};
+        try { data = JSON.parse(text); } catch {
+            throw new Error(`Respuesta inesperada de VDID (no es JSON): ${text.slice(0, 200)}`);
+        }
+
         return {
             status:                  data.status                  || data.verificationStatus || 'unknown',
             globalResult:            data.globalResult            || 'unknown',
