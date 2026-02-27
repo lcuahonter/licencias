@@ -93,6 +93,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // Modales para documentos corregidos
   const [showCorrectionsSuccessModal, setShowCorrectionsSuccessModal] = useState(false);
+  const [expandedRejected, setExpandedRejected] = useState<Set<string>>(new Set());
   const [showCorrectionsErrorModal, setShowCorrectionsErrorModal] = useState(false);
   const [correctionsMessage, setCorrectionsMessage] = useState('');
 
@@ -1594,70 +1595,85 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
                 const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
                 const idestatus = rawData?.idestatus;
-
+                const isExpanded = expandedRejected.has(req.id);
                 const statusDisplay = idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADA';
 
                 return (
-                  <div key={req.id} className="p-5 rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
-                          <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                  <div key={req.id} className="rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark overflow-hidden">
+                    {/* Cabecera siempre visible — clic para expandir/colapsar */}
+                    <button
+                      onClick={() => setExpandedRejected(prev => {
+                        const next = new Set(prev);
+                        next.has(req.id) ? next.delete(req.id) : next.add(req.id);
+                        return next;
+                      })}
+                      className="w-full px-5 py-4 flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-1.5 rounded-full bg-red-50 text-red-500 shrink-0">
+                          <span className="material-symbols-outlined text-base">block</span>
                         </div>
-                        <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
-                        <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
-                      </div>
-                      <div className="p-2 rounded-full bg-red-50 text-red-500">
-                        <span className="material-symbols-outlined">block</span>
-                      </div>
-                    </div>
-
-                    {/* Mostrar documentos rechazados si los hay */}
-                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
-                      <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
-                        <div className="font-bold flex items-center gap-1 mb-1">
-                          <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                          </div>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate mt-0.5">{descripcion}</p>
                         </div>
-                        <ul className="list-disc list-inside font-bold space-y-1">
-                          {req.rejectedDocuments.map(docData => (
-                            <li key={docData.iddocumento}>
-                              {docData.tipodocumento}
-                              {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
-                            </li>
-                          ))}
-                        </ul>
                       </div>
-                    )}
+                      <span className={`material-symbols-outlined text-gray-400 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                        expand_more
+                      </span>
+                    </button>
 
-                    {/* Botón de corrección solo si hay documentos rechazados Y NO es rechazo por dictamen (estatus 25) */}
-                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenFixModal(req)}
-                          className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-sm">upload_file</span>
-                          Corregir Documentos
-                        </button>
-                      </div>
-                    )}
+                    {/* Detalle colapsable */}
+                    {isExpanded && (
+                      <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-700 pt-3 space-y-3">
+                        <p className="text-xs text-gray-500">Creado: {fecha}</p>
 
-                    {/* Mensaje informativo cuando fue rechazada por dictamen final (idestatus 25) */}
-                    {idestatus === 25 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                          <div className="flex items-start gap-3">
-                            <span className="material-symbols-outlined text-gray-400">info</span>
-                            <div>
-                              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">
-                                Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
-                                Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
-                              </p>
+                        {/* Documentos rechazados */}
+                        {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                          <div className="bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
+                            <div className="font-bold flex items-center gap-1 mb-1">
+                              <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                            </div>
+                            <ul className="list-disc list-inside font-bold space-y-1">
+                              {req.rejectedDocuments.map(docData => (
+                                <li key={docData.iddocumento}>
+                                  {docData.tipodocumento}
+                                  {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Botón de corrección */}
+                        {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
+                          <button
+                            onClick={() => handleOpenFixModal(req)}
+                            className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-sm">upload_file</span>
+                            Corregir Documentos
+                          </button>
+                        )}
+
+                        {/* Rechazo por dictamen */}
+                        {idestatus === 25 && (
+                          <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                            <div className="flex items-start gap-3">
+                              <span className="material-symbols-outlined text-gray-400">info</span>
+                              <div>
+                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
+                                  Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
