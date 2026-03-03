@@ -48,6 +48,15 @@ export const solicitudService = {
     });
   },
 
+  /** Actualiza el UUID de verificación VDID en una solicitud existente. */
+  updateUuid: async (idsolicitud: number, uuid: string, token?: string) => {
+    return await apiRequest<any>(API_ENDPOINTS.SOLICITUDES.UPDATE, {
+      method: 'POST',
+      body: { idsolicitud, uuid },
+      token,
+    });
+  },
+
   createRevision: async (payload: any, token?: string) => {
     return await apiRequestWithLoading<any>(API_ENDPOINTS.REVISION.CREATE, {
       method: 'POST',

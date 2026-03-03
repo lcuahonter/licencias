@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserData } from '../types';
+import { vdidService } from '../src/api/vdidService';
+import VdidCaptureModal from '../components/src/VdidCaptureModal';
 
 interface DocumentUploadScreenProps {
   onBack: () => void;
@@ -12,22 +14,125 @@ interface DocumentUploadScreenProps {
   isSubmittingRequest?: boolean;
 }
 
-// Tipos de identificación disponibles
-type IdType = 'ine' | 'passport';
-
-const ID_OPTIONS: { id: IdType; label: string; icon: string }[] = [
-  { id: 'ine', label: 'INE / IFE', icon: 'id_card' },
-  { id: 'passport', label: 'Pasaporte', icon: 'book_2' },
-];
-
 import { catalogService } from '../src/api/catalogService';
 
 const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onContinue, idUsuario, idSolicitud, token, isSubmittingRequest }) => {
   
+  // ── VDID states ──────────────────────────────────────────
+  const [showVdidModal, setShowVdidModal] = useState(false);
+  const [vdidUrl, setVdidUrl]             = useState('');
+  const [vdidLoading, setVdidLoading]     = useState(false);
+  const [vdidError, setVdidError]         = useState<string | null>(null);
+  /** null = aún no verificado, 'passed' = aprobado, 'failed' = rechazado */
+  const [vdidResult, setVdidResult]       = useState<null | 'passed' | 'failed'>(null);
+  const [vdidFailReason, setVdidFailReason] = useState<string | null>(null);
+  const [vdidUuid, setVdidUuid]           = useState<string | null>(null);
+  const [vdidPolling, setVdidPolling]     = useState<false | 'scanning' | 'waiting'>(false);  // esperando resultados de Suma México
+  const [vdidSelfie, setVdidSelfie]       = useState<string | null>(null); // base64 selfie
+
+  /**
+   * Callback al completar el flujo VDID en el iframe.
+   * Cierra el modal y hace polling a /id/v2/results cada 5 s hasta obtener
+   * un resultado definitivo (Passed / Failed) o agotar 2 minutos.
+   * Si la respuesta dice "isn't ready" muestra "En espera" y reintenta.
+   */
+  const handleVdidCompleted = async () => {
+      setShowVdidModal(false);
+      // NO marcamos como verificado aún — esperamos el resultado real de Suma México
+
+      const currentUuid = vdidUuid;
+      if (!currentUuid || currentUuid.startsWith('local-')) {
+          setVdidResult('failed');
+          setVdidFailReason('No se pudo obtener un identificador de verificación. Intenta de nuevo.');
+          return;
+      }
+
+      setVdidPolling('scanning');
+      setVdidResult(null);
+      setVdidFailReason(null);
+
+      const POLL_INTERVAL = 5_000;   // 5 segundos
+      const MAX_WAIT      = 600_000; // 10 minutos (el experto de Suma México puede tardar ~5 min)
+      const deadline      = Date.now() + MAX_WAIT;
+
+      while (Date.now() < deadline) {
+          try {
+              const results = await vdidService.getResults(currentUuid);
+              console.log('[VDID] status:', results.status, 'globalResult:', results.globalResult);
+
+              // Suma México aún no terminó de procesar — seguir esperando
+              if (results.status === 'not_ready' || results.globalResult === 'not_ready') {
+                  setVdidPolling('waiting');
+                  await new Promise(r => setTimeout(r, POLL_INTERVAL));
+                  continue;
+              }
+
+              // Resultado definitivo
+              const gr     = results.globalResult?.toLowerCase() ?? '';
+              const passed = gr === 'passed' || gr === 'ok';
+
+              if (passed) {
+                  setVdidResult('passed');
+                  if (results.selfieBase64) {
+                      const selfie = results.selfieBase64.startsWith('data:')
+                          ? results.selfieBase64
+                          : `data:image/jpeg;base64,${results.selfieBase64}`;
+                      setVdidSelfie(selfie);
+                  }
+              } else {
+                  setVdidResult('failed');
+                  setVdidFailReason(
+                      results.globalResultDescription ||
+                      'Tu identificación no pudo ser verificada.'
+                  );
+              }
+              setVdidPolling(false);
+              return;
+
+          } catch (e: any) {
+              console.warn('[VDID] Error consultando resultados, reintentando en 5s:', e);
+              setVdidPolling('waiting');
+              await new Promise(r => setTimeout(r, POLL_INTERVAL));
+          }
+      }
+
+      // Timeout: 10 minutos sin respuesta definitiva
+      setVdidResult('failed');
+      setVdidFailReason('El tiempo de espera se agotó (10 min). Vuelve a escanear tu identificación.');
+      setVdidPolling(false);
+  };
+
+  /**
+   * Inicia la verificación de identidad con Suma México.
+   * - Si hay CLIENT_ID + CLIENT_SECRET: flujo rastreado con UUID real.
+   * - Si solo hay PUBLIC_KEY: flujo de captura sin registro (respaldo).
+   */
+  const handleVdidDocumentScan = async () => {
+      if (!vdidService.isConfigured()) {
+          setVdidError('VITE_VDID_PUBLIC_KEY no está configurada en las variables de entorno.');
+          return;
+      }
+      setVdidError(null);
+      setVdidLoading(true);
+      try {
+          // startTrackedVerification intenta flujo con UUID real;
+          // si el endpoint no está habilitado en el plan, cae automáticamente
+          // a captura sin UUID (uuid === null).
+          const { uuid, url } = await vdidService.startTrackedVerification(
+              `licencias-dgo-${idUsuario ?? 'u0'}-${idSolicitud ?? Date.now()}`
+          );
+          setVdidUuid(uuid ?? `local-${idUsuario ?? 'u0'}-${idSolicitud ?? Date.now()}`);
+          setVdidUrl(url);
+          setShowVdidModal(true);
+      } catch (err: any) {
+          setVdidError(err?.message || 'No se pudo iniciar la verificación con Suma México.');
+      } finally {
+          setVdidLoading(false);
+      }
+  };
+
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-  // Estado del tipo de ID
-  const [selectedIdType, setSelectedIdType] = useState<IdType>('ine');
   const [hasDisability, setHasDisability] = useState(false);
   const [errorField, setErrorField] = useState<string | null>(null);
 
@@ -194,41 +299,24 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     return idestatus === 8 || idestatus === 9 || idestatus === '8' || idestatus === '9';
   };
 
-  const isIdComplete = () => {
-    const idsToShow = getDocumentIdsForIdType(selectedIdType);
-    
-    // Verificar que todos los documentos de ID visibles tengan archivo
-    for (const tipoId of idsToShow) {
-      const item = docsCatalog.find(d => Number(d.id) === tipoId);
-      if (!item) continue;
-      
-      const k = keyForItem(item);
-      
-      // Si es obligatorio, requiere archivo
-      if (isTypeMandatory(tipoId)) {
-        if (!docs[k]) return false;
-      }
-    }
-    
-    return true;
-  };
-
   const isComplete = () => {
-    if (!docsCatalog || docsCatalog.length === 0) return true; // Si no hay catálogo, no bloqueamos
+    // Requiere verificación VDID aprobada por Suma México
+    if (vdidResult !== 'passed') return false;
 
-    // Solo validar los documentos de ID visibles según la selección actual
-    if (!isIdComplete()) return false;
+    if (!docsCatalog || docsCatalog.length === 0) return true;
 
-    // Validar documentos requeridos adicionales (no son de identificación)
-    for (const item of docsCatalog) {
-      // Saltamos documentos de identificación (ya validados en isIdComplete)
-      if ([8, 9, 11, 12].includes(Number(item.id))) continue;
-      
-      // Si es obligatorio y no está habilitado como opcional, requiere archivo
-      if (isTypeMandatory(item.id)) {
-        const k = keyForItem(item);
-        if (!docs[k]) return false;
-      }
+    // Solo valida docs visibles en pantalla: activos (idestatus 8/9) + no de identidad VDID.
+    // Evita que documentos ocultos del catálogo bloqueen el botón.
+    const visibleMandatory = docsCatalog.filter(
+      (it) =>
+        ![8, 9, 11, 12].includes(Number(it.id)) &&
+        isDocumentActive(it) &&
+        isTypeMandatory(it.id)
+    );
+
+    for (const item of visibleMandatory) {
+      const k = keyForItem(item);
+      if (!docs[k]) return false;
     }
 
     // Validar documentos opcionales habilitados
@@ -251,33 +339,18 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
     disabilityProof: 3 // Asumo 3 (Reconocimiento médico) por defecto
   };
 
-  // Mapping: según el tipo de ID seleccionado, qué documentos mostrar
-  const getDocumentIdsForIdType = (idType: IdType): number[] => {
-    switch (idType) {
-      case 'ine': return [8, 9]; // INE Frente y Reverso
-      case 'passport': return [11]; // Pasaporte
-      default: return [];
-    }
-  };
-
-  // Filtra el catálogo para mostrar solo los documentos del tipo de ID seleccionado
-  const getFilteredCatalog = (): any[] => {
-    const idsToShow = getDocumentIdsForIdType(selectedIdType);
-    return docsCatalog.filter(item => idsToShow.includes(Number(item.id)) && isDocumentActive(item));
-  };
-
-
-
-  // Prepara y envía los documentos al padre como arreglo con el id de tipo
+  // Prepara y envía los documentos al padre
   const submitDocuments = () => {
     const documentsArray: any[] = [];
 
     for (const item of docsCatalog) {
+      // Los documentos de ID (INE/Pasaporte) los valida VDID — no se suben manualmente
+      if ([8, 9, 11, 12].includes(Number(item.id))) continue;
+
       const k = keyForItem(item);
       const base64 = docs[k];
       const meta = fileMeta[k];
 
-      // Si es opcional y no está habilitado por el usuario, lo ignoramos
       if (!isTypeMandatory(item.id) && optionalEnabled[k] === false) continue;
 
       if (base64) {
@@ -293,8 +366,16 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       }
     }
 
-    // Envío al padre: ahora documents es un arreglo con objetos (más robusto)
-    onContinue({ documents: documentsArray, fileMeta, hasDisability, selectedIdType, optionalEnabled, catalog: docsCatalog });
+    onContinue({
+      documents: documentsArray,
+      fileMeta,
+      hasDisability,
+      optionalEnabled,
+      catalog: docsCatalog,
+      vdidUuid,                          // UUID de la verificación Suma México
+      vdidVerified: vdidResult === 'passed', // flag: identidad verificada
+      vdidSelfie,                            // base64 selfie obtenida de /id/v2/results
+    });
   };
 
   return (
@@ -314,49 +395,125 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
             <div className="text-sm text-gray-500 mb-4">Cargando catálogo de documentos…</div>
           )}
           
-           {/* SELECTOR DE TIPO DE ID */}
-           <div className="mb-8">
-              <p className="text-xs font-bold uppercase text-gray-400 mb-3">Tipo de Identificación</p>
-              <div className="grid grid-cols-2 gap-3">
-                {ID_OPTIONS.map((opt) => {
-                  const isSelected = selectedIdType === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => setSelectedIdType(opt.id)}
-                      className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all duration-200 ${
-                        isSelected 
-                          ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black shadow-lg scale-[1.02]' 
-                          : 'border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-2xl mb-1">{opt.icon}</span>
-                      <span className="text-[10px] font-bold">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-           </div>
-
            <div className="space-y-6">
              
-             {/* CAMPOS DINÁMICOS (Derivados del catálogo) */}
+             {/* ── Documento de Identificación: siempre vía VDID ── */}
+             <div className="space-y-4">
+               <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Verificación de Identidad</h3>
 
-             {docsCatalog.length > 0 ? (
-               <>
-                 {/* Documentos de identificación (filtrados por tipo seleccionado) */}
-                 <div className="space-y-4">
-                   <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documento de Identificación</h3>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     {getFilteredCatalog().map(item => renderDocumentUpload(item))}
+               {/* ── Estado: validando (polling activo) ── */}
+               {vdidPolling ? (
+                 <div className={`border-2 rounded-2xl p-5 flex flex-col items-center gap-3 text-center transition-colors duration-500 ${
+                   vdidPolling === 'waiting'
+                     ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400'
+                     : 'bg-amber-50 dark:bg-amber-900/20 border-amber-400'
+                 }`}>
+                   <span className={`animate-spin h-10 w-10 border-4 border-t-transparent rounded-full ${
+                     vdidPolling === 'waiting' ? 'border-blue-400' : 'border-amber-400'
+                   }`} />
+                   <div>
+                     {vdidPolling === 'waiting' ? (
+                       <>
+                         <p className="font-bold text-blue-700 dark:text-blue-300 text-base">En espera de resultados…</p>
+                         <p className="text-blue-600 dark:text-blue-400 text-xs mt-1">
+                           El servidor todavía está procesando tu verificación.
+                           Reintentando automáticamente cada 5 segundos.
+                         </p>
+                       </>
+                     ) : (
+                       <>
+                         <p className="font-bold text-amber-700 dark:text-amber-300 text-base">Validando identidad…</p>
+                         <p className="text-amber-600 dark:text-amber-400 text-xs mt-1">
+                           Suma México está revisando tu identificación. Espera un momento.
+                         </p>
+                       </>
+                     )}
+                     {vdidUuid && (
+                       <p className={`text-[10px] font-mono break-all mt-2 select-all ${
+                         vdidPolling === 'waiting' ? 'text-blue-500 dark:text-blue-400' : 'text-amber-600 dark:text-amber-500'
+                       }`}>UUID: {vdidUuid}</p>
+                     )}
                    </div>
                  </div>
+               ) : vdidResult === 'passed' ? (
+                 /* Estado: verificación aprobada */
+                 <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
+                   {vdidSelfie ? (
+                     <img src={vdidSelfie} alt="Selfie verificada" className="w-20 h-20 rounded-full object-cover border-4 border-green-400 shadow-md" />
+                   ) : (
+                     <span className="material-symbols-outlined text-5xl text-green-500">verified_user</span>
+                   )}
+                   <div>
+                     <p className="font-bold text-green-700 dark:text-green-400 text-base">Identidad Verificada</p>
+                     <p className="text-green-600 dark:text-green-500 text-xs mt-1">
+                       {vdidSelfie ? 'Selfie y documento obtenidos correctamente.' : 'Tu documento fue validado correctamente por Suma México.'}
+                     </p>
+                     {vdidUuid && (
+                       <p className="text-gray-400 text-[10px] mt-2 font-mono break-all">UUID: {vdidUuid}</p>
+                     )}
+                   </div>
+                   <button
+                     onClick={() => { setVdidResult(null); setVdidUuid(null); setVdidSelfie(null); setVdidFailReason(null); }}
+                     className="text-[11px] text-gray-500 underline"
+                   >Volver a verificar</button>
+                 </div>
+               ) : vdidResult === 'failed' ? (
+                 /* Estado: verificación rechazada */
+                 <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-500 rounded-2xl p-5 flex flex-col items-center gap-3 text-center">
+                   <span className="material-symbols-outlined text-5xl text-red-500">gpp_bad</span>
+                   <div>
+                     <p className="font-bold text-red-700 dark:text-red-400 text-base">Verificación Rechazada</p>
+                     <p className="text-red-600 dark:text-red-400 text-xs mt-1">
+                       {vdidFailReason || 'Tu identificación no pudo ser verificada por Suma México.'}
+                     </p>
+                     <p className="text-gray-500 text-xs mt-2">Debes volver a escanear tu identificación oficial.</p>
+                     {vdidUuid && (
+                       <p className="text-red-400 dark:text-red-500 text-[10px] font-mono break-all mt-2 select-all">UUID: {vdidUuid}</p>
+                     )}
+                   </div>
+                   <button
+                     onClick={() => { setVdidResult(null); setVdidUuid(null); setVdidSelfie(null); setVdidFailReason(null); handleVdidDocumentScan(); }}
+                     className="w-full max-w-xs h-11 bg-red-600 hover:bg-red-500 active:scale-95 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-md"
+                   >
+                     <span className="material-symbols-outlined text-lg">refresh</span>
+                     Volver a Escanear
+                   </button>
+                 </div>
+               ) : (
+                 /* Estado: pendiente de verificación */
+                 <div className="bg-gray-50 dark:bg-gray-800/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">
+                   <span className="material-symbols-outlined text-5xl text-gray-400">badge</span>
+                   <div>
+                     <p className="font-bold text-gray-700 dark:text-gray-300 text-sm">Verificación de Identidad</p>
+                     <p className="text-gray-500 text-xs mt-1">
+                       Escanea tu identificación oficial con Suma México para validar tu identidad.
+                     </p>
+                     <p className="text-gray-400 text-[10px] mt-1">Incluye reconocimiento facial y prueba de vida.</p>
+                   </div>
+                   <button
+                     onClick={handleVdidDocumentScan}
+                     disabled={vdidLoading}
+                     className="w-full max-w-xs h-12 bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-60 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-md"
+                   >
+                     {vdidLoading
+                       ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> Iniciando...</>
+                       : <><span className="material-symbols-outlined text-lg">document_scanner</span> Iniciar Verificación</>}
+                   </button>
+                   {vdidError && (
+                     <p className="text-red-500 text-xs">{vdidError}</p>
+                   )}
+                 </div>
+               )}
+             </div>
 
-                 <hr className="border-gray-200 dark:border-gray-700 my-6" />
+             {/* ── Documentos adicionales del catálogo (NO son de identidad) ── */}
+             {docsCatalog.length > 0 && (
+               <>
 
                  {/* Documentos Requeridos Adicionales (no son de identificación) */}
                  {docsCatalog.filter((it) => ![8, 9, 11, 12].includes(Number(it.id)) && isTypeMandatory(it.id)).length > 0 && (
                    <div className="space-y-4">
+                     <hr className="border-gray-200 dark:border-gray-700 mb-6" />
                      <h3 className="text-xs font-bold uppercase text-gray-400 mb-3">Documentos Requeridos</h3>
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        {docsCatalog.filter((it) => ![8, 9, 11, 12].includes(Number(it.id)) && isDocumentActive(it) && isTypeMandatory(it.id)).map(item => renderDocumentUpload(item))}
@@ -416,8 +573,6 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                    </div>
                  )}
                </>
-             ) : (
-               <div className="text-sm text-gray-500">No hay información del catálogo. Puedes continuar con los documentos básicos.</div>
              )}
 
              {/* DISCAPACIDAD */}
@@ -477,6 +632,16 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
           )}
         </button>
       </div>
+
+      {/* ── MODAL VDID ────────────────────────────────────────────────── */}
+      <VdidCaptureModal
+          isOpen={showVdidModal}
+          onClose={() => setShowVdidModal(false)}
+          onCompleted={handleVdidCompleted}
+          url={vdidUrl}
+          title={'Verificar Identidad'}
+          description={'Captura tu documento y realiza la prueba de vida. Al terminar presiona "Listo".'}
+      />
     </div>
   );
 };

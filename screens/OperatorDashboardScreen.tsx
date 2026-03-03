@@ -90,9 +90,14 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
 
       // Obtener solicitudes con idestatus 20 (Nuevas) - TAMBIÉN MOSTRARLAS
       // IMPORTANTE: El backend separa 20 y 22, pero para el operador ambas son "nuevas sin revisar"
-    
-      // Combinar 20 y 22
-      const solicitudesSinAsignar = [ ...solicitudesSinAsignar22];
+      const respSolicitudes20 = await solicitudService.getByEstatus(20, token);
+      const solicitudesSinAsignar20 = respSolicitudes20?.data?.solicitudesData || [];
+
+      // Combinar 20 y 22, evitando duplicados por id
+      const combinadas = [...solicitudesSinAsignar22, ...solicitudesSinAsignar20];
+      const solicitudesSinAsignar = combinadas.filter(
+        (sol, index, self) => index === self.findIndex(s => s.id === sol.id)
+      );
 
       // Obtener revisiones asignadas al operador actual
       let revisionesDelOperador: any[] = [];
