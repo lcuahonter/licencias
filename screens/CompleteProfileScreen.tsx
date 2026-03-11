@@ -33,7 +33,7 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
                 placeholder={placeholder}
                 inputMode={numeric ? 'numeric' : 'text'}
                 readOnly={readOnly}
-                className={`w-full h-12 px-4 rounded-xl border-2 outline-none font-bold transition-all uppercase 
+                className={`w-full h-12 px-4 rounded-xl border-2 outline-none font-bold text-sm transition-all uppercase truncate
                 ${readOnly
                         ? 'bg-gray-100 dark:bg-gray-900 border-gray-200 text-gray-500 cursor-not-allowed'
                         : error
@@ -90,7 +90,7 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
             <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>
                 Teléfono
             </label>
-            <div className="relative">
+            <div className={`relative rounded-xl border-2 transition-all ${error ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'}`}>
                 <input
                     ref={phoneInputRef}
                     type="tel"
@@ -99,10 +99,10 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                     onChange={handlePhoneChange}
                     placeholder=""
                     maxLength={10}
-                    className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold transition-all [appearance:none] [-webkit-appearance:none] ${
+                    className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 outline-none font-bold text-sm transition-all [appearance:none] [-webkit-appearance:none] ${
                         error 
-                            ? 'border-red-500 text-red-900 focus:border-red-600' 
-                            : 'border-gray-100 dark:border-gray-700 focus:border-primary'
+                            ? 'text-red-900' 
+                            : 'text-gray-900 dark:text-white'
                     }`}
                 />
             </div>
@@ -495,8 +495,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                         <InputField label="Nombre(s)" value={form.firstName} readOnly={true} />
                         <InputField label="Apellido Paterno" value={form.paternalName} readOnly={true} width="half" />
                         <InputField label="Apellido Materno" value={form.maternalName} readOnly={true} width="half" />
-                        <InputField label="CURP" value={form.curp} readOnly={true} width="half" />
-                        <InputField label="Correo" value={form.email} readOnly={true} width="half" />
+                        <InputField label="CURP" value={form.curp} readOnly={true} />
+                        <InputField label="Correo" value={form.email} readOnly={true} />
 
                         <InputField innerRef={inputRefs.rfc} label="RFC (Homoclave Opcional)" value={form.rfc} onChange={(val: string) => handleSafeInput('rfc', val, 'alphanumeric')} placeholder="AAAA990101 o AAAA990101XXX" width="half" max={13} error={errors.rfc} />
 

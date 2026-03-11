@@ -42,6 +42,7 @@
 .iti {
   width: 100%;
   border: none !important;
+  border-radius: 0.75rem !important;
 }
 
 .iti input {
