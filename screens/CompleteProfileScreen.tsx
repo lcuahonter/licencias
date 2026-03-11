@@ -100,7 +100,7 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                     onChange={handlePhoneChange}
                     placeholder=""
                     maxLength={10}
-                    className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold transition-all ${
+                    className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold transition-all [appearance:none] [-webkit-appearance:none] ${
                         error 
                             ? 'border-red-500 text-red-900 focus:border-red-600' 
                             : 'border-gray-100 dark:border-gray-700 focus:border-primary'
