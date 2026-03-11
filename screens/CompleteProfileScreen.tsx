@@ -71,19 +71,25 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
     }, [phoneValue]);
 
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Solo dígitos, máximo 10 (el prefijo lo muestra intl-tel-input por fuera con separateDialCode)
-        let digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-        
+        const countryData = itiRef.current?.getSelectedCountryData();
+        const dialCode = countryData ? countryData.dialCode : '52';
+
+        // Quitar todo lo que no sea número
+        let allDigits = e.target.value.replace(/\D/g, '');
+
+        // Si empieza con el código de país, removerlo
+        if (allDigits.startsWith(dialCode)) {
+            allDigits = allDigits.slice(dialCode.length);
+        }
+
         if (phoneInputRef.current) {
-            phoneInputRef.current.value = digits;
+            phoneInputRef.current.value = allDigits;
         }
-        
+
         if (itiRef.current) {
-            const countryData = itiRef.current.getSelectedCountryData();
-            const dialCode = countryData ? '+' + countryData.dialCode : '+52';
-            onLadaChange(dialCode);
+            onLadaChange('+' + dialCode);
         }
-        onPhoneChange(digits);
+        onPhoneChange(allDigits);
     };
 
     return (
@@ -99,7 +105,6 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
                     pattern="[0-9]*"
                     onChange={handlePhoneChange}
                     placeholder=""
-                    maxLength={10}
                     className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 outline-none font-bold text-sm transition-all [appearance:none] [-webkit-appearance:none] ${
                         error 
                             ? 'text-red-900' 
@@ -379,13 +384,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             if (!form.colony) newErrors.colony = 'Requerido';
             if (!form.municipality.trim()) newErrors.municipality = 'Requerido';
             if (!form.locality.trim()) newErrors.locality = 'Requerido';
-            if (form.phone.length !== 10) newErrors.phone = '10 dígitos';
+            if (form.phone.length < 6) newErrors.phone = 'Número inválido';
         }
 
         if (step === 3) {
             if (!form.emergFirstName.trim()) newErrors.emergFirstName = 'Requerido';
             if (!form.emergPaternal.trim()) newErrors.emergPaternal = 'Requerido';
-            if (!form.emergPhone.length || form.emergPhone.length !== 10) newErrors.emergPhone = '10 dígitos';
+            if (!form.emergPhone.length || form.emergPhone.length < 6) newErrors.emergPhone = 'Número inválido';
             if (!form.emergAddress.trim()) newErrors.emergAddress = 'Requerido';
             if (!form.emergZipCode || form.emergZipCode.length !== 5) newErrors.emergZipCode = '5 dígitos';
             if (!form.emergColony) newErrors.emergColony = 'Requerido';
