@@ -57,7 +57,6 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
         if (phoneInputRef.current && !itiRef.current) {
             itiRef.current = intlTelInput(phoneInputRef.current, {
                 initialCountry: "mx",
-                onlyCountries: ["mx", "us", "es", "ar", "br", "cl", "co", "cu", "ec", "sv", "gt", "hn", "ni", "pa", "py", "pe", "pr", "do", "uy", "ve"],
                 separateDialCode: true,
             } as any);
         }
