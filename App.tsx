@@ -238,8 +238,8 @@ const AppContent: React.FC = () => {
               </div>
             </div>
             {currentStep === AppStep.WELCOME && (
-              <div className="w-full p-4 text-center text-[10px] text-gray-400 lg:hidden bg-white dark:bg-background-dark pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-                Gobierno del Estado de Durango &copy; 2025
+              <div className="w-full p-4 text-center text-[10px] text-gray-400 bg-white dark:bg-background-dark pb-[calc(env(safe-area-inset-bottom)+2rem)]">
+                Gobierno del Estado de Durango &copy; 2026
               </div>
             )}
           </div>

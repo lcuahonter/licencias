@@ -50,14 +50,35 @@ const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error,
     <div className="col-span-2 space-y-1">
         <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>Teléfono</label>
         <div className="flex gap-2 relative">
-            <div className="relative w-24">
+            <div className="relative w-28">
                 <select
                     value={ladaValue}
                     onChange={(e) => onLadaChange(e.target.value)}
-                    className="w-full h-12 pl-3 pr-1 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 appearance-none font-bold outline-none"
+                    className="w-full h-12 pl-3 pr-1 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 appearance-none font-bold outline-none text-sm"
                 >
                     <option value="+52">🇲🇽 +52</option>
                     <option value="+1">🇺🇸 +1</option>
+                    <option value="+1">🇨🇦 +1</option>
+                    <option value="+54">🇦🇷 +54</option>
+                    <option value="+591">🇧🇴 +591</option>
+                    <option value="+55">🇧🇷 +55</option>
+                    <option value="+56">🇨🇱 +56</option>
+                    <option value="+57">🇨🇴 +57</option>
+                    <option value="+506">🇨🇷 +506</option>
+                    <option value="+53">🇨🇺 +53</option>
+                    <option value="+593">🇪🇨 +593</option>
+                    <option value="+503">🇸🇻 +503</option>
+                    <option value="+34">🇪🇸 +34</option>
+                    <option value="+502">🇬🇹 +502</option>
+                    <option value="+504">🇭🇳 +504</option>
+                    <option value="+505">🇳🇮 +505</option>
+                    <option value="+507">🇵🇦 +507</option>
+                    <option value="+595">🇵🇾 +595</option>
+                    <option value="+51">🇵🇪 +51</option>
+                    <option value="+1">🇵🇷 +1</option>
+                    <option value="+1">🇩🇴 +1</option>
+                    <option value="+598">🇺🇾 +598</option>
+                    <option value="+58">🇻🇪 +58</option>
                 </select>
                 <span className="absolute right-2 top-4 text-[8px] text-gray-400">▼</span>
             </div>
