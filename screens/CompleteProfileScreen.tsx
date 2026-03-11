@@ -3,6 +3,7 @@ import { UserData } from '../types';
 // Corregimos los imports para que sean relativos estándar
 import { userService } from '../src/api/userService';
 import { catalogService } from '../src/api/catalogService';
+import { getGenderFromCurp } from '../src/utils/curpHelpers';
 import intlTelInput from 'intl-tel-input';
 import 'intl-tel-input/build/css/intlTelInput.css';
 
@@ -310,6 +311,24 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         }
     }, [form.curp]);
 
+    // Auto-detectar sexo desde CURP
+    useEffect(() => {
+        if (form.curp && form.curp.length >= 11) {
+            const gender = getGenderFromCurp(form.curp);
+            if (gender) {
+                setForm(prev => ({ ...prev, gender }));
+                // Limpiar error de género si existía
+                if (errors.gender) {
+                    setErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.gender;
+                        return newErrors;
+                    });
+                }
+            }
+        }
+    }, [form.curp]);
+
     const validateRFC = (rfc: string) => {
         // Acepta 10 caracteres (sin homoclave) o 13 (con homoclave)
         const rfcRegex = /^([A-ZÑ&]{3,4})(\d{6})([A-Z\d]{0,3})$/;
@@ -501,13 +520,15 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                         <InputField innerRef={inputRefs.rfc} label="RFC (Homoclave Opcional)" value={form.rfc} onChange={(val: string) => handleSafeInput('rfc', val, 'alphanumeric')} placeholder="AAAA990101 o AAAA990101XXX" width="half" max={13} error={errors.rfc} />
 
                         <div className="col-span-1 space-y-1">
-                            <label className={`text-[10px] font-bold uppercase ml-1 ${errors.gender ? 'text-red-500' : 'text-gray-500'}`}>Sexo</label>
-                            <select value={form.gender} onChange={(e) => { setForm({ ...form, gender: e.target.value }); if (errors.gender) setErrors(p => { const n = {...p}; delete n.gender; return n; }); }} className={`w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold ${errors.gender ? 'border-red-500 text-red-900' : 'border-gray-100 dark:border-gray-700'}`}>
-                                <option value="" disabled>-- Selecciona --</option>
-                                <option value="F">FEMENINO</option>
-                                <option value="M">MASCULINO</option>
-                            </select>
-                            {errors.gender && <p className="text-[9px] text-red-500 font-bold ml-2 animate-in slide-in-from-top-1">{errors.gender}</p>}
+                            <label className="text-[10px] font-bold uppercase ml-1 text-gray-500">Sexo</label>
+                            <div className="relative">
+                                <select value={form.gender} disabled className="w-full h-12 px-3 rounded-xl bg-gray-100 dark:bg-gray-900 border-2 border-gray-200 text-gray-500 outline-none font-bold cursor-not-allowed">
+                                    <option value="" disabled>-- Selecciona --</option>
+                                    <option value="F">FEMENINO</option>
+                                    <option value="M">MASCULINO</option>
+                                </select>
+                                <span className="material-symbols-outlined absolute right-3 top-3 text-gray-400 text-sm pointer-events-none">lock</span>
+                            </div>
                         </div>
                         <div className="col-span-1 space-y-1">
                             <label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Nacionalidad</label>
