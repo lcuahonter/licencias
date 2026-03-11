@@ -3,6 +3,8 @@ import { UserData } from '../types';
 // Corregimos los imports para que sean relativos estándar
 import { userService } from '../src/api/userService';
 import { catalogService } from '../src/api/catalogService';
+import intlTelInput from 'intl-tel-input';
+import 'intl-tel-input/build/css/intlTelInput.css';
 
 interface CompleteProfileScreenProps {
     userData: UserData;
@@ -46,57 +48,69 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
     </div>
 );
 
-const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error, innerRef }: any) => (
-    <div className="col-span-2 space-y-1">
-        <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>Teléfono</label>
-        <div className="flex gap-2 relative">
-            <div className="relative w-28">
-                <select
-                    value={ladaValue}
-                    onChange={(e) => onLadaChange(e.target.value)}
-                    className="w-full h-12 pl-3 pr-1 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 appearance-none font-bold outline-none text-sm"
-                >
-                    <option value="+52">🇲🇽 +52</option>
-                    <option value="+1">🇺🇸 +1</option>
-                    <option value="+1">🇨🇦 +1</option>
-                    <option value="+54">🇦🇷 +54</option>
-                    <option value="+591">🇧🇴 +591</option>
-                    <option value="+55">🇧🇷 +55</option>
-                    <option value="+56">🇨🇱 +56</option>
-                    <option value="+57">🇨🇴 +57</option>
-                    <option value="+506">🇨🇷 +506</option>
-                    <option value="+53">🇨🇺 +53</option>
-                    <option value="+593">🇪🇨 +593</option>
-                    <option value="+503">🇸🇻 +503</option>
-                    <option value="+34">🇪🇸 +34</option>
-                    <option value="+502">🇬🇹 +502</option>
-                    <option value="+504">🇭🇳 +504</option>
-                    <option value="+505">🇳🇮 +505</option>
-                    <option value="+507">🇵🇦 +507</option>
-                    <option value="+595">🇵🇾 +595</option>
-                    <option value="+51">🇵🇪 +51</option>
-                    <option value="+1">🇵🇷 +1</option>
-                    <option value="+1">🇩🇴 +1</option>
-                    <option value="+598">🇺🇾 +598</option>
-                    <option value="+58">🇻🇪 +58</option>
-                </select>
-                <span className="absolute right-2 top-4 text-[8px] text-gray-400">▼</span>
+const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error, innerRef }: any) => {
+    const phoneInputRef = useRef<HTMLInputElement>(null);
+    const itiRef = useRef<any>(null);
+
+    // Inicialización de intl-tel-input
+    useEffect(() => {
+        if (phoneInputRef.current && !itiRef.current) {
+            itiRef.current = intlTelInput(phoneInputRef.current, {
+                initialCountry: "mx",
+                onlyCountries: ["mx", "us", "es", "ar", "br", "cl", "co", "cu", "ec", "sv", "gt", "hn", "ni", "pa", "py", "pe", "pr", "do", "uy", "ve"],
+                separateDialCode: true,
+            } as any);
+        }
+    }, []);
+
+    // Sincronizar valores cuando cambian (solo los dígitos, el prefijo va separado)
+    useEffect(() => {
+        if (phoneInputRef.current && itiRef.current && phoneValue) {
+            phoneInputRef.current.value = phoneValue;
+        }
+    }, [phoneValue]);
+
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        // Solo dígitos, máximo 10 (el prefijo lo muestra intl-tel-input por fuera con separateDialCode)
+        let digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+        
+        if (phoneInputRef.current) {
+            phoneInputRef.current.value = digits;
+        }
+        
+        if (itiRef.current) {
+            const countryData = itiRef.current.getSelectedCountryData();
+            const dialCode = countryData ? '+' + countryData.dialCode : '+52';
+            onLadaChange(dialCode);
+        }
+        onPhoneChange(digits);
+    };
+
+    return (
+        <div className="col-span-2 space-y-1">
+            <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>
+                Teléfono
+            </label>
+            <div className="relative">
+                <input
+                    ref={phoneInputRef}
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    onChange={handlePhoneChange}
+                    placeholder=""
+                    maxLength={10}
+                    className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold transition-all ${
+                        error 
+                            ? 'border-red-500 text-red-900 focus:border-red-600' 
+                            : 'border-gray-100 dark:border-gray-700 focus:border-primary'
+                    }`}
+                />
             </div>
-            <input
-                ref={innerRef}
-                value={phoneValue}
-                onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    if (val.length <= 10) onPhoneChange(val);
-                }}
-                placeholder="10 Dígitos"
-                inputMode="tel"
-                className={`flex-1 h-12 px-4 rounded-xl bg-white dark:bg-gray-800 border-2 outline-none font-bold transition-all ${error ? 'border-red-500 text-red-900 focus:border-red-600' : 'border-gray-100 dark:border-gray-700 focus:border-primary'}`}
-            />
+            {error && <p className="text-[9px] text-red-500 font-bold ml-2">{error}</p>}
         </div>
-        {error && <p className="text-[9px] text-red-500 font-bold ml-2">{error}</p>}
-    </div>
-);
+    );
+};
 
 // --- MAIN COMPONENT ---
 
