@@ -7,6 +7,7 @@ import { getGenderFromCurp } from '../src/utils/curpHelpers';
 import intlTelInput from 'intl-tel-input';
 import 'intl-tel-input/build/css/intlTelInput.css';
 
+
 interface CompleteProfileScreenProps {
     userData: UserData;
     idUsuario: number;
@@ -49,66 +50,60 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
     </div>
 );
 
-const PhoneInput = ({ ladaValue, phoneValue, onLadaChange, onPhoneChange, error, innerRef }: any) => {
-    const phoneInputRef = useRef<HTMLInputElement>(null);
+const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label = 'Teléfono', error }: any) => {
+    const itiContainerRef = useRef<HTMLDivElement>(null); // div vacío - React NO renderiza hijos aquí
     const itiRef = useRef<any>(null);
+    const onLadaChangeRef = useRef(onLadaChange);
+    onLadaChangeRef.current = onLadaChange;
 
-    // Inicialización de intl-tel-input
     useEffect(() => {
-        if (phoneInputRef.current && !itiRef.current) {
-            itiRef.current = intlTelInput(phoneInputRef.current, {
-                initialCountry: "mx",
-                separateDialCode: true,
-            } as any);
-        }
+        if (!itiContainerRef.current || itiRef.current) return;
+
+        // Input imperativo — React nunca lo toca
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'tel';
+        hiddenInput.tabIndex = -1;
+        hiddenInput.style.cssText = 'width:0;height:48px;opacity:0;border:none;padding:0;margin:0;outline:none;background:transparent;position:absolute;';
+        itiContainerRef.current.appendChild(hiddenInput);
+
+        itiRef.current = intlTelInput(hiddenInput, {
+            initialCountry: 'mx',
+            separateDialCode: true,
+            dropdownContainer: document.body,
+        } as any);
+
+        const handleCountryChange = () => {
+            const data = itiRef.current?.getSelectedCountryData();
+            if (data) onLadaChangeRef.current('+' + data.dialCode);
+        };
+        hiddenInput.addEventListener('countrychange', handleCountryChange);
+
+        return () => {
+            hiddenInput.removeEventListener('countrychange', handleCountryChange);
+            itiRef.current?.destroy();
+            itiRef.current = null;
+        };
     }, []);
-
-    // Sincronizar valores cuando cambian (solo los dígitos, el prefijo va separado)
-    useEffect(() => {
-        if (phoneInputRef.current && itiRef.current && phoneValue) {
-            phoneInputRef.current.value = phoneValue;
-        }
-    }, [phoneValue]);
-
-    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const countryData = itiRef.current?.getSelectedCountryData();
-        const dialCode = countryData ? countryData.dialCode : '52';
-
-        // Quitar todo lo que no sea número
-        let allDigits = e.target.value.replace(/\D/g, '');
-
-        // Si empieza con el código de país, removerlo
-        if (allDigits.startsWith(dialCode)) {
-            allDigits = allDigits.slice(dialCode.length);
-        }
-
-        if (phoneInputRef.current) {
-            phoneInputRef.current.value = allDigits;
-        }
-
-        if (itiRef.current) {
-            onLadaChange('+' + dialCode);
-        }
-        onPhoneChange(allDigits);
-    };
 
     return (
         <div className="col-span-2 space-y-1">
             <label className={`text-[10px] font-bold uppercase ml-1 ${error ? 'text-red-500' : 'text-gray-500'}`}>
-                Teléfono
+                {label}
             </label>
-            <div className={`relative rounded-xl border-2 transition-all ${error ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'}`}>
+            <div className={`flex items-center rounded-xl border-2 h-12 transition-all ${
+                error ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
+            }`}>
+                {/* Div imperativo: ancho fijo 80px para que el flag+prefijo no se encime con el input */}
+                <div ref={itiContainerRef} className="phone-iti-wrap relative shrink-0 h-full" style={{ width: 80 }} />
+                {/* Nuestro input real: 100% React, sin ninguna libreria tocando su valor */}
                 <input
-                    ref={phoneInputRef}
                     type="tel"
                     inputMode="numeric"
-                    pattern="[0-9]*"
-                    onChange={handlePhoneChange}
-                    placeholder=""
-                    className={`w-full h-12 rounded-xl bg-white dark:bg-gray-800 outline-none font-bold text-sm transition-all [appearance:none] [-webkit-appearance:none] ${
-                        error 
-                            ? 'text-red-900' 
-                            : 'text-gray-900 dark:text-white'
+                    value={phoneValue || ''}
+                    onChange={(e) => onPhoneChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="10 dígitos"
+                    className={`flex-1 h-full px-3 bg-transparent outline-none font-bold text-sm ${
+                        error ? 'text-red-900' : 'text-gray-900 dark:text-white'
                     }`}
                 />
             </div>
@@ -384,13 +379,13 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             if (!form.colony) newErrors.colony = 'Requerido';
             if (!form.municipality.trim()) newErrors.municipality = 'Requerido';
             if (!form.locality.trim()) newErrors.locality = 'Requerido';
-            if (form.phone.length < 6) newErrors.phone = 'Número inválido';
+            if (!form.phone.trim()) newErrors.phone = 'Requerido';
         }
 
         if (step === 3) {
             if (!form.emergFirstName.trim()) newErrors.emergFirstName = 'Requerido';
             if (!form.emergPaternal.trim()) newErrors.emergPaternal = 'Requerido';
-            if (!form.emergPhone.length || form.emergPhone.length < 6) newErrors.emergPhone = 'Número inválido';
+            if (!form.emergPhone.trim()) newErrors.emergPhone = 'Requerido';
             if (!form.emergAddress.trim()) newErrors.emergAddress = 'Requerido';
             if (!form.emergZipCode || form.emergZipCode.length !== 5) newErrors.emergZipCode = '5 dígitos';
             if (!form.emergColony) newErrors.emergColony = 'Requerido';
@@ -446,7 +441,8 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                 conocidoColonia: form.emergColonyName, // Nombre de la colonia
                 conocidoMunicipio: form.emergMunicipality,
                 conocidoLocalidad: form.emergLocality, // Texto libre
-                conocidoTelefono: `${form.emergPhoneLada} ${form.emergPhone}`
+                conocidoTelefono: `${form.emergPhoneLada} ${form.emergPhone}`,
+                telefono: `${form.phoneLada} ${form.phone}`
             };
 
             // Llamada limpia al servicio
@@ -602,7 +598,17 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                         />
 
                         <InputField label="Entidad" value={form.state} readOnly={true} width="half" />
-                        <PhoneInput innerRef={inputRefs.phone} ladaValue={form.phoneLada} phoneValue={form.phone} onLadaChange={(v: string) => setForm({ ...form, phoneLada: v })} onPhoneChange={(v: string) => setForm({ ...form, phone: v })} error={errors.phone} />
+                        <PhoneInput
+                            label="Teléfono"
+                            phoneValue={form.phone}
+                            ladaValue={form.phoneLada}
+                            onLadaChange={(v: string) => setForm(prev => ({ ...prev, phoneLada: v }))}
+                            onPhoneChange={(v: string) => {
+                                setForm(prev => ({ ...prev, phone: v }));
+                                if (v.trim()) setErrors(prev => { const n = { ...prev }; delete n.phone; return n; });
+                            }}
+                            error={errors.phone}
+                        />
                     </div>
                 )}
 
@@ -651,7 +657,17 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                             error={errors.emergLocality}
                         />
 
-                        <PhoneInput innerRef={inputRefs.emergPhone} ladaValue={form.emergPhoneLada} phoneValue={form.emergPhone} onLadaChange={(v: string) => setForm({ ...form, emergPhoneLada: v })} onPhoneChange={(v: string) => setForm({ ...form, emergPhone: v })} error={errors.emergPhone} />
+                        <PhoneInput
+                            label="Teléfono de Emergencia"
+                            phoneValue={form.emergPhone}
+                            ladaValue={form.emergPhoneLada}
+                            onLadaChange={(v: string) => setForm(prev => ({ ...prev, emergPhoneLada: v }))}
+                            onPhoneChange={(v: string) => {
+                                setForm(prev => ({ ...prev, emergPhone: v }));
+                                if (v.trim()) setErrors(prev => { const n = { ...prev }; delete n.emergPhone; return n; });
+                            }}
+                            error={errors.emergPhone}
+                        />
                     </div>
                 )}
 
