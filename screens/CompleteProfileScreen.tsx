@@ -868,6 +868,9 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                                 isClearable
                                 isSearchable
                                 noOptionsMessage={() => 'Sin resultados'}
+                                menuPortalTarget={typeof document !== 'undefined' ? document.body : undefined}
+                                menuPosition="fixed"
+                                maxMenuHeight={220}
                                 styles={{
                                     control: (base: any, state: any) => ({
                                         ...base,
@@ -878,21 +881,25 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                                         boxShadow: 'none',
                                         backgroundColor: errors.nationality ? '#fef2f2' : 'white',
                                         fontWeight: '700',
-                                        fontSize: '0.875rem',
+                                        fontSize: '14px',
                                         '&:hover': { borderColor: errors.nationality ? '#ef4444' : '#6366f1' },
                                     }),
-                                    valueContainer: (base: any) => ({ ...base, padding: '0 12px' }),
-                                    singleValue: (base: any) => ({ ...base, color: errors.nationality ? '#7f1d1d' : '#111827' }),
-                                    placeholder: (base: any) => ({ ...base, color: '#9ca3af', fontWeight: '400' }),
-                                    menu: (base: any) => ({ ...base, borderRadius: '0.75rem', zIndex: 9999 }),
+                                    valueContainer: (base: any) => ({ ...base, padding: '0 10px' }),
+                                    singleValue: (base: any) => ({ ...base, color: errors.nationality ? '#7f1d1d' : '#111827', fontSize: '13px' }),
+                                    placeholder: (base: any) => ({ ...base, color: '#9ca3af', fontWeight: '400', fontSize: '13px' }),
+                                    menu: (base: any) => ({ ...base, borderRadius: '0.75rem', zIndex: 99999, fontSize: '13px' }),
+                                    menuPortal: (base: any) => ({ ...base, zIndex: 99999 }),
                                     option: (base: any, state: any) => ({
                                         ...base,
                                         fontWeight: '600',
-                                        fontSize: '0.875rem',
+                                        fontSize: '13px',
+                                        padding: '8px 12px',
                                         backgroundColor: state.isSelected ? '#6366f1' : state.isFocused ? '#e0e7ff' : 'white',
                                         color: state.isSelected ? 'white' : '#111827',
                                     }),
                                     indicatorSeparator: () => ({ display: 'none' }),
+                                    dropdownIndicator: (base: any) => ({ ...base, padding: '0 6px' }),
+                                    clearIndicator: (base: any) => ({ ...base, padding: '0 4px' }),
                                 }}
                             />
                             {errors.nationality && <p className="text-[9px] text-red-500 font-bold ml-2 animate-in slide-in-from-top-1">{errors.nationality}</p>}
