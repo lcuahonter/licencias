@@ -6,12 +6,40 @@ import { catalogService } from '../src/api/catalogService';
 import { getGenderFromCurp } from '../src/utils/curpHelpers';
 import intlTelInput from 'intl-tel-input';
 import 'intl-tel-input/build/css/intlTelInput.css';
+import ReactSelect from 'react-select';
+
+const NATIONALITY_OPTIONS = [
+  'AFGANA','ALBANESA','ALEMANA','ANDORRANA','ANGOLEÑA','ANTIGUENSE','ÁRABE EMIRATENSE','ARGELINA',
+  'ARGENTINA','ARMENIA','AUSTRALIANA','AUSTRIACA','AZERBAIYANA','BAHAMEÑA','BANGLADESÍ','BARBADIENSE',
+  'BAREINÍ','BELGA','BELICEÑA','BENINESA','BIELORRUSA','BIRMANA','BOLIVIANA','BOSNIA-HERZEGOVINIA',
+  'BOTSUANIANA','BRASILEÑA','BRUNEIANA','BÚLGARA','BURKINESA','BURUNDESA','BUTANESA','CABOVERDIANA',
+  'CAMBOYENSE','CAMERUNESA','CANADIENSE','CATARÍ','CHADIANA','CHILENA','CHINA','CHIPRIOTA',
+  'COLOMBIANA','COMORENSE','CONGOLEÑA','COSTARRICENSE','CROATA','CUBANA','DANESA','DOMINICANA',
+  'ECUATOGUINEANA','ECUATORIANA','EGIPCIA','ERITREA','ESLOVACA','ESLOVENA','ESPAÑOLA','ESTADOUNIDENSE',
+  'ESTONIA','ETÍOPE','FIYIANA','FILIPINA','FINLANDESA','FRANCESA','GABONESA','GAMBIANA',
+  'GEORGIANA','GHANESA','GRANADINA','GRIEGA','GUATEMALTECA','GUINEANA','GUINEA-BISAUENSE','GUYANESA',
+  'HAITIANA','HONDUREÑA','HÚNGARA','INDIA','INDONESIA','IRANÍ','IRAQUÍ','IRLANDESA',
+  'ISLANDESA','ISRAELÍ','ITALIANA','JAMAICANA','JAPONESA','JORDANA','KAZAJA','KENIANA',
+  'KIRGUÍS','KIRIBATIANA','KUWAITÍ','LAOSIANA','LESOTENSE','LETONA','LIBERIANA','LIBIA',
+  'LIECHTENSTENIENSE','LITUANA','LUXEMBURGUESA','MACEDÓNICA','MALGACHE','MALASIA','MALAUIANA','MALDIVIANA',
+  'MALENSE','MALTESA','MARFILEÑA','MARROQUÍ','MAURICIANA','MAURITANA','MEXICANA','MICRONESIA',
+  'MOLDAVA','MONAGUESCA','MONGOLA','MONTENEGRINA','MOZAMBIQUEÑA','NAMIBIA','NAURUANA','NEPALESA',
+  'NICARAGÜENSE','NIGERIANA','NIGERINA','NORCOREANA','NORUEGA','NEOZELANDESA','OMANÍ','PAKISTANÍ',
+  'PALAUANA','PALESTINA','PANAMEÑA','PAPUANA','PARAGUAYA','PERUANA','POLACA','PORTUGUESA',
+  'RUANDESA','RUMANA','RUSA','SAMOANA','SANMARINENSE','SANTOTOMENSE','SAUDÍ','SENEGALESA',
+  'SERBIA','SEYCHELLENSE','SIERRALEONESA','SINGAPURENSE','SIRIA','SOMALÍ','CEILANESA','SUDAFRICANA',
+  'SUDANESA','SUDANSURENSE','SUECA','SUIZA','SURINAMESA','SWAZI','TAILANDESA','TANZANA',
+  'TAYIKA','TIMORENSE','TOGOLESA','TONGANA','TRINITARIA','TUNECINA','TURCA','TURCOMANA',
+  'TUVALUANA','UGANDESA','UCRANIANA','URUGUAYA','UZBEKA','VANUATENSE','VENEZOLANA','VIETNAMITA',
+  'YEMENÍ','YIBUTIANA','ZAMBIANA','ZIMBABUENSE',
+].map(n => ({ value: n, label: n }));
 
 
 interface CompleteProfileScreenProps {
     userData: UserData;
     idUsuario: number;
     token?: string;
+    onSessionExpired?: () => void;
     onBack: () => void;
     onSave: (data: Partial<UserData>) => void;
 }
@@ -93,8 +121,8 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
             <div className={`flex items-center rounded-xl border-2 h-12 transition-all ${
                 error ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
             }`}>
-                {/* Div imperativo: ancho fijo 80px para que el flag+prefijo no se encime con el input */}
-                <div ref={itiContainerRef} className="phone-iti-wrap relative shrink-0 h-full" style={{ width: 80 }} />
+                {/* Div imperativo: ancho automático según el prefijo seleccionado */}
+                <div ref={itiContainerRef} className="phone-iti-wrap relative shrink-0 h-full" />
                 {/* Nuestro input real: 100% React, sin ninguna libreria tocando su valor */}
                 <input
                     type="tel"
@@ -102,7 +130,7 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
                     value={phoneValue || ''}
                     onChange={(e) => onPhoneChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
                     placeholder="10 dígitos"
-                    className={`flex-1 h-full px-3 bg-transparent outline-none font-bold text-sm ${
+                    className={`flex-1 h-full pl-3 pr-2 bg-transparent outline-none font-bold text-sm ${
                         error ? 'text-red-900' : 'text-gray-900 dark:text-white'
                     }`}
                 />
@@ -131,7 +159,11 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         rfc: '',
         curp: userData.idNumber || '',
         email: userData.email || '',
-        nationality: 'MEXICANA',
+        nationality: (() => {
+            const c = (userData.idNumber || '').toUpperCase();
+            if (c.length >= 13) return c.substring(11, 13) === 'NE' ? '' : 'MEXICANA';
+            return '';
+        })(),
         gender: '',
         bloodType: '',
         isDonor: false,
@@ -329,6 +361,18 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
         }
     }, [form.curp]);
 
+    // Auto-detectar nacionalidad desde CURP (posiciones 12-13, índice 11-12)
+    useEffect(() => {
+        if (form.curp && form.curp.length >= 13) {
+            const estadoCurp = form.curp.substring(11, 13).toUpperCase();
+            const newNationality = estadoCurp === 'NE' ? '' : 'MEXICANA';
+            setForm(prev => ({ ...prev, nationality: newNationality }));
+            if (newNationality && errors.nationality) {
+                setErrors(prev => { const n = { ...prev }; delete n.nationality; return n; });
+            }
+        }
+    }, [form.curp]);
+
     const validateRFC = (rfc: string) => {
         // Acepta 10 caracteres (sin homoclave) o 13 (con homoclave)
         const rfcRegex = /^([A-ZÑ&]{3,4})(\d{6})([A-Z\d]{0,3})$/;
@@ -370,6 +414,7 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
             const rfcError = validateRFC(form.rfc);
             if (rfcError) newErrors.rfc = rfcError;
             if (!form.gender) newErrors.gender = 'Selecciona el sexo';
+            if (!form.nationality) newErrors.nationality = 'Selecciona la nacionalidad';
             if (!form.bloodType) newErrors.bloodType = 'Selecciona el tipo de sangre';
         }
 
@@ -532,10 +577,46 @@ const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({ userData,
                             </div>
                         </div>
                         <div className="col-span-1 space-y-1">
-                            <label className="text-[10px] font-bold uppercase text-gray-500 ml-1">Nacionalidad</label>
-                            <select value={form.nationality} onChange={(e) => setForm({ ...form, nationality: e.target.value })} className="w-full h-12 px-3 rounded-xl bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 outline-none font-bold">
-                                <option value="MEXICANA">MEXICANA</option><option value="EXTRANJERA">EXTRANJERA</option>
-                            </select>
+                            <label className={`text-[10px] font-bold uppercase ml-1 ${errors.nationality ? 'text-red-500' : 'text-gray-500'}`}>Nacionalidad</label>
+                            <ReactSelect
+                                options={NATIONALITY_OPTIONS}
+                                value={form.nationality ? { value: form.nationality, label: form.nationality } : null}
+                                onChange={(opt: any) => {
+                                    setForm(prev => ({ ...prev, nationality: opt?.value || '' }));
+                                    if (opt?.value && errors.nationality) setErrors((p: any) => { const n = {...p}; delete n.nationality; return n; });
+                                }}
+                                placeholder="-- Seleccione --"
+                                isClearable
+                                isSearchable
+                                noOptionsMessage={() => 'Sin resultados'}
+                                styles={{
+                                    control: (base: any, state: any) => ({
+                                        ...base,
+                                        minHeight: '48px',
+                                        borderRadius: '0.75rem',
+                                        borderWidth: '2px',
+                                        borderColor: errors.nationality ? '#ef4444' : state.isFocused ? '#6366f1' : '#f3f4f6',
+                                        boxShadow: 'none',
+                                        backgroundColor: errors.nationality ? '#fef2f2' : 'white',
+                                        fontWeight: '700',
+                                        fontSize: '0.875rem',
+                                        '&:hover': { borderColor: errors.nationality ? '#ef4444' : '#6366f1' },
+                                    }),
+                                    valueContainer: (base: any) => ({ ...base, padding: '0 12px' }),
+                                    singleValue: (base: any) => ({ ...base, color: errors.nationality ? '#7f1d1d' : '#111827' }),
+                                    placeholder: (base: any) => ({ ...base, color: '#9ca3af', fontWeight: '400' }),
+                                    menu: (base: any) => ({ ...base, borderRadius: '0.75rem', zIndex: 9999 }),
+                                    option: (base: any, state: any) => ({
+                                        ...base,
+                                        fontWeight: '600',
+                                        fontSize: '0.875rem',
+                                        backgroundColor: state.isSelected ? '#6366f1' : state.isFocused ? '#e0e7ff' : 'white',
+                                        color: state.isSelected ? 'white' : '#111827',
+                                    }),
+                                    indicatorSeparator: () => ({ display: 'none' }),
+                                }}
+                            />
+                            {errors.nationality && <p className="text-[9px] text-red-500 font-bold ml-2 animate-in slide-in-from-top-1">{errors.nationality}</p>}
                         </div>
                         <div className="col-span-1 space-y-1">
                             <label className={`text-[10px] font-bold uppercase ml-1 ${errors.bloodType ? 'text-red-500' : 'text-gray-500'}`}>Tipo Sangre</label>

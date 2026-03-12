@@ -127,7 +127,7 @@ const AppContent: React.FC = () => {
                 // Revisor -> panel del operador
                 setCurrentStep(AppStep.OPERATOR_DASHBOARD);
                 return;
-              } else if (nextScreen === 'AdminDashboard') {
+              } else if ((nextScreen as string) === 'AdminDashboard') {
                 // Administrador -> panel admin
                 setCurrentStep(AppStep.ADMIN_DASHBOARD);
                 return;
@@ -144,7 +144,7 @@ const AppContent: React.FC = () => {
 
       case AppStep.REGISTRATION: return <RegistrationScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.DOCUMENTS); }} />;
       case AppStep.DOCUMENTS: return <DocumentUploadScreen idUsuario={userId} token={authToken || undefined} idSolicitud={0} onSessionExpired={handleFullLogout} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); if ((data as any).vdidUuid) setVdidUuid((data as any).vdidUuid); setCurrentStep(AppStep.BIOMETRICS); }} />;
-      case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} token={authToken || undefined} vdidUuid={vdidUuid || undefined} />;
+      case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} {...{ token: authToken || undefined, vdidUuid: vdidUuid || undefined } as any} />;
       case AppStep.REVIEW: return <ReviewScreen userData={userData} onBack={() => setCurrentStep(AppStep.BIOMETRICS)} onSend={() => setCurrentStep(AppStep.DASHBOARD)} onEdit={updateUserData} />;
 
       case AppStep.DASHBOARD:

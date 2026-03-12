@@ -46,8 +46,13 @@
 }
 
 /* Dentro del PhoneInput propio: el div wrapper solo tiene el ancho del flag-container */
+.phone-iti-wrap {
+  min-width: 105px !important;
+  flex-shrink: 0 !important;
+}
+
 .phone-iti-wrap .iti {
-  width: fit-content !important;
+  width: 100% !important;
   border-radius: 0 !important;
   height: 100% !important;
   overflow: visible !important;
@@ -70,14 +75,14 @@
 .iti__flag-container {
   background-color: transparent !important;
   border-right: 1px solid #e5e7eb !important;
-  padding: 8px 12px !important;
+  padding: 8px 10px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
-  min-width: 52px !important; /* Touch target mínimo para dedos */
+  min-width: 100px !important;
   cursor: pointer !important;
-  -webkit-tap-highlight-color: transparent !important; /* Sin flash azul en iOS */
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 .dark .iti__flag-container {
