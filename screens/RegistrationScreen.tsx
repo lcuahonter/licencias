@@ -320,9 +320,8 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ userData, onBac
               <label className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">CURP</label>
               <div className="flex gap-2 items-center">
                 <div className="flex-1 relative">
-                  <input ref={inputRefs.idNumber} value={form.idNumber} onChange={e => handleCurpInput(e.target.value)} onBlur={handleCurpBlur} maxLength={18} placeholder="ABCD990101H..." className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all uppercase font-mono ${errors.idNumber ? 'border-red-400 bg-red-50' : 'border-gray-100 dark:border-gray-700'}`} />
+                  <input ref={inputRefs.idNumber} value={form.idNumber} onChange={e => handleCurpInput(e.target.value)} onBlur={handleCurpBlur} maxLength={18} placeholder="ABCD990101H..." className={`w-full h-14 bg-white dark:bg-gray-800 border-2 rounded-2xl px-4 focus:border-primary outline-none transition-all uppercase font-mono ${errors.idNumber ? 'border-red-400 bg-red-50' : !errors.idNumber && CURP_REGEX.test(form.idNumber) && !loadingCurp && !loadingVdidCurp ? 'border-green-500 bg-green-50/40 dark:bg-green-900/10' : 'border-gray-100 dark:border-gray-700'}`} />
                   {(loadingCurp || loadingVdidCurp) && <div className="absolute right-4 top-4 animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>}
-                  {!errors.idNumber && CURP_REGEX.test(form.idNumber) && !loadingCurp && !loadingVdidCurp && (<div className="absolute right-4 top-4 text-green-500"><span className="material-symbols-outlined">check_circle</span></div>)}
                 </div>
                 <button
                   type="button"

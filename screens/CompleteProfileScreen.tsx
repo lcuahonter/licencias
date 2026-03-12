@@ -79,15 +79,19 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
 );
 
 const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label = 'Teléfono', error }: any) => {
-    const itiContainerRef = useRef<HTMLDivElement>(null); // div vacío - React NO renderiza hijos aquí
+    const itiContainerRef = useRef<HTMLDivElement>(null);
     const itiRef = useRef<any>(null);
     const onLadaChangeRef = useRef(onLadaChange);
     onLadaChangeRef.current = onLadaChange;
 
+    const [showModal, setShowModal] = useState(false);
+    const [search, setSearch] = useState('');
+    const [countries, setCountries] = useState<{ name: string; iso2: string; dialCode: string }[]>([]);
+    const [selectedIso2, setSelectedIso2] = useState('mx');
+
     useEffect(() => {
         if (!itiContainerRef.current || itiRef.current) return;
 
-        // Input imperativo — React nunca lo toca
         const hiddenInput = document.createElement('input');
         hiddenInput.type = 'tel';
         hiddenInput.tabIndex = -1;
@@ -97,14 +101,33 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
         itiRef.current = intlTelInput(hiddenInput, {
             initialCountry: 'mx',
             separateDialCode: true,
-            dropdownContainer: document.body,
         } as any);
+
+        // Cargar lista de países desde ITI globals
+        const globalData = (window as any).intlTelInputGlobals?.getCountryData?.() || [];
+        setCountries(globalData);
 
         const handleCountryChange = () => {
             const data = itiRef.current?.getSelectedCountryData();
-            if (data) onLadaChangeRef.current('+' + data.dialCode);
+            if (data) {
+                onLadaChangeRef.current('+' + data.dialCode);
+                setSelectedIso2(data.iso2);
+            }
         };
         hiddenInput.addEventListener('countrychange', handleCountryChange);
+        // Disparar una vez para leer la inicial
+        handleCountryChange();
+
+        // Interceptar click en el flag-container para abrir nuestro modal
+        const flagContainer = itiContainerRef.current.querySelector('.iti__flag-container') as HTMLElement;
+        if (flagContainer) {
+            flagContainer.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setSearch('');
+                setShowModal(true);
+            });
+        }
 
         return () => {
             hiddenInput.removeEventListener('countrychange', handleCountryChange);
@@ -112,6 +135,20 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
             itiRef.current = null;
         };
     }, []);
+
+    const selectCountry = (iso2: string, dialCode: string) => {
+        itiRef.current?.setCountry(iso2);
+        // setCountry no dispara countrychange en todas las versiones, forzar manualmente
+        onLadaChangeRef.current('+' + dialCode);
+        setSelectedIso2(iso2);
+        setShowModal(false);
+        setSearch('');
+    };
+
+    const filtered = countries.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        ('+' + c.dialCode).includes(search)
+    );
 
     return (
         <div className="col-span-2 space-y-1">
@@ -121,9 +158,7 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
             <div className={`flex items-center rounded-xl border-2 h-12 transition-all ${
                 error ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
             }`}>
-                {/* Div imperativo: ancho automático según el prefijo seleccionado */}
                 <div ref={itiContainerRef} className="phone-iti-wrap relative shrink-0 h-full" />
-                {/* Nuestro input real: 100% React, sin ninguna libreria tocando su valor */}
                 <input
                     type="tel"
                     inputMode="numeric"
@@ -136,6 +171,60 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
                 />
             </div>
             {error && <p className="text-[9px] text-red-500 font-bold ml-2">{error}</p>}
+
+            {/* Modal de selección de país — centrado, sin depender del scroll */}
+            {showModal && (
+                <div
+                    className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/50"
+                    onClick={() => setShowModal(false)}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-900 w-full sm:w-96 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
+                        style={{ maxHeight: '70vh' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-100 dark:border-gray-700">
+                            <h3 className="font-bold text-sm text-gray-800 dark:text-white">Selecciona el prefijo</h3>
+                            <button
+                                onClick={() => setShowModal(false)}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 font-bold text-base"
+                            >✕</button>
+                        </div>
+                        {/* Búsqueda */}
+                        <div className="px-4 py-2">
+                            <input
+                                autoFocus
+                                type="text"
+                                placeholder="Buscar país o código..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="w-full h-10 px-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm font-semibold text-gray-800 dark:text-white outline-none border-2 border-transparent focus:border-indigo-400"
+                            />
+                        </div>
+                        {/* Lista de países */}
+                        <div className="overflow-y-auto flex-1 px-2 pb-4">
+                            {filtered.length === 0 ? (
+                                <p className="text-center text-sm text-gray-400 py-6">Sin resultados</p>
+                            ) : filtered.map((c) => (
+                                <button
+                                    key={c.iso2}
+                                    onClick={() => selectCountry(c.iso2, c.dialCode)}
+                                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-colors active:scale-95 ${
+                                        selectedIso2 === c.iso2
+                                            ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                                            : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200'
+                                    }`}
+                                >
+                                    <span className={`iti__flag iti__${c.iso2} shrink-0`} />
+                                    <span className="flex-1 font-semibold text-sm truncate">{c.name}</span>
+                                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500 shrink-0">+{c.dialCode}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
