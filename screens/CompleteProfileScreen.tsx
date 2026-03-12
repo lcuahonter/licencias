@@ -4,8 +4,6 @@ import { UserData } from '../types';
 import { userService } from '../src/api/userService';
 import { catalogService } from '../src/api/catalogService';
 import { getGenderFromCurp } from '../src/utils/curpHelpers';
-import intlTelInput from 'intl-tel-input';
-import 'intl-tel-input/build/css/intlTelInput.css';
 import ReactSelect from 'react-select';
 
 const NATIONALITY_OPTIONS = [
@@ -78,74 +76,246 @@ const InputField = ({ label, value, onChange, placeholder, width = 'full', numer
     </div>
 );
 
+// Lista estática de países con emoji, código ISO y lada
+const PHONE_COUNTRIES = [
+    { name: 'México', iso2: 'mx', dialCode: '52', flag: '🇲🇽' },
+    { name: 'Estados Unidos', iso2: 'us', dialCode: '1', flag: '🇺🇸' },
+    { name: 'Canadá', iso2: 'ca', dialCode: '1', flag: '🇨🇦' },
+    { name: 'Afghanistan', iso2: 'af', dialCode: '93', flag: '🇦🇫' },
+    { name: 'Albania', iso2: 'al', dialCode: '355', flag: '🇦🇱' },
+    { name: 'Alemania', iso2: 'de', dialCode: '49', flag: '🇩🇪' },
+    { name: 'Andorra', iso2: 'ad', dialCode: '376', flag: '🇦🇩' },
+    { name: 'Angola', iso2: 'ao', dialCode: '244', flag: '🇦🇴' },
+    { name: 'Antigua y Barbuda', iso2: 'ag', dialCode: '1268', flag: '🇦🇬' },
+    { name: 'Arabia Saudita', iso2: 'sa', dialCode: '966', flag: '🇸🇦' },
+    { name: 'Argelia', iso2: 'dz', dialCode: '213', flag: '🇩🇿' },
+    { name: 'Argentina', iso2: 'ar', dialCode: '54', flag: '🇦🇷' },
+    { name: 'Armenia', iso2: 'am', dialCode: '374', flag: '🇦🇲' },
+    { name: 'Australia', iso2: 'au', dialCode: '61', flag: '🇦🇺' },
+    { name: 'Austria', iso2: 'at', dialCode: '43', flag: '🇦🇹' },
+    { name: 'Azerbaiyán', iso2: 'az', dialCode: '994', flag: '🇦🇿' },
+    { name: 'Bahamas', iso2: 'bs', dialCode: '1242', flag: '🇧🇸' },
+    { name: 'Bahrein', iso2: 'bh', dialCode: '973', flag: '🇧🇭' },
+    { name: 'Bangladesh', iso2: 'bd', dialCode: '880', flag: '🇧🇩' },
+    { name: 'Barbados', iso2: 'bb', dialCode: '1246', flag: '🇧🇧' },
+    { name: 'Bélgica', iso2: 'be', dialCode: '32', flag: '🇧🇪' },
+    { name: 'Belice', iso2: 'bz', dialCode: '501', flag: '🇧🇿' },
+    { name: 'Benín', iso2: 'bj', dialCode: '229', flag: '🇧🇯' },
+    { name: 'Bielorrusia', iso2: 'by', dialCode: '375', flag: '🇧🇾' },
+    { name: 'Bolivia', iso2: 'bo', dialCode: '591', flag: '🇧🇴' },
+    { name: 'Bosnia y Herzegovina', iso2: 'ba', dialCode: '387', flag: '🇧🇦' },
+    { name: 'Botsuana', iso2: 'bw', dialCode: '267', flag: '🇧🇼' },
+    { name: 'Brasil', iso2: 'br', dialCode: '55', flag: '🇧🇷' },
+    { name: 'Brunéi', iso2: 'bn', dialCode: '673', flag: '🇧🇳' },
+    { name: 'Bulgaria', iso2: 'bg', dialCode: '359', flag: '🇧🇬' },
+    { name: 'Burkina Faso', iso2: 'bf', dialCode: '226', flag: '🇧🇫' },
+    { name: 'Burundi', iso2: 'bi', dialCode: '257', flag: '🇧🇮' },
+    { name: 'Bután', iso2: 'bt', dialCode: '975', flag: '🇧🇹' },
+    { name: 'Cabo Verde', iso2: 'cv', dialCode: '238', flag: '🇨🇻' },
+    { name: 'Camboya', iso2: 'kh', dialCode: '855', flag: '🇰🇭' },
+    { name: 'Camerún', iso2: 'cm', dialCode: '237', flag: '🇨🇲' },
+    { name: 'Catar', iso2: 'qa', dialCode: '974', flag: '🇶🇦' },
+    { name: 'Chad', iso2: 'td', dialCode: '235', flag: '🇹🇩' },
+    { name: 'Chile', iso2: 'cl', dialCode: '56', flag: '🇨🇱' },
+    { name: 'China', iso2: 'cn', dialCode: '86', flag: '🇨🇳' },
+    { name: 'Chipre', iso2: 'cy', dialCode: '357', flag: '🇨🇾' },
+    { name: 'Colombia', iso2: 'co', dialCode: '57', flag: '🇨🇴' },
+    { name: 'Comoras', iso2: 'km', dialCode: '269', flag: '🇰🇲' },
+    { name: 'Congo (Rep. Dem.)', iso2: 'cd', dialCode: '243', flag: '🇨🇩' },
+    { name: 'Congo (Rep.)', iso2: 'cg', dialCode: '242', flag: '🇨🇬' },
+    { name: 'Corea del Norte', iso2: 'kp', dialCode: '850', flag: '🇰🇵' },
+    { name: 'Corea del Sur', iso2: 'kr', dialCode: '82', flag: '🇰🇷' },
+    { name: 'Costa de Marfil', iso2: 'ci', dialCode: '225', flag: '🇨🇮' },
+    { name: 'Costa Rica', iso2: 'cr', dialCode: '506', flag: '🇨🇷' },
+    { name: 'Croacia', iso2: 'hr', dialCode: '385', flag: '🇭🇷' },
+    { name: 'Cuba', iso2: 'cu', dialCode: '53', flag: '🇨🇺' },
+    { name: 'Dinamarca', iso2: 'dk', dialCode: '45', flag: '🇩🇰' },
+    { name: 'Djibouti', iso2: 'dj', dialCode: '253', flag: '🇩🇯' },
+    { name: 'Dominica', iso2: 'dm', dialCode: '1767', flag: '🇩🇲' },
+    { name: 'Ecuador', iso2: 'ec', dialCode: '593', flag: '🇪🇨' },
+    { name: 'Egipto', iso2: 'eg', dialCode: '20', flag: '🇪🇬' },
+    { name: 'El Salvador', iso2: 'sv', dialCode: '503', flag: '🇸🇻' },
+    { name: 'Emiratos Árabes Unidos', iso2: 'ae', dialCode: '971', flag: '🇦🇪' },
+    { name: 'Eritrea', iso2: 'er', dialCode: '291', flag: '🇪🇷' },
+    { name: 'Eslovaquia', iso2: 'sk', dialCode: '421', flag: '🇸🇰' },
+    { name: 'Eslovenia', iso2: 'si', dialCode: '386', flag: '🇸🇮' },
+    { name: 'España', iso2: 'es', dialCode: '34', flag: '🇪🇸' },
+    { name: 'Estonia', iso2: 'ee', dialCode: '372', flag: '🇪🇪' },
+    { name: 'Esuatini', iso2: 'sz', dialCode: '268', flag: '🇸🇿' },
+    { name: 'Etiopía', iso2: 'et', dialCode: '251', flag: '🇪🇹' },
+    { name: 'Filipinas', iso2: 'ph', dialCode: '63', flag: '🇵🇭' },
+    { name: 'Finlandia', iso2: 'fi', dialCode: '358', flag: '🇫🇮' },
+    { name: 'Fiyi', iso2: 'fj', dialCode: '679', flag: '🇫🇯' },
+    { name: 'Francia', iso2: 'fr', dialCode: '33', flag: '🇫🇷' },
+    { name: 'Gabón', iso2: 'ga', dialCode: '241', flag: '🇬🇦' },
+    { name: 'Gambia', iso2: 'gm', dialCode: '220', flag: '🇬🇲' },
+    { name: 'Georgia', iso2: 'ge', dialCode: '995', flag: '🇬🇪' },
+    { name: 'Ghana', iso2: 'gh', dialCode: '233', flag: '🇬🇭' },
+    { name: 'Granada', iso2: 'gd', dialCode: '1473', flag: '🇬🇩' },
+    { name: 'Grecia', iso2: 'gr', dialCode: '30', flag: '🇬🇷' },
+    { name: 'Guatemala', iso2: 'gt', dialCode: '502', flag: '🇬🇹' },
+    { name: 'Guinea', iso2: 'gn', dialCode: '224', flag: '🇬🇳' },
+    { name: 'Guinea Ecuatorial', iso2: 'gq', dialCode: '240', flag: '🇬🇶' },
+    { name: 'Guinea-Bisáu', iso2: 'gw', dialCode: '245', flag: '🇬🇼' },
+    { name: 'Guyana', iso2: 'gy', dialCode: '592', flag: '🇬🇾' },
+    { name: 'Haití', iso2: 'ht', dialCode: '509', flag: '🇭🇹' },
+    { name: 'Honduras', iso2: 'hn', dialCode: '504', flag: '🇭🇳' },
+    { name: 'Hungría', iso2: 'hu', dialCode: '36', flag: '🇭🇺' },
+    { name: 'India', iso2: 'in', dialCode: '91', flag: '🇮🇳' },
+    { name: 'Indonesia', iso2: 'id', dialCode: '62', flag: '🇮🇩' },
+    { name: 'Irak', iso2: 'iq', dialCode: '964', flag: '🇮🇶' },
+    { name: 'Irán', iso2: 'ir', dialCode: '98', flag: '🇮🇷' },
+    { name: 'Irlanda', iso2: 'ie', dialCode: '353', flag: '🇮🇪' },
+    { name: 'Islandia', iso2: 'is', dialCode: '354', flag: '🇮🇸' },
+    { name: 'Islas Marshall', iso2: 'mh', dialCode: '692', flag: '🇲🇭' },
+    { name: 'Islas Salomón', iso2: 'sb', dialCode: '677', flag: '🇸🇧' },
+    { name: 'Israel', iso2: 'il', dialCode: '972', flag: '🇮🇱' },
+    { name: 'Italia', iso2: 'it', dialCode: '39', flag: '🇮🇹' },
+    { name: 'Jamaica', iso2: 'jm', dialCode: '1876', flag: '🇯🇲' },
+    { name: 'Japón', iso2: 'jp', dialCode: '81', flag: '🇯🇵' },
+    { name: 'Jordania', iso2: 'jo', dialCode: '962', flag: '🇯🇴' },
+    { name: 'Kazajistán', iso2: 'kz', dialCode: '7', flag: '🇰🇿' },
+    { name: 'Kenia', iso2: 'ke', dialCode: '254', flag: '🇰🇪' },
+    { name: 'Kirguistán', iso2: 'kg', dialCode: '996', flag: '🇰🇬' },
+    { name: 'Kiribati', iso2: 'ki', dialCode: '686', flag: '🇰🇮' },
+    { name: 'Kuwait', iso2: 'kw', dialCode: '965', flag: '🇰🇼' },
+    { name: 'Laos', iso2: 'la', dialCode: '856', flag: '🇱🇦' },
+    { name: 'Lesoto', iso2: 'ls', dialCode: '266', flag: '🇱🇸' },
+    { name: 'Letonia', iso2: 'lv', dialCode: '371', flag: '🇱🇻' },
+    { name: 'Líbano', iso2: 'lb', dialCode: '961', flag: '🇱🇧' },
+    { name: 'Liberia', iso2: 'lr', dialCode: '231', flag: '🇱🇷' },
+    { name: 'Libia', iso2: 'ly', dialCode: '218', flag: '🇱🇾' },
+    { name: 'Liechtenstein', iso2: 'li', dialCode: '423', flag: '🇱🇮' },
+    { name: 'Lituania', iso2: 'lt', dialCode: '370', flag: '🇱🇹' },
+    { name: 'Luxemburgo', iso2: 'lu', dialCode: '352', flag: '🇱🇺' },
+    { name: 'Madagascar', iso2: 'mg', dialCode: '261', flag: '🇲🇬' },
+    { name: 'Malasia', iso2: 'my', dialCode: '60', flag: '🇲🇾' },
+    { name: 'Malaui', iso2: 'mw', dialCode: '265', flag: '🇲🇼' },
+    { name: 'Maldivas', iso2: 'mv', dialCode: '960', flag: '🇲🇻' },
+    { name: 'Mali', iso2: 'ml', dialCode: '223', flag: '🇲🇱' },
+    { name: 'Malta', iso2: 'mt', dialCode: '356', flag: '🇲🇹' },
+    { name: 'Marruecos', iso2: 'ma', dialCode: '212', flag: '🇲🇦' },
+    { name: 'Mauricio', iso2: 'mu', dialCode: '230', flag: '🇲🇺' },
+    { name: 'Mauritania', iso2: 'mr', dialCode: '222', flag: '🇲🇷' },
+    { name: 'Micronesia', iso2: 'fm', dialCode: '691', flag: '🇫🇲' },
+    { name: 'Moldavia', iso2: 'md', dialCode: '373', flag: '🇲🇩' },
+    { name: 'Mónaco', iso2: 'mc', dialCode: '377', flag: '🇲🇨' },
+    { name: 'Mongolia', iso2: 'mn', dialCode: '976', flag: '🇲🇳' },
+    { name: 'Montenegro', iso2: 'me', dialCode: '382', flag: '🇲🇪' },
+    { name: 'Mozambique', iso2: 'mz', dialCode: '258', flag: '🇲🇿' },
+    { name: 'Myanmar (Birmania)', iso2: 'mm', dialCode: '95', flag: '🇲🇲' },
+    { name: 'Namibia', iso2: 'na', dialCode: '264', flag: '🇳🇦' },
+    { name: 'Nauru', iso2: 'nr', dialCode: '674', flag: '🇳🇷' },
+    { name: 'Nepal', iso2: 'np', dialCode: '977', flag: '🇳🇵' },
+    { name: 'Nicaragua', iso2: 'ni', dialCode: '505', flag: '🇳🇮' },
+    { name: 'Níger', iso2: 'ne', dialCode: '227', flag: '🇳🇪' },
+    { name: 'Nigeria', iso2: 'ng', dialCode: '234', flag: '🇳🇬' },
+    { name: 'Noruega', iso2: 'no', dialCode: '47', flag: '🇳🇴' },
+    { name: 'Nueva Zelanda', iso2: 'nz', dialCode: '64', flag: '🇳🇿' },
+    { name: 'Omán', iso2: 'om', dialCode: '968', flag: '🇴🇲' },
+    { name: 'Países Bajos', iso2: 'nl', dialCode: '31', flag: '🇳🇱' },
+    { name: 'Pakistán', iso2: 'pk', dialCode: '92', flag: '🇵🇰' },
+    { name: 'Palaos', iso2: 'pw', dialCode: '680', flag: '🇵🇼' },
+    { name: 'Palestina', iso2: 'ps', dialCode: '970', flag: '🇵🇸' },
+    { name: 'Panamá', iso2: 'pa', dialCode: '507', flag: '🇵🇦' },
+    { name: 'Papúa Nueva Guinea', iso2: 'pg', dialCode: '675', flag: '🇵🇬' },
+    { name: 'Paraguay', iso2: 'py', dialCode: '595', flag: '🇵🇾' },
+    { name: 'Perú', iso2: 'pe', dialCode: '51', flag: '🇵🇪' },
+    { name: 'Polonia', iso2: 'pl', dialCode: '48', flag: '🇵🇱' },
+    { name: 'Portugal', iso2: 'pt', dialCode: '351', flag: '🇵🇹' },
+    { name: 'Puerto Rico', iso2: 'pr', dialCode: '1787', flag: '🇵🇷' },
+    { name: 'Reino Unido', iso2: 'gb', dialCode: '44', flag: '🇬🇧' },
+    { name: 'República Centroafricana', iso2: 'cf', dialCode: '236', flag: '🇨🇫' },
+    { name: 'República Checa', iso2: 'cz', dialCode: '420', flag: '🇨🇿' },
+    { name: 'República Dominicana', iso2: 'do', dialCode: '1809', flag: '🇩🇴' },
+    { name: 'Ruanda', iso2: 'rw', dialCode: '250', flag: '🇷🇼' },
+    { name: 'Rumania', iso2: 'ro', dialCode: '40', flag: '🇷🇴' },
+    { name: 'Rusia', iso2: 'ru', dialCode: '7', flag: '🇷🇺' },
+    { name: 'Samoa', iso2: 'ws', dialCode: '685', flag: '🇼🇸' },
+    { name: 'San Cristóbal y Nieves', iso2: 'kn', dialCode: '1869', flag: '🇰🇳' },
+    { name: 'San Marino', iso2: 'sm', dialCode: '378', flag: '🇸🇲' },
+    { name: 'San Vicente y las Granadinas', iso2: 'vc', dialCode: '1784', flag: '🇻🇨' },
+    { name: 'Santa Lucía', iso2: 'lc', dialCode: '1758', flag: '🇱🇨' },
+    { name: 'Santo Tomé y Príncipe', iso2: 'st', dialCode: '239', flag: '🇸🇹' },
+    { name: 'Senegal', iso2: 'sn', dialCode: '221', flag: '🇸🇳' },
+    { name: 'Serbia', iso2: 'rs', dialCode: '381', flag: '🇷🇸' },
+    { name: 'Seychelles', iso2: 'sc', dialCode: '248', flag: '🇸🇨' },
+    { name: 'Sierra Leona', iso2: 'sl', dialCode: '232', flag: '🇸🇱' },
+    { name: 'Singapur', iso2: 'sg', dialCode: '65', flag: '🇸🇬' },
+    { name: 'Siria', iso2: 'sy', dialCode: '963', flag: '🇸🇾' },
+    { name: 'Somalia', iso2: 'so', dialCode: '252', flag: '🇸🇴' },
+    { name: 'Sri Lanka', iso2: 'lk', dialCode: '94', flag: '🇱🇰' },
+    { name: 'Sudáfrica', iso2: 'za', dialCode: '27', flag: '🇿🇦' },
+    { name: 'Sudán', iso2: 'sd', dialCode: '249', flag: '🇸🇩' },
+    { name: 'Sudán del Sur', iso2: 'ss', dialCode: '211', flag: '🇸🇸' },
+    { name: 'Suecia', iso2: 'se', dialCode: '46', flag: '🇸🇪' },
+    { name: 'Suiza', iso2: 'ch', dialCode: '41', flag: '🇨🇭' },
+    { name: 'Surinam', iso2: 'sr', dialCode: '597', flag: '🇸🇷' },
+    { name: 'Tailandia', iso2: 'th', dialCode: '66', flag: '🇹🇭' },
+    { name: 'Tanzania', iso2: 'tz', dialCode: '255', flag: '🇹🇿' },
+    { name: 'Tayikistán', iso2: 'tj', dialCode: '992', flag: '🇹🇯' },
+    { name: 'Timor Oriental', iso2: 'tl', dialCode: '670', flag: '🇹🇱' },
+    { name: 'Togo', iso2: 'tg', dialCode: '228', flag: '🇹🇬' },
+    { name: 'Tonga', iso2: 'to', dialCode: '676', flag: '🇹🇴' },
+    { name: 'Trinidad y Tobago', iso2: 'tt', dialCode: '1868', flag: '🇹🇹' },
+    { name: 'Túnez', iso2: 'tn', dialCode: '216', flag: '🇹🇳' },
+    { name: 'Turkmenistán', iso2: 'tm', dialCode: '993', flag: '🇹🇲' },
+    { name: 'Turquía', iso2: 'tr', dialCode: '90', flag: '🇹🇷' },
+    { name: 'Tuvalu', iso2: 'tv', dialCode: '688', flag: '🇹🇻' },
+    { name: 'Ucrania', iso2: 'ua', dialCode: '380', flag: '🇺🇦' },
+    { name: 'Uganda', iso2: 'ug', dialCode: '256', flag: '🇺🇬' },
+    { name: 'Uruguay', iso2: 'uy', dialCode: '598', flag: '🇺🇾' },
+    { name: 'Uzbekistán', iso2: 'uz', dialCode: '998', flag: '🇺🇿' },
+    { name: 'Vanuatu', iso2: 'vu', dialCode: '678', flag: '🇻🇺' },
+    { name: 'Venezuela', iso2: 've', dialCode: '58', flag: '🇻🇪' },
+    { name: 'Vietnam', iso2: 'vn', dialCode: '84', flag: '🇻🇳' },
+    { name: 'Yemen', iso2: 'ye', dialCode: '967', flag: '🇾🇪' },
+    { name: 'Yibuti', iso2: 'dj', dialCode: '253', flag: '🇩🇯' },
+    { name: 'Zambia', iso2: 'zm', dialCode: '260', flag: '🇿🇲' },
+    { name: 'Zimbabue', iso2: 'zw', dialCode: '263', flag: '🇿🇼' },
+    { name: 'Grecia', iso2: 'gr', dialCode: '30', flag: '🇬🇷' },
+    { name: 'Hungría', iso2: 'hu', dialCode: '36', flag: '🇭🇺' },
+    { name: 'Irlanda', iso2: 'ie', dialCode: '353', flag: '🇮🇪' },
+    { name: 'Macedonia del Norte', iso2: 'mk', dialCode: '389', flag: '🇲🇰' },
+    { name: 'Bosnia y Herzegovina', iso2: 'ba', dialCode: '387', flag: '🇧🇦' },
+    { name: 'Kosovo', iso2: 'xk', dialCode: '383', flag: '🇽🇰' },
+    { name: 'Guadalupe', iso2: 'gp', dialCode: '590', flag: '🇬🇵' },
+    { name: 'Martinica', iso2: 'mq', dialCode: '596', flag: '🇲🇶' },
+    { name: 'Reunión', iso2: 're', dialCode: '262', flag: '🇷🇪' },
+    { name: 'Polinesia Francesa', iso2: 'pf', dialCode: '689', flag: '🇵🇫' },
+    { name: 'Nueva Caledonia', iso2: 'nc', dialCode: '687', flag: '🇳🇨' },
+    { name: 'Mayotte', iso2: 'yt', dialCode: '262', flag: '🇾🇹' },
+    { name: 'Guayana Francesa', iso2: 'gf', dialCode: '594', flag: '🇬🇫' },
+    { name: 'Islas Feroe', iso2: 'fo', dialCode: '298', flag: '🇫🇴' },
+    { name: 'Groenlandia', iso2: 'gl', dialCode: '299', flag: '🇬🇱' },
+    { name: 'Gibraltar', iso2: 'gi', dialCode: '350', flag: '🇬🇮' },
+    { name: 'Macao', iso2: 'mo', dialCode: '853', flag: '🇲🇴' },
+    { name: 'Hong Kong', iso2: 'hk', dialCode: '852', flag: '🇭🇰' },
+    { name: 'Taiwán', iso2: 'tw', dialCode: '886', flag: '🇹🇼' },
+];
+
 const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label = 'Teléfono', error }: any) => {
-    const itiContainerRef = useRef<HTMLDivElement>(null);
-    const itiRef = useRef<any>(null);
     const onLadaChangeRef = useRef(onLadaChange);
     onLadaChangeRef.current = onLadaChange;
 
     const [showModal, setShowModal] = useState(false);
     const [search, setSearch] = useState('');
-    const [countries, setCountries] = useState<{ name: string; iso2: string; dialCode: string }[]>([]);
-    const [selectedIso2, setSelectedIso2] = useState('mx');
+    const [selected, setSelected] = useState(PHONE_COUNTRIES[0]); // México por defecto
 
-    useEffect(() => {
-        if (!itiContainerRef.current || itiRef.current) return;
-
-        const hiddenInput = document.createElement('input');
-        hiddenInput.type = 'tel';
-        hiddenInput.tabIndex = -1;
-        hiddenInput.style.cssText = 'width:0;height:48px;opacity:0;border:none;padding:0;margin:0;outline:none;background:transparent;position:absolute;';
-        itiContainerRef.current.appendChild(hiddenInput);
-
-        itiRef.current = intlTelInput(hiddenInput, {
-            initialCountry: 'mx',
-            separateDialCode: true,
-        } as any);
-
-        // Cargar lista de países desde ITI globals
-        const globalData = (window as any).intlTelInputGlobals?.getCountryData?.() || [];
-        setCountries(globalData);
-
-        const handleCountryChange = () => {
-            const data = itiRef.current?.getSelectedCountryData();
-            if (data) {
-                onLadaChangeRef.current('+' + data.dialCode);
-                setSelectedIso2(data.iso2);
-            }
-        };
-        hiddenInput.addEventListener('countrychange', handleCountryChange);
-        // Disparar una vez para leer la inicial
-        handleCountryChange();
-
-        // Interceptar click en el flag-container para abrir nuestro modal
-        const flagContainer = itiContainerRef.current.querySelector('.iti__flag-container') as HTMLElement;
-        if (flagContainer) {
-            flagContainer.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setSearch('');
-                setShowModal(true);
-            });
-        }
-
-        return () => {
-            hiddenInput.removeEventListener('countrychange', handleCountryChange);
-            itiRef.current?.destroy();
-            itiRef.current = null;
-        };
-    }, []);
-
-    const selectCountry = (iso2: string, dialCode: string) => {
-        itiRef.current?.setCountry(iso2);
-        // setCountry no dispara countrychange en todas las versiones, forzar manualmente
-        onLadaChangeRef.current('+' + dialCode);
-        setSelectedIso2(iso2);
+    const selectCountry = (c: typeof PHONE_COUNTRIES[0]) => {
+        setSelected(c);
+        onLadaChangeRef.current('+' + c.dialCode);
         setShowModal(false);
         setSearch('');
     };
 
-    const filtered = countries.filter(c =>
+    // Inicializar lada al montar
+    useEffect(() => {
+        onLadaChangeRef.current('+' + selected.dialCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const filtered = PHONE_COUNTRIES.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
         ('+' + c.dialCode).includes(search)
     );
@@ -158,7 +328,22 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
             <div className={`flex items-center rounded-xl border-2 h-12 transition-all ${
                 error ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
             }`}>
-                <div ref={itiContainerRef} className="phone-iti-wrap relative shrink-0 h-full" />
+                {/* Botón selector de país */}
+                <button
+                    type="button"
+                    onClick={() => { setSearch(''); setShowModal(true); }}
+                    className="flex items-center gap-1.5 h-full px-3 border-r border-gray-200 dark:border-gray-600 shrink-0 active:bg-gray-50 dark:active:bg-gray-700 rounded-l-xl"
+                >
+                    <img
+                        src={`https://flagcdn.com/w20/${selected.iso2}.png`}
+                        srcSet={`https://flagcdn.com/w40/${selected.iso2}.png 2x`}
+                        alt={selected.name}
+                        className="w-5 h-auto rounded-sm shrink-0"
+                        loading="eager"
+                    />
+                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300">+{selected.dialCode}</span>
+                    <span className="text-gray-400 text-xs">▾</span>
+                </button>
                 <input
                     type="tel"
                     inputMode="numeric"
@@ -172,27 +357,27 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
             </div>
             {error && <p className="text-[9px] text-red-500 font-bold ml-2">{error}</p>}
 
-            {/* Modal de selección de país — centrado, sin depender del scroll */}
+            {/* Modal centrado en pantalla */}
             {showModal && (
                 <div
-                    className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/50"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4"
                     onClick={() => setShowModal(false)}
                 >
                     <div
-                        className="bg-white dark:bg-gray-900 w-full sm:w-96 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
-                        style={{ maxHeight: '70vh' }}
+                        className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-2xl shadow-2xl flex flex-col"
+                        style={{ maxHeight: '75vh' }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-100 dark:border-gray-700 shrink-0">
                             <h3 className="font-bold text-sm text-gray-800 dark:text-white">Selecciona el prefijo</h3>
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 font-bold text-base"
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 font-bold"
                             >✕</button>
                         </div>
                         {/* Búsqueda */}
-                        <div className="px-4 py-2">
+                        <div className="px-4 py-2 shrink-0">
                             <input
                                 autoFocus
                                 type="text"
@@ -202,23 +387,28 @@ const PhoneInput = ({ phoneValue, ladaValue, onPhoneChange, onLadaChange, label 
                                 className="w-full h-10 px-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm font-semibold text-gray-800 dark:text-white outline-none border-2 border-transparent focus:border-indigo-400"
                             />
                         </div>
-                        {/* Lista de países */}
+                        {/* Lista */}
                         <div className="overflow-y-auto flex-1 px-2 pb-4">
-                            {filtered.length === 0 ? (
-                                <p className="text-center text-sm text-gray-400 py-6">Sin resultados</p>
-                            ) : filtered.map((c) => (
+                            {filtered.map((c) => (
                                 <button
                                     key={c.iso2}
-                                    onClick={() => selectCountry(c.iso2, c.dialCode)}
+                                    type="button"
+                                    onClick={() => selectCountry(c)}
                                     className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-colors active:scale-95 ${
-                                        selectedIso2 === c.iso2
-                                            ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                                            : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200'
+                                        selected.iso2 === c.iso2
+                                            ? 'bg-indigo-50 dark:bg-indigo-900/30'
+                                            : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                                     }`}
                                 >
-                                    <span className={`iti__flag iti__${c.iso2} shrink-0`} />
-                                    <span className="flex-1 font-semibold text-sm truncate">{c.name}</span>
-                                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500 shrink-0">+{c.dialCode}</span>
+                                    <img
+                                        src={`https://flagcdn.com/w20/${c.iso2}.png`}
+                                        srcSet={`https://flagcdn.com/w40/${c.iso2}.png 2x`}
+                                        alt={c.name}
+                                        className="w-6 h-auto rounded-sm shrink-0"
+                                        loading="lazy"
+                                    />
+                                    <span className="flex-1 font-semibold text-sm text-gray-800 dark:text-gray-200 truncate">{c.name}</span>
+                                    <span className={`text-xs font-bold shrink-0 ${selected.iso2 === c.iso2 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>+{c.dialCode}</span>
                                 </button>
                             ))}
                         </div>
