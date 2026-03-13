@@ -372,10 +372,10 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
       hasDisability,
       optionalEnabled,
       catalog: docsCatalog,
-      vdidUuid,                          // UUID de la verificación Suma México
-      vdidVerified: vdidResult === 'passed', // flag: identidad verificada
-      vdidSelfie,                            // base64 selfie obtenida de /id/v2/results
-    });
+      vdidUuid,
+      vdidVerified: vdidResult === 'passed',
+      vdidSelfie,
+    } as any);
   };
 
   return (

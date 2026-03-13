@@ -6,6 +6,16 @@ export const validateCurpFormat = (curp: string): boolean => {
   return re.test(curp.toUpperCase());
 };
 
+// Extraer el sexo del CURP
+// La posición 10 (índice 10) contiene: 'H' = Hombre, 'M' = Mujer
+export const getGenderFromCurp = (curp: string): 'M' | 'F' | null => {
+  if (!curp || curp.length < 11) return null;
+  const genderChar = curp.charAt(10).toUpperCase();
+  if (genderChar === 'H') return 'M'; // H = Hombre = Masculino
+  if (genderChar === 'M') return 'F'; // M = Mujer = Femenino
+  return null;
+};
+
 // Función auxiliar para decodificar fecha desde el string
 export const decodeCurpData = (curp: string) => {
   const c = curp.toUpperCase();

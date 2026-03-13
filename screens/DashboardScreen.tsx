@@ -93,6 +93,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // Modales para documentos corregidos
   const [showCorrectionsSuccessModal, setShowCorrectionsSuccessModal] = useState(false);
+  const [expandedRejected, setExpandedRejected] = useState<Set<string>>(new Set());
   const [showCorrectionsErrorModal, setShowCorrectionsErrorModal] = useState(false);
   const [correctionsMessage, setCorrectionsMessage] = useState('');
 
@@ -478,9 +479,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         setSolicitudesCargadas(solicitudesProcesadas);
 
-        // Verificar fotos existentes solo para solicitudes con idestatus 24 (Aprobada por operador)
+        // Verificar fotos existentes para solicitudes con idestatus 20 (nueva)
         for (const req of solicitudesProcesadas) {
-          if (req.rawData?.idestatus === 24) {
+          if (req.rawData?.idestatus === 20) {
             await verificarFotoExistente(Number(req.id));
           }
         }
@@ -615,9 +616,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           setSolicitudesCargadas(solicitudesProcesadas);
 
-          // Verificar fotos existentes solo para solicitudes con idestatus 24 (Aprobada por operador)
+          // Verificar fotos existentes para solicitudes con idestatus 20 (nueva)
           for (const req of solicitudesProcesadas) {
-            if (req.rawData?.idestatus === 24) {
+            if (req.rawData?.idestatus === 20) {
               await verificarFotoExistente(Number(req.id));
             }
           }
@@ -1319,7 +1320,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     try {
       setIsSubmittingCorrections(true);
       // Convertir archivos a base64 y enviar updateDocumento para cada documento rechazado
-      for (const docData of fixingRequest.rejectedDocuments || []) {
+      for (const _docData of fixingRequest.rejectedDocuments || []) {
+        const docData = _docData as { iddocumento: number; tipodocumento: string; comentarios?: string };
         const file = fixedDocs[docData.iddocumento];
         if (!file) continue;
 
@@ -1471,12 +1473,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           <span className="material-symbols-outlined text-sm">warning</span> Documentos con Observaciones:
                         </div>
                         <ul className="list-disc list-inside font-bold space-y-1">
-                          {req.rejectedDocuments.map(docData => (
-                            <li key={docData.iddocumento}>
+                          {req.rejectedDocuments.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                            <li key={docData.iddocumento ?? i}>
                               {docData.tipodocumento}
                               {docData.comentarios && <span className="font-normal text-orange-600 ml-1">({docData.comentarios})</span>}
                             </li>
-                          ))}
+                          ); })}
                         </ul>
                       </div>
                     )}
@@ -1494,8 +1496,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </div>
                     )}
 
-                    {/* Foto + Examen solo cuando el operador aprobó (idestatus 24) */}
-                    {idestatus === 24 && (() => {
+                    {/* Foto + Examen solo cuando idestatus 20 (nueva) */}
+                    {idestatus === 20 && (() => {
                       const solicUuid  = rawData?.uuid || vdidUuids[req.id];
                       const vdidSt     = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
                       // Bloquear foto/examen SOLO si la verificación fue explícitamente rechazada
@@ -1594,70 +1596,85 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
                 const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
                 const idestatus = rawData?.idestatus;
-
+                const isExpanded = expandedRejected.has(req.id);
                 const statusDisplay = idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADA';
 
                 return (
-                  <div key={req.id} className="p-5 rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
-                          <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                  <div key={req.id} className="rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark overflow-hidden">
+                    {/* Cabecera siempre visible — clic para expandir/colapsar */}
+                    <button
+                      onClick={() => setExpandedRejected(prev => {
+                        const next = new Set(prev);
+                        next.has(req.id) ? next.delete(req.id) : next.add(req.id);
+                        return next;
+                      })}
+                      className="w-full px-5 py-4 flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-1.5 rounded-full bg-red-50 text-red-500 shrink-0">
+                          <span className="material-symbols-outlined text-base">block</span>
                         </div>
-                        <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
-                        <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
-                      </div>
-                      <div className="p-2 rounded-full bg-red-50 text-red-500">
-                        <span className="material-symbols-outlined">block</span>
-                      </div>
-                    </div>
-
-                    {/* Mostrar documentos rechazados si los hay */}
-                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
-                      <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
-                        <div className="font-bold flex items-center gap-1 mb-1">
-                          <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                          </div>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate mt-0.5">{descripcion}</p>
                         </div>
-                        <ul className="list-disc list-inside font-bold space-y-1">
-                          {req.rejectedDocuments.map(docData => (
-                            <li key={docData.iddocumento}>
-                              {docData.tipodocumento}
-                              {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
-                            </li>
-                          ))}
-                        </ul>
                       </div>
-                    )}
+                      <span className={`material-symbols-outlined text-gray-400 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                        expand_more
+                      </span>
+                    </button>
 
-                    {/* Botón de corrección solo si hay documentos rechazados Y NO es rechazo por dictamen (estatus 25) */}
-                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenFixModal(req)}
-                          className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-sm">upload_file</span>
-                          Corregir Documentos
-                        </button>
-                      </div>
-                    )}
+                    {/* Detalle colapsable */}
+                    {isExpanded && (
+                      <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-700 pt-3 space-y-3">
+                        <p className="text-xs text-gray-500">Creado: {fecha}</p>
 
-                    {/* Mensaje informativo cuando fue rechazada por dictamen final (idestatus 25) */}
-                    {idestatus === 25 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                          <div className="flex items-start gap-3">
-                            <span className="material-symbols-outlined text-gray-400">info</span>
-                            <div>
-                              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">
-                                Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
-                                Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
-                              </p>
+                        {/* Documentos rechazados */}
+                        {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                          <div className="bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
+                            <div className="font-bold flex items-center gap-1 mb-1">
+                              <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                            </div>
+                            <ul className="list-disc list-inside font-bold space-y-1">
+                              {req.rejectedDocuments.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                                <li key={docData.iddocumento ?? i}>
+                                  {docData.tipodocumento}
+                                  {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                                </li>
+                              ); })}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Botón de corrección */}
+                        {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
+                          <button
+                            onClick={() => handleOpenFixModal(req)}
+                            className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-sm">upload_file</span>
+                            Corregir Documentos
+                          </button>
+                        )}
+
+                        {/* Rechazo por dictamen */}
+                        {idestatus === 25 && (
+                          <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                            <div className="flex items-start gap-3">
+                              <span className="material-symbols-outlined text-gray-400">info</span>
+                              <div>
+                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
+                                  Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1787,17 +1804,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in fade-in flex flex-col max-h-[80vh]">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4"><div><h2 className="text-lg font-black text-red-600">Corregir Documentos</h2><p className="text-xs text-gray-500">Sube nuevamente los archivos</p></div><button onClick={() => setFixingRequest(null)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-              {fixingRequest.rejectedDocuments?.map(docData => (
-                <div key={docData.iddocumento} className="space-y-1">
+              {fixingRequest.rejectedDocuments?.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                <div key={docData.iddocumento ?? i} className="space-y-1">
                   <label className="text-xs font-bold uppercase text-gray-500">{docData.tipodocumento || 'Documento'}</label>
                   {docData.comentarios && (
                     <p className="text-[10px] text-red-600 mb-1 italic">Motivo: {docData.comentarios}</p>
                   )}
-                  <div onClick={() => triggerFileUpload(docData.iddocumento)} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[docData.iddocumento] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
-                    {fixedDocs[docData.iddocumento] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
+                  <div onClick={() => triggerFileUpload(String(docData.iddocumento))} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[String(docData.iddocumento)] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+                    {fixedDocs[String(docData.iddocumento)] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
                   </div>
                 </div>
-              ))}
+              ); })}
             </div>
             <button
               disabled={Object.keys(fixedDocs).length < (fixingRequest.rejectedDocuments?.length || 0) || isSubmittingCorrections}
@@ -1953,7 +1970,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                     <div className="bg-white p-3 rounded-lg">
                       <p className="text-gray-500 text-xs mb-1">Tipo de Licencia</p>
-                      <p className="font-bold text-gray-900">{userData.requests?.find((r: any) => r.id === selectedSolicitudId?.toString())?.licenseType || 'Automovilista'}</p>
+                      <p className="font-bold text-gray-900">{userData.requests?.find((r: any) => r.id === selectedSolicitudId?.toString())?.type || 'Automovilista'}</p>
                     </div>
                   </div>
                 </div>
@@ -2234,8 +2251,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setResultType(aprobado ? 'success' : 'error');
                         setShowVerResultButton(false);
 
-                        // La solicitud permanece en idestatus 24 (Aprobada).
-                        // El resultado del examen se consulta via examService.verificarAprobacion al recargar.
+                        // Solo si aprobó el examen, marcar como Completa (idestatus 22) para que el operador la vea
+                        if (aprobado) {
+                          try {
+                            await solicitudService.updateSolicitud(selectedSolicitudId!, 22, token || '');
+                          } catch { /* no fatal */ }
+                        }
 
                         // Recargar solicitudes para actualizar el estado (aprobado o reprobado)
                         await wait(1000);
