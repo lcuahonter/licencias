@@ -1,4 +1,5 @@
 import { apiRequest } from './apiClient';
+import { apiRequestWithLoading } from './apiClientWithLoading';
 import { API_ENDPOINTS } from './endpoints';
 
 export interface Pregunta {
@@ -33,12 +34,13 @@ export interface VerificarResultadoResponse {
 
 const examService = {
   async obtenerPreguntas(idsolicitud: number, token: string): Promise<ObtenerPreguntasResponse> {
-    const response = await apiRequest<{ data: ObtenerPreguntasResponse }>(
+    const response = await apiRequestWithLoading<{ data: ObtenerPreguntasResponse }>(
       API_ENDPOINTS.EXAM.OBTENER_PREGUNTAS,
       {
         method: 'POST',
         body: { idsolicitud },
-        token
+        token,
+        loadingMessage: 'Obteniendo preguntas...'
       }
     );
     return response.data;
@@ -49,47 +51,51 @@ const examService = {
     respuestas: RespuestaExamen[],
     token: string
   ): Promise<any> {
-    return await apiRequest<any>(
+    return await apiRequestWithLoading<any>(
       API_ENDPOINTS.EXAM.ENVIAR_RESPUESTAS,
       {
         method: 'POST',
         body: { idintento, respuestas },
-        token
+        token,
+        loadingMessage: 'Enviando respuestas...'
       }
     );
   },
 
   async verificarResultado(idintento: number, token: string): Promise<VerificarResultadoResponse> {
-    const response = await apiRequest<{ data: VerificarResultadoResponse }>(
+    const response = await apiRequestWithLoading<{ data: VerificarResultadoResponse }>(
       API_ENDPOINTS.EXAM.VERIFICAR_RESULTADO,
       {
         method: 'POST',
         body: { idintento },
-        token
+        token,
+        loadingMessage: 'Verificando resultado...'
       }
     );
     return response.data;
   },
 
   async obtenerPorSolicitud(idsolicitud: number, token: string): Promise<any> {
-    const response = await apiRequest<any>(
+    const response = await apiRequestWithLoading<any>(
       API_ENDPOINTS.EXAM.OBTENER_POR_SOLICITUD,
       {
         method: 'POST',
         body: { idsolicitud },
-        token
+        token,
+        loadingMessage: 'Consultando examen...'
       }
     );
     return response.data;
   },
 
   async verificarAprobacion(idsolicitud: number, token: string): Promise<any> {
-    const response = await apiRequest<any>(
+    const response = await apiRequestWithLoading<any>(
       API_ENDPOINTS.EXAM.VERIFICAR_APROBACION,
       {
         method: 'POST',
         body: { idsolicitud },
-        token
+        token,
+        loadingMessage: 'Verificando aprobación...'
       }
     );
     return response.data;

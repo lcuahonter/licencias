@@ -1,20 +1,23 @@
 import { apiRequest } from './apiClient';
+import { apiRequestWithLoading } from './apiClientWithLoading';
 import { API_ENDPOINTS } from './endpoints'; // <--- Importamos
 
 export const authService = {
   login: async (payload: { username: string; password: string }) => {
     // Usamos la variable en lugar del string
-    return await apiRequest<any>(API_ENDPOINTS.AUTH.LOGIN, {
+    return await apiRequestWithLoading<any>(API_ENDPOINTS.AUTH.LOGIN, {
       method: 'POST',
-      body: payload
+      body: payload,
+      loadingMessage: 'Iniciando sesión...'
     });
   },
 
   logout: async (token?: string) => {
     try {
-      return await apiRequest<any>(API_ENDPOINTS.AUTH.LOGOUT, {
+      return await apiRequestWithLoading<any>(API_ENDPOINTS.AUTH.LOGOUT, {
         method: 'POST',
-        token
+        token,
+        loadingMessage: 'Cerrando sesión...'
       });
     } catch (error) {
       // Siempre permitir logout aunque falle el backend
@@ -25,23 +28,26 @@ export const authService = {
 
 export const userService = {
   createUsuario: async (payload: any) => {
-    return await apiRequest<any>(API_ENDPOINTS.USUARIOS.CREATE, {
+    return await apiRequestWithLoading<any>(API_ENDPOINTS.USUARIOS.CREATE, {
       method: 'POST',
-      body: payload
+      body: payload,
+      loadingMessage: 'Creando usuario...'
     });
   },
 
   getUsuarioById: async (id: number) => {
-    return await apiRequest<any>(API_ENDPOINTS.USUARIOS.GET_BY_ID, {
+    return await apiRequestWithLoading<any>(API_ENDPOINTS.USUARIOS.GET_BY_ID, {
       method: 'POST',
-      body: { id }
+      body: { id },
+      loadingMessage: 'Obteniendo información del usuario...'
     });
   },
 
   updateUsuario: async (payload: any) => {
-    return await apiRequest<any>(API_ENDPOINTS.USUARIOS.UPDATE, {
+    return await apiRequestWithLoading<any>(API_ENDPOINTS.USUARIOS.UPDATE, {
       method: 'POST',
-      body: payload
+      body: payload,
+      loadingMessage: 'Actualizando información...'
     });
   }
 };

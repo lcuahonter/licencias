@@ -14,10 +14,10 @@ export enum AppStep {
 }
 
 export type LicenseType = 'Automovilista' | 'Motociclista' | 'Transporte Público';;
-export type ProcessType = 'Primera Vez' | 'Refrendo' | 'Reposición';
+export type ProcessType = 'Primera Vez' | 'Refrendo' | 'Reposición' | 'Renovación';
 
 // Estatus posibles de la solicitud
-export type RequestStatus = 'pending_payment' | 'paid_pending_docs' | 'rejected' | 'completed';
+export type RequestStatus = 'pending_payment' | 'paid_pending_docs' | 'rejected' | 'completed' | 'replaced' | 'archived';
 
 export interface LicenseRequest {
   id: string;
@@ -39,6 +39,9 @@ export interface LicenseRequest {
 export interface UserData {
   firstName: string;
   lastName: string;
+  paternalName?: string;
+  maternalName?: string;
+  idUsuario?: number;
   idNumber: string;
   email: string;
   birthDate: string;

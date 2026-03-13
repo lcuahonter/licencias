@@ -2,6 +2,10 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { AppStep, UserData, LicenseRequest } from './types';
 import './index.css';
+import { LoadingProvider, useLoading } from './src/contexts/LoadingContext';
+import { setLoadingFunctions } from './src/api/apiClientWithLoading';
+import { setFotoLoadingFunctions } from './src/api/fotoService';
+import { vdidService } from './src/api/vdidService';
 
 // Importamos todas las pantallas
 import WelcomeScreen from './screens/WelcomeScreen';
@@ -17,7 +21,15 @@ import PaymentScreen from './screens/PaymentScreen';
 import SuccessScreen from './screens/SuccessScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { setLoading, setLoadingMessage } = useLoading();
+  
+  // Configurar las funciones de loading para el apiClient y fotoService
+  useEffect(() => {
+    setLoadingFunctions({ setLoading, setLoadingMessage });
+    setFotoLoadingFunctions(setLoadingMessage, () => setLoading(false));
+  }, [setLoading, setLoadingMessage]);
+
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.WELCOME);
 
   // --- 1. NUEVO ESTADO: ID DE USUARIO ---
@@ -47,6 +59,9 @@ const App: React.FC = () => {
   // Token de sesión que se usará para llamadas autenticadas
   const [authToken, setAuthToken] = useState<string | null>(null);
 
+  // UUID de la verificación VDID (Suma México) — se genera en DocumentUploadScreen
+  const [vdidUuid, setVdidUuid] = useState<string | null>(null);
+
   // --- LOGICA DE NAVEGACION ---
   const nextStep = useCallback(() => {
     const steps = Object.values(AppStep);
@@ -55,6 +70,16 @@ const App: React.FC = () => {
   }, [currentStep]);
 
   const updateUserData = (data: Partial<UserData>) => setUserData(prev => ({ ...prev, ...data }));
+
+  // Limpieza completa de sesión (app + VDID)
+  const handleFullLogout = () => {
+    setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] });
+    setUserId(0);
+    setAuthToken(null);
+    setVdidUuid(null);
+    vdidService.clearToken();
+    setCurrentStep(AppStep.WELCOME);
+  };
 
   const addRequest = (req: LicenseRequest) => {
     setUserData(prev => ({ ...prev, requests: [...(prev.requests || []), req] }));
@@ -90,6 +115,9 @@ const App: React.FC = () => {
                 setAuthToken((loginData as any).token as string);
               }
 
+              // 2.c Pre-cargar el JWT de Suma México en segundo plano
+              vdidService.warmupToken();
+
               // 3. Decidir navegación basada en el token (Prioridad Alta)
               if (nextScreen === 'Dashboard') {
                 // Usuario con rol 2 va directo a Dashboard
@@ -99,7 +127,7 @@ const App: React.FC = () => {
                 // Revisor -> panel del operador
                 setCurrentStep(AppStep.OPERATOR_DASHBOARD);
                 return;
-              } else if (nextScreen === 'AdminDashboard') {
+              } else if ((nextScreen as string) === 'AdminDashboard') {
                 // Administrador -> panel admin
                 setCurrentStep(AppStep.ADMIN_DASHBOARD);
                 return;
@@ -121,8 +149,8 @@ const App: React.FC = () => {
         />;
 
       case AppStep.REGISTRATION: return <RegistrationScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.DOCUMENTS); }} />;
-      case AppStep.DOCUMENTS: return <DocumentUploadScreen idUsuario={userId} token={authToken || undefined} idSolicitud={0} onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); setCurrentStep(AppStep.BIOMETRICS); }} />;
-      case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} />;
+      case AppStep.DOCUMENTS: return <DocumentUploadScreen idUsuario={userId} token={authToken || undefined} idSolicitud={0} onSessionExpired={handleFullLogout} onBack={() => setCurrentStep(AppStep.WELCOME)} onContinue={(data) => { updateUserData(data); if ((data as any).vdidUuid) setVdidUuid((data as any).vdidUuid); setCurrentStep(AppStep.BIOMETRICS); }} />;
+      case AppStep.BIOMETRICS: return <BiometricScreen onBack={() => setCurrentStep(AppStep.DOCUMENTS)} onComplete={(photoUrl) => { updateUserData({ photo: photoUrl }); setCurrentStep(AppStep.REVIEW); }} {...{ token: authToken || undefined, vdidUuid: vdidUuid || undefined } as any} />;
       case AppStep.REVIEW: return <ReviewScreen userData={userData} onBack={() => setCurrentStep(AppStep.BIOMETRICS)} onSend={() => setCurrentStep(AppStep.DASHBOARD)} onEdit={updateUserData} />;
 
       case AppStep.DASHBOARD:
@@ -133,12 +161,7 @@ const App: React.FC = () => {
           onGoToProfile={() => setCurrentStep(AppStep.COMPLETE_PROFILE)}
           onGoToDocuments={() => setCurrentStep(AppStep.DOCUMENTS)}
           onContinueRequest={(req) => { updateUserData({ licenseType: req.type === 'Motociclista' ? 'Motociclista' : 'Automovilista Particular' }); setCurrentStep(AppStep.APPOINTMENT); }}
-          onLogout={() => {
-            setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] });
-            setUserId(0); // Limpiamos ID al salir
-            setAuthToken(null); // Limpiamos token
-            setCurrentStep(AppStep.WELCOME);
-          }}
+          onLogout={handleFullLogout}
         />;
 
       case AppStep.COMPLETE_PROFILE:
@@ -146,13 +169,13 @@ const App: React.FC = () => {
           userData={userData}
           idUsuario={userId} // <--- 2. PASAMOS EL ID AL COMPONENTE
           token={authToken || undefined}
-          onSessionExpired={() => { setAuthToken(null); setUserId(0); setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] }); setCurrentStep(AppStep.WELCOME); }}
+          onSessionExpired={handleFullLogout}
           onBack={() => setCurrentStep(AppStep.DASHBOARD)}
           onSave={(data) => { updateUserData(data); setCurrentStep(AppStep.DASHBOARD); }}
         />;
 
-      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
-      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen token={authToken || undefined} onLogout={() => { setAuthToken(null); setCurrentStep(AppStep.WELCOME); }} />;
+      case AppStep.OPERATOR_DASHBOARD: return <OperatorDashboardScreen token={authToken || undefined} onLogout={handleFullLogout} />;
+      case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen token={authToken || undefined} onLogout={handleFullLogout} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
       case AppStep.PAYMENT: return <PaymentScreen userData={userData} onBack={() => setCurrentStep(AppStep.APPOINTMENT)} onPaymentSuccess={(paymentData) => { updateUserData({ payment: paymentData }); setCurrentStep(AppStep.DASHBOARD); }} />;
       case AppStep.SUCCESS: return <SuccessScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} />;
@@ -221,14 +244,22 @@ const App: React.FC = () => {
               </div>
             </div>
             {currentStep === AppStep.WELCOME && (
-              <div className="w-full p-4 text-center text-[10px] text-gray-400 lg:hidden bg-white dark:bg-background-dark pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-                Gobierno del Estado de Durango &copy; 2025
+              <div className="w-full p-4 text-center text-[10px] text-gray-400 bg-white dark:bg-background-dark pb-[calc(env(safe-area-inset-bottom)+2rem)]">
+                Gobierno del Estado de Durango &copy; 2026
               </div>
             )}
           </div>
         </div>
       )}
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <LoadingProvider>
+      <AppContent />
+    </LoadingProvider>
   );
 };
 

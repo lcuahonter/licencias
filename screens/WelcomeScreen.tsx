@@ -17,7 +17,7 @@ interface DecodedToken {
 }
 
 interface WelcomeScreenProps {
-  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen' | 'OperatorDashboard') => void;
+  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen' | 'OperatorDashboard' | 'AdminDashboard') => void;
 }
 
 
@@ -123,17 +123,24 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-surface-dark relative">
       {/* Encabezado con Logo del Gobierno de Durango */}
-      <div className="bg-white px-6 py-4 shadow-md flex items-center gap-4 border-b border-gray-200">
+      <div className="bg-white px-6 pt-10 pb-4 md:py-4 shadow-md flex items-center gap-4 border-b border-gray-200">
         <img
           src="/logo-durango.png"
           alt="Logo Gobierno de Durango"
-          className="h-16 w-auto object-contain flex-shrink-0"
+          className="h-10 md:h-16 w-auto object-contain flex-shrink-0"
           onError={(e) => {
             e.currentTarget.style.display = 'none';
           }}
         />
         <div className="flex-1 text-right">
-          <p className="text-xl font-black text-gray-800">Licencias Durango</p>
+          <img
+            src="/Licencias-Durango-2-v.horizontal.png"
+            alt="Licencias Durango Logo"
+            className="h-8 w-auto ml-auto object-contain"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
         </div>
       </div>
 
