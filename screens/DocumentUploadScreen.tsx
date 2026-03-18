@@ -232,7 +232,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                 {isMandatory && <span className="text-red-500 ml-1">*</span>}
               </h4>
             </div>
-            {/* Icono de ayuda con tooltip para descripción */}
+            {/* Icono de ayuda con tooltip para descripciónn */}
             {descripcion && (
               <div className="group relative flex-shrink-0">
                 <span className="material-symbols-outlined text-sm text-gray-400 cursor-help">help</span>
