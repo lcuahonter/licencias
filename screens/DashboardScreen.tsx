@@ -2580,7 +2580,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       <div className="flex-shrink-0 flex items-center justify-center pl-2 border-l border-gray-100">
                         <div className="w-28 h-28 bg-white p-1.5 rounded-lg border border-gray-200 shadow-sm">
                           <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`LICENCIA-DGO:${selectedLicense.folio}|USR:${userDataFresh.id}|${userDataFresh.curp}`)}`}
+                            src={(() => {
+                              const validationData = {
+                                nombre: `${userDataFresh.nombres || ''} ${userDataFresh.apellidopaterno || ''} ${userDataFresh.apellidomaterno || ''}`.trim(),
+                                folio: selectedLicense.folio,
+                                expedicion: selectedLicense.rawData?.expedicion 
+                                  ? new Date(selectedLicense.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                  : 'N/A',
+                                modulo: selectedLicense.rawData?.modulo || 'N/A',
+                                tipo_licencia: selectedLicense.type,
+                                vigencia: selectedLicense.rawData?.vigencia || 'N/A'
+                              };
+                              const encodedData = btoa(JSON.stringify(validationData));
+                              const validationUrl = `${window.location.origin}/#data=${encodedData}`;
+                              return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(validationUrl)}`;
+                            })()}
                             className="w-full h-full object-contain"
                             alt="QR de Validación"
                           />

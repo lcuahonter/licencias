@@ -83,23 +83,23 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
         ? `${user.direccion}, ${user.colonia || ''}, ${user.municipio || ''}`
         : user.address || 'Durango, Dgo.';
 
-    // QR Data with full driver details
-    const qrData = JSON.stringify({
-        folio: licenseNo,
+    // QR Data - URL to validation page (frontend) with encoded license data
+    // When someone scans the QR, they'll see a formatted web page with license info
+    const validationData = {
         nombre: fullName,
-        rfc: rfc,
+        folio: licenseNo,
+        expedicion: license.rawData?.expedicion 
+            ? new Date(license.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : 'N/A',
+        RFC: rfc || 'N/A',
         tipo_licencia: license.type,
-        expedicion: license.rawData?.expedicion ? new Date(license.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A',
         vigencia: validity,
-        fecha_nacimiento: birthDate,
-        sexo: sexo,
-        nacionalidad: nacionalidad,
-        tipo_sangre: bloodType,
-        donador: donor,
-        telefono_emergencia: emergencyPhone,
-        direccion: address
-    });
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+        solicitudId: license.id, 
+    token: token
+    };
+    const encodedData = btoa(JSON.stringify(validationData));
+    const validationUrl = `${window.location.origin}/#data=${encodedData}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(validationUrl)}`;
 
     // Funciones para agregar a Wallet
     const handleAddToGoogleWallet = async () => {
