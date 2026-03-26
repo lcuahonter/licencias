@@ -26,7 +26,7 @@ interface LicenseValidationData {
   nombre: string;
   folio: string;
   expedicion: string;
-  modulo: string;
+  RFC: string;
   tipo_licencia: string;
   vigencia: string;
   solicitudId?: string | number;
@@ -264,8 +264,8 @@ const ValidacionLicenciaScreen: React.FC = () => {
                     <p className="text-xs font-bold text-gray-900">MEXICANA</p>
                   </div>
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Módulo</p>
-                    <p className="text-xs font-bold text-gray-900">{licenseData.modulo}</p>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">RFC</p>
+                    <p className="text-xs font-bold text-gray-900">{licenseData.RFC}</p>
                   </div>
                   <div className="bg-white p-3 rounded-lg border border-gray-100">
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expedición</p>
