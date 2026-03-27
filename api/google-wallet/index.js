@@ -1,47 +1,19 @@
-// Azure Function para generar JWT de Google Wallet
 const { SignJWT, importPKCS8 } = require('jose');
 
-// Configuración de Google Wallet (REEMPLAZAR CON TUS CREDENCIALES)
+// Configuración de Google Wallet actualizada con tu nuevo JSON
 const GOOGLE_WALLET_CONFIG = {
-  issuerId: 'BCR2DN5T23UZ3ZAJ',  // Tu Issuer ID real
+  issuerId: '3388000000023093196',
   serviceAccount: {
     type: 'service_account',
-    project_id: 'skilled-flight-491317-c7',
-    private_key_id: '919dc8ff9db14b8466a5b79823b53e13bf37c0c1',
-    private_key: `-----BEGIN PRIVATE KEY-----
-MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDMZAh89VUNyxHU
-YBLYQ6ANfEKA3NZ3ARUPOwsJq+Mo+RZFqjKW+I1W4rKMZmNbVj5FsoLMyw+6x7Sa
-9M0c+x+fXNf4cxrVPHGTrm7qHhE/0uRABchaMI4lmYo1JQHFPpIWSLkiGzjHc4rL
-XqTXVLBzbn6ZwjO7gE2oWU3C4+TIN5+qqeDnElCTLhLVJmWNmhqCSb6hy/EjfSvs
-7nfXwoWGReBHRJ+ZYrpnj+HRC9cEtUK8YaaaQt/GqbgTUBNJq8pPPXP1VDfRRBwP
-M5/7ExYHn+ByMy3EXgz+zFGEVd7XMgk+cpDS29WuMbEOcb9avPgRnL2HpRIjxvB5
-KBLXDUCPAgMBAAECggEAIecn7J5UjOoAcPNnZ38SiJoc0pDkdtn0RdH75eSf/2Bj
-PDaxQeSZq+4E7ZAK7rrIBTnz7gdyz6nSVe/BruB4NtrTgi/e+rxAygfhowOjcIGe
-qytVDUzHj19qvZ+qra6lfyfHTxZ9MmxX0J3IMbr9B9tYtFAyfOlujZG+pH4L1Cqa
-4ujlvckQNmaqBmF77Sh1HYwXwp5sX+dY6tQl9d0Xe3+nDsPIfCB1jfS9210KX4b9
-4ldghwVx+ifLMjIkhmllE34UBAil/0p6cpAmN3BqlSTmzttE/gbXh47iT3SeGWfl
-ZUTEUkpfFXfnxwTLP3DsC2WMF+5DD1YVcrC80NPk1QKBgQD9x22KrqwGzHtZ0Zrk
-IrGgjlIauTKFA1ioQYfvv18SWfjnmBJnlTTsmrAL4lGAe8YAcDwaNr6DZmoGXkGi
-c1EUqNs+PHnvJZUEZsDsEqABoNrl0vKJzROL6y/MC6OdRX7JPl4hn/U+6HTSMLd9
-v4yoUfv+RbV4llp74hn7IlZRLQKBgQDOLfRn7dDaP2wfsQMv+Bu1jVe3yHlLIhmP
-b6OJeP1+PDJ5J8OlMFjL8SAZH7l6EbI2qwU87JcMFhr/BAlbVegli/86bOUFh3tC
-QfOa03LE5NEzwh2HN5acMigl4olEcg3VPGO5/Gk8PbexGZWLaG+iw5D7KdgzLng9
-Mx6SsLrWKwKBgQDqKnJxXOtu+o93OWlqyHiOZcRs1CZBhezwlEcSecsH6+04BaI1
-4f+LstBups39eDgjf2x14723EXETnzWA6FcQcR6cNsFsYYk3Hnk1W5o45mwVVKhn
-bstyd/kKllLKc62hk+LXs/lfqq7gpAMsDOuFBOE4pqnkMxga526BxBVRoQKBgGsZ
-bfrKixHDniu8LHavf91IBYe/CFqh5PsgN6gChFMde+55XGSjf4y4vT6vvw4MwTEq
-lzb1guTRWsabVyztrABM/5Be3nyHytw5HAyRx+1FGvKy49nIY2DRoQ9E5J78S/k3
-PGpxFk0nlhLVwlu/LTY0NkxxiQ/VFLpdooT6bqMvAoGBANOP4z+Kx9yVYzdAVMb1
-EQjzNxGQlDpvDukmXKXTDzZcILRJft0mzRwj+DlD9AosXn1EAjwAserQieFdIsDP
-z2bc0NTvQ63yBQtEaclVsqHTHmRBo98aGXpm/gHxi3HmWqr8SFNkaIzfBS8axEyZ
-GGErDjELiu+4zi4oQR4r+OCq
------END PRIVATE KEY-----`,
-    client_email: 'wallet-licencias@skilled-flight-491317-c7.iam.gserviceaccount.com',
-    client_id: '114261544750696739996',
+    project_id: 'licenciasdgo',
+    private_key_id: '08dc9d6bdfe177e16bb4dd3449409e139f3603a4',
+    private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDEkGH+nz/seg++\nXHmwKE3lgmJQnG7HrR+lu0nvIYK5nW7np/k9XV5hQ5prtFQN0O9C9CCyjCAyaJFC\nwPpBXohZxwvgBzkbb1P9ySSauZaXmm2sVMO421KvWbElu+ClIi/3rR0sT2o/70gl\nIUlzC6I/S2KoToiFrdCEBjEu/n7K1em/B2KAH/fGu8WsveFk/lgQnKnRgnPJByrR\nX5qv76/A6dx898efk08H5/f1q4Vp5+UHkxANHn7TFxt6eFBvYfSnMjdn65sQidvr\nQBDW9Vbdv0M8YsscZ+wPo6AcYfMXnfilwp4T3hwiMOGMKG9l53OU4QtER7cAoFE4\nnOgCIGENAgMBAAECggEAICDZY5zz/dsVp6/F1B1CXjkpiLOJB+osOhKayxNXIq+w\n6PxzqKwSOSOrod8fvgJgmTj9/zEYMiUVWSvhu72P29zE/CEyHGHeAKVX7lJXYwBC\n3OAd/aEbqr2mTtyeo18rJ/iLxCpW24xo5mjCcKN+KYpQ3eG4PuFiK7I3Z88BOnXj\nFFXGhMgvFZIuHU3Fk+U+fqf6rp6jSXiOjbTz8BQRkOFy8BuYv77rdsjiB0l5gfyN\nanKGUlAA5y+QJ/+vue7iX1dVyiHt9JlHmoZUiRMovjxxJP3S7nvGMuQDnMuJuGlA\nSQvOtI6L6PwmIHYg7jkQIIkMvcnZ52O6CiDs91bBAQKBgQDpCgQyPDhUb/wsnU5A\ngY5xnFHUjgF0iSpYQ+7ruGmIAgtCqlkygbhoGtCAKwSH3JLuDvKmM/e+jW3BH0J0\njAfD09/GGWBnTYHmHl6Yp6lXkqNyjri3HEDo5Cg4lWNyA9FnLMgyPvX/BgJ4QIbI\nX2SbDlxLsIs4aiAgo80Lkj7A+QKBgQDX7lknmcdtGGQfSUXheE4AvrNhcATe76nG\nW6XLVWWdNSR79dU92vKIV9yQEX/HLBBXvGdr1fDzVqqEC64fVqvqgsqTr3uF0QGM\n8Ey/gwtVGmxR4wfDBn4U+3DsxADVfOGVDNwHQiPxuMMtJwNQ4xgC7k4iQfEUERvI\nPoP7Nj65tQKBgBHMBwgDG1YvezW5CbnZaxR4GLO/6JKKyyYUghGUctLFPTDpK4i0\n6W1h5txy7JSnnrz5fUR+IYR27pPaHEwkSY+GBcfuNjONcsctOJI187PRahQcnDS3\nvqlKi1vO5NpXOk3D2MIllsnUHqoqW2DAEEHbNec941P6ntt/RvCESbCZAoGAJZIQ\nKybDn0TOLu9l3Ew9bj3AImUGQ+/5X00U9OMf8hGMDpGAj+mnp3d6JgsVa4dMNKfQ\nat/ns79RnfYWTteaxAwLyVSQLoFmPqqVAAGCGEWnsTvKXvGjQG1bgaa86mh3K6L4\nKb8lV+qo8xNFrW5GAESMjcNhefdcGSRffHc8xL0CgYEApEmYDlqRimAw2OKC29Ib\nSk3GU++4Ppu7QPRtWMYEA6E4Q1gmCSkJjG0fKQ9s6Hq65VzztFZv15ZVMTQ+sE32\nqu3YvHZR6LcQTpbZYO2PaJGxeqZdBNWjDN5a40xK0tvXEASc83f1LvsFkiPKLfEn\nu35j8Qrd/uRt6D+Q69iSRdM=\n-----END PRIVATE KEY-----\n",
+    client_email: 'api-licencias-wallet@licenciasdgo.iam.gserviceaccount.com',
+    client_id: '116623889464452321355',
     auth_uri: 'https://accounts.google.com/o/oauth2/auth',
     token_uri: 'https://oauth2.googleapis.com/token',
     auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-    client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/wallet-licencias%40skilled-flight-491317-c7.iam.gserviceaccount.com',
+    client_x509_cert_url: 'https://www.googleapis.com/robot/v1/metadata/x509/api-licencias-wallet%40licenciasdgo.iam.gserviceaccount.com',
     universe_domain: 'googleapis.com'
   }
 };
@@ -67,7 +39,7 @@ module.exports = async function (context, req) {
 
   try {
     const licenseData = req.body;
-    
+   
     if (!licenseData || !licenseData.folio || !licenseData.nombre) {
       context.res.status = 400;
       context.res.body = {
@@ -78,7 +50,9 @@ module.exports = async function (context, req) {
     }
 
     const issuerId = GOOGLE_WALLET_CONFIG.issuerId;
-    const classId = `${issuerId}.licencias_durango_class`;
+    
+    // AQUÍ ESTÁ EL ID DE TU CLASE GENÉRICA
+    const classId = `${issuerId}.Licencias`;
 
     const genericObject = {
       id: `${issuerId}.${licenseData.folio.replace(/[^a-zA-Z0-9_.-]/g, '_')}`,
@@ -163,3 +137,4 @@ module.exports = async function (context, req) {
     };
   }
 };
+
