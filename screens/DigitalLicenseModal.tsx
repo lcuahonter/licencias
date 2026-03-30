@@ -3,6 +3,7 @@ import { UserData, LicenseRequest } from '../types';
 import durangoLogo from '../src/recursos/durangogob.svg';
 import marcaWatermark from '../src/recursos/marca.jpg';
 import { fotoService } from '../src/api/fotoService';
+import { addToWallet, getPlatform, GoogleWalletPassData } from '../src/api/walletService';
 
 interface DigitalLicenseModalProps {
     isOpen: boolean;
@@ -21,6 +22,9 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
 }) => {
     const [isFlipped, setIsFlipped] = React.useState(false);
     const [fotoRostroUrl, setFotoRostroUrl] = useState<string | null>(null);
+    const [walletLoading, setWalletLoading] = useState(false);
+    const [walletError, setWalletError] = useState<string | null>(null);
+    const platform = getPlatform();
 
     // Cargar foto de rostro cuando se abre el modal
     useEffect(() => {
@@ -260,6 +264,53 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                     <span className="material-symbols-outlined group-hover:rotate-180 transition-transform duration-500">360</span>
                     <span className="font-bold tracking-wider uppercase text-sm">Girar Licencia</span>
                 </button>
+
+                {/* Add to Wallet Button */}
+                {token && (
+                    <div className="mt-3 flex flex-col items-center gap-1">
+                        <button
+                            onClick={async () => {
+                                setWalletError(null);
+                                setWalletLoading(true);
+                                try {
+                                    const passData: GoogleWalletPassData = {
+                                        folio: licenseNo,
+                                        nombre: fullName,
+                                        tipo_licencia: license!.rawData?.licencia || license!.type,
+                                        vigencia: validity,
+                                        expedicion: license!.rawData?.expedicion
+                                            ? new Date(license!.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                            : 'N/A',
+                                        rfc: rfc !== 'N/A' ? rfc : undefined,
+                                    };
+                                    await addToWallet(Number(license!.id), token, passData);
+                                } catch (err: any) {
+                                    setWalletError(err?.message || 'No se pudo agregar al wallet');
+                                } finally {
+                                    setWalletLoading(false);
+                                }
+                            }}
+                            disabled={walletLoading}
+                            className="flex items-center gap-2 px-6 py-3 rounded-full shadow-lg font-bold tracking-wider uppercase text-sm transition-all disabled:opacity-50"
+                            style={platform === 'ios'
+                                ? { background: '#000', color: '#fff' }
+                                : { background: '#1a73e8', color: '#fff' }
+                            }
+                        >
+                            {walletLoading ? (
+                                <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                            ) : (
+                                <span className="material-symbols-outlined text-base">wallet</span>
+                            )}
+                            {platform === 'ios' ? 'Agregar a Apple Wallet'
+                                : platform === 'android' ? 'Agregar a Google Wallet'
+                                : 'Descargar Pase (.pkpass)'}
+                        </button>
+                        {walletError && (
+                            <p className="text-red-400 text-xs text-center mt-1">{walletError}</p>
+                        )}
+                    </div>
+                )}
 
                 <div className="mt-4 text-center">
                     <p className="text-white/60 text-xs">Toca fuera de la tarjeta para cerrar</p>

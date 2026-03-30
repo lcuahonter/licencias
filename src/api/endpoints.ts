@@ -52,6 +52,10 @@ export const API_ENDPOINTS = {
     SUBIR: import.meta.env.VITE_FOTOS_ROSTRO_SUBIR || '/api/fotos-rostro/subir',
     DESCARGAR: import.meta.env.VITE_FOTOS_ROSTRO_DESCARGAR || '/api/fotos-rostro/descargar',
     URL: import.meta.env.VITE_FOTOS_ROSTRO_URL || '/api/fotos-rostro/url'
+  },
+  WALLET: {
+    PKPASS: import.meta.env.VITE_WALLET_PKPASS || '/api/wallet/pkpass',
+    GOOGLE_JWT: import.meta.env.VITE_WALLET_GOOGLE_JWT || '/wallet/google/create'
   }
 };
 
