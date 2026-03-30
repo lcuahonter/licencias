@@ -17,7 +17,7 @@ interface DecodedToken {
 }
 
 interface WelcomeScreenProps {
-  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen' | 'OperatorDashboard') => void;
+  onStart: (data?: Partial<UserData>, nextScreen?: 'Dashboard' | 'DocumentUploadScreen' | 'OperatorDashboard' | 'AdminDashboard') => void;
 }
 
 

@@ -940,7 +940,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
               <div className="relative">
-                <input type="text" value={searchOp} onChange={(e) => setSearchOp(e.target.value)} placeholder="Buscar por Nombre o Correo..." className="w-full h-11 pl-10 pr-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none transition-colors" style={{ focusBorderColor: '#1565C0' }} />
+                <input type="text" value={searchOp} onChange={(e) => setSearchOp(e.target.value)} placeholder="Buscar por Nombre o Correo..." className="w-full h-11 pl-10 pr-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none transition-colors" style={{ outline: 'none' }} />
                 <span className="material-symbols-outlined absolute left-3 top-2.5 text-gray-400">search</span>
               </div>
               <div className="flex gap-2">
@@ -998,7 +998,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ onLogout, t
                               return (
                                 <div key={estado} className={`px-2 py-1 rounded-lg ${colorClass} text-[10px] font-bold flex items-center gap-1`}>
                                   <span>{displayLabel}:</span>
-                                  <span>{cantidad}</span>
+                                  <span>{String(cantidad)}</span>
                                 </div>
                               );
                             })}

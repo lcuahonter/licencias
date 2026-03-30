@@ -36,6 +36,8 @@ import { userService } from '../src/api/userService';
 import { revisionService } from '../src/api/revisionService';
 import examService from '../src/api/examService';
 import { authService } from '../src/api/authService';
+import { vdidService } from '../src/api/vdidService';
+import VdidCaptureModal from '../components/src/VdidCaptureModal';
 import JsBarcode from 'jsbarcode';
 import html2pdf from 'html2pdf.js';
 import { Capacitor } from '@capacitor/core';
@@ -91,6 +93,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   // Modales para documentos corregidos
   const [showCorrectionsSuccessModal, setShowCorrectionsSuccessModal] = useState(false);
+  const [expandedRejected, setExpandedRejected] = useState<Set<string>>(new Set());
   const [showCorrectionsErrorModal, setShowCorrectionsErrorModal] = useState(false);
   const [correctionsMessage, setCorrectionsMessage] = useState('');
 
@@ -118,6 +121,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [solicitudesConFoto, setSolicitudesConFoto] = useState<Set<number>>(new Set());
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // --- VDID PER-SOLICITUD STATES ---
+  /** UUID por idSolicitud, puede venir de rawData.uuid (backend) o guardarse localmente */
+  const [vdidUuids, setVdidUuids] = useState<Record<string, string>>({});
+  /** Estado de verificación VDID por solicitud */
+  const [vdidStatuses, setVdidStatuses] = useState<Record<string, 'pending' | 'passed' | 'failed'>>({});
+  const [vdidFailReasons, setVdidFailReasons] = useState<Record<string, string>>({});
+  // Modal re-scan
+  const [showRescanModal, setShowRescanModal] = useState(false);
+  const [rescanSolicitudId, setRescanSolicitudId] = useState<number | null>(null);
+  const [rescanUrl, setRescanUrl] = useState('');
+  const [rescanUuid, setRescanUuid] = useState<string | null>(null);
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [rescanPolling, setRescanPolling] = useState(false);
 
   // --- FUNCIÓN DE LOGOUT ---
   const handleLogout = async () => {
@@ -272,6 +289,90 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     }
   };
 
+  // --- VDID: VERIFICAR ESTADO DE UNA VERIFICACIÓN ---
+  const checkVdidStatus = async (solicitudId: string, uuid: string) => {
+    try {
+      const ready = await vdidService.getStatus(uuid);
+      if (!ready) {
+        setVdidStatuses(prev => ({ ...prev, [solicitudId]: 'pending' }));
+        return;
+      }
+      const results = await vdidService.getResults(uuid);
+      const gr = results.globalResult?.toLowerCase() ?? '';
+      const passed = gr === 'passed' || gr === 'ok';
+      setVdidStatuses(prev => ({ ...prev, [solicitudId]: passed ? 'passed' : 'failed' }));
+      if (!passed) {
+        setVdidFailReasons(prev => ({
+          ...prev,
+          [solicitudId]: results.globalResultDescription || 'Verificación no aprobada por Suma México.',
+        }));
+      }
+    } catch {
+      setVdidStatuses(prev => ({ ...prev, [solicitudId]: 'pending' }));
+    }
+  };
+
+  // --- VDID: ABRIR MODAL RE-SCAN ---
+  const handleOpenRescan = async (solicitudId: number) => {
+    if (!vdidService.isConfigured()) {
+      setAlertMessage('La verificación de identidad no está configurada.');
+      setAlertType('error');
+      setShowAlertModal(true);
+      return;
+    }
+    setRescanSolicitudId(solicitudId);
+    setRescanLoading(true);
+    try {
+      const { uuid, url } = await vdidService.startTrackedVerification(
+        `licencias-dgo-${idUsuario ?? 'u0'}-${solicitudId}`
+      );
+      setRescanUuid(uuid ?? null);
+      setRescanUrl(url);
+      setShowRescanModal(true);
+    } catch (err: any) {
+      setAlertMessage(err?.message || 'No se pudo iniciar la verificación de identidad.');
+      setAlertType('error');
+      setShowAlertModal(true);
+    } finally {
+      setRescanLoading(false);
+    }
+  };
+
+  // --- VDID: COMPLETAR RE-SCAN (POLLING + UUID EN BACKEND) ---
+  const handleRescanCompleted = async () => {
+    setShowRescanModal(false);
+    const solId = rescanSolicitudId;
+    const uuid = rescanUuid;
+    if (!solId || !uuid || uuid.startsWith('local-')) return;
+    const solIdStr = String(solId);
+    setVdidUuids(prev => ({ ...prev, [solIdStr]: uuid }));
+    setVdidStatuses(prev => ({ ...prev, [solIdStr]: 'pending' }));
+    // Actualizar UUID en el backend (no bloquea)
+    try { await solicitudService.updateUuid(solId, uuid, token); } catch { /* no fatal */ }
+    setRescanPolling(true);
+    try {
+      const ready = await vdidService.waitForResults(uuid, 120_000, 5_000);
+      if (ready) {
+        const results = await vdidService.getResults(uuid);
+        const gr = results.globalResult?.toLowerCase() ?? '';
+        const passed = gr === 'passed' || gr === 'ok';
+        setVdidStatuses(prev => ({ ...prev, [solIdStr]: passed ? 'passed' : 'failed' }));
+        if (!passed) {
+          setVdidFailReasons(prev => ({
+            ...prev,
+            [solIdStr]: results.globalResultDescription || 'Tu identificación no pudo ser verificada.',
+          }));
+        }
+      } else {
+        setVdidStatuses(prev => ({ ...prev, [solIdStr]: 'failed' }));
+        setVdidFailReasons(prev => ({ ...prev, [solIdStr]: 'Tiempo de espera agotado. Intenta de nuevo.' }));
+      }
+    } catch {
+      setVdidStatuses(prev => ({ ...prev, [solIdStr]: 'pending' }));
+    } finally {
+      setRescanPolling(false);
+    }
+  };
 
   // --- FUNCIÓN PARA RECARGAR SOLICITUDES ---
   const reloadSolicitudes = async () => {
@@ -290,21 +391,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
         for (const sol of solicitudes) {
           const idestatus = sol.idestatus;
 
-          // Solo mostrar: 20 (Nueva), 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
-          if (![20, 22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+          // Solo mostrar estados válidos de solicitudes_licencias
+          if (![20, 22, 23, 24, 25].includes(idestatus)) continue;
 
           let status: any = 'pending';
           let rejectedDocuments: any[] = [];
 
-          // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-          // PRIORIDAD 1: Si ya tiene número de licencia asignado, está completamente aprobada
-          if (sol.numerolicencia) {
-            status = 'completed';
-          } else if (idestatus === 26) {
-            // Estado 26 = Examen APROBADO confirmado por el backend
-            status = 'completed';
-          } else if (idestatus === 24) {
-            // Solicitud APROBADA (documentos OK) - verificar examen usando API de verificación
+          // FUENTE DE VERDAD: idestatus de solicitudes_licencias
+          // SOLO idestatus 24 (Aprobada por operador) habilita verificación de examen
+          if (idestatus === 24) {
+            // Operador ya aprobó documentos → verificar si el ciudadano ya pasó el examen
             try {
               const resultadoExamen = await examService.verificarAprobacion(sol.id, token);
               const examenAprobado = resultadoExamen?.aprobo === true;
@@ -312,18 +408,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               if (examenAprobado) {
                 status = 'completed';
               } else {
-                // Documentos aprobados pero examen pendiente o reprobado
+                // Aprobada pero examen pendiente
                 status = 'paid_pending_docs';
               }
             } catch (err) {
-              // Si hay error al verificar, mantener como pendiente
               status = 'paid_pending_docs';
             }
-          } else if (idestatus === 27) {
-            // Examen teórico REPROBADO
-            status = 'rejected';
-          } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
-            // Si idestatus es 25, la solicitud fue RECHAZADA por dictamen (no solo documentos)
+          } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 20) {
+            // 25 = Rechazada definitiva
+            // 20/22/23 = en espera / en revisión por operador
             status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
 
             try {
@@ -337,9 +430,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                 const rechazados = docs.filter((d: any) => d.idestatus === 15);
 
-                // Guardar documentos rechazados para mostrarlos al usuario
-                // PERO NO cambiar el status a 'rejected' si la solicitud sigue en proceso (idestatus 23)
-                // Solo las solicitudes con idestatus 25 son realmente rechazadas
                 if (rechazados.length > 0) {
                   rejectedDocuments = rechazados.map((d: any) => ({
                     iddocumento: d.iddocumento,
@@ -389,10 +479,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         setSolicitudesCargadas(solicitudesProcesadas);
 
-        // Verificar fotos existentes para solicitudes con idestatus 20 y 24
+        // Verificar fotos existentes para solicitudes con idestatus 20 (nueva)
         for (const req of solicitudesProcesadas) {
-          if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
+          if (req.rawData?.idestatus === 20) {
             await verificarFotoExistente(Number(req.id));
+          }
+        }
+        // Disparar comprobación VDID para solicitudes que traigan uuid del backend
+        for (const req of solicitudesProcesadas) {
+          const uuid = req.rawData?.uuid || vdidUuids[req.id];
+          if (uuid && !String(uuid).startsWith('local-') && !vdidStatuses[req.id]) {
+            checkVdidStatus(req.id, uuid);
           }
         }
       }
@@ -422,21 +519,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           for (const sol of solicitudes) {
             const idestatus = sol.idestatus;
 
-            // Solo mostrar: 20 (Nueva), 22 (Completa), 23 (Pendiente revisión), 24 (Documentos aprobados), 25 (Rechazada), 26 (Examen aprobado), 27 (Examen reprobado), 32 (Asignada a operador)
-            if (![20, 22, 23, 24, 25, 26, 27, 32].includes(idestatus)) continue;
+            // Solo mostrar estados válidos de solicitudes_licencias
+            if (![20, 22, 23, 24, 25].includes(idestatus)) continue;
 
             let status: any = 'pending';
             let rejectedDocuments: any[] = [];
 
-            // USAR EL IDESTATUS DE LA SOLICITUD COMO FUENTE DE VERDAD
-            // PRIORIDAD 1: Si ya tiene número de licencia asignado, está completamente aprobada
-            if (sol.numerolicencia) {
-              status = 'completed';
-            } else if (idestatus === 26) {
-              // Estado 26 = Examen APROBADO confirmado por el backend
-              status = 'completed';
-            } else if (idestatus === 24) {
-              // Solicitud APROBADA (documentos OK) - verificar examen usando API de verificación
+            // FUENTE DE VERDAD: idestatus de solicitudes_licencias
+            // SOLO idestatus 24 (Aprobada por operador) habilita verificación de examen
+            if (idestatus === 24) {
+              // Operador ya aprobó documentos → verificar si el ciudadano ya pasó el examen
               try {
                 const resultadoExamen = await examService.verificarAprobacion(sol.id, token);
                 const examenAprobado = resultadoExamen?.aprobo === true;
@@ -444,19 +536,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 if (examenAprobado) {
                   status = 'completed';
                 } else {
-                  // Documentos aprobados pero examen pendiente o reprobado
+                  // Aprobada pero examen pendiente
                   status = 'paid_pending_docs';
                 }
               } catch (err) {
-                // Si hay error al verificar, mantener como pendiente
                 status = 'paid_pending_docs';
               }
-            } else if (idestatus === 27) {
-              // Examen teórico REPROBADO
-              status = 'rejected';
-            } else if (idestatus === 20 || idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 32) {
-              // Para solicitudes rechazadas o en proceso, consultar documentos
-              // IMPORTANTE: Solo marcar como rejected si idestatus es 25 (rechazada por dictamen)
+            } else if (idestatus === 25 || idestatus === 22 || idestatus === 23 || idestatus === 20) {
+              // 25 = Rechazada definitiva
+              // 20/22/23 = en espera / en revisión por operador
               status = idestatus === 25 ? 'rejected' : 'paid_pending_docs';
 
               try {
@@ -528,10 +616,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           setSolicitudesCargadas(solicitudesProcesadas);
 
-          // Verificar fotos existentes para solicitudes con idestatus 20 y 24
+          // Verificar fotos existentes para solicitudes con idestatus 20 (nueva)
           for (const req of solicitudesProcesadas) {
-            if (req.rawData?.idestatus === 20 || req.rawData?.idestatus === 24) {
+            if (req.rawData?.idestatus === 20) {
               await verificarFotoExistente(Number(req.id));
+            }
+          }
+          // Disparar comprobación VDID para solicitudes que traigan uuid del backend
+          for (const req of solicitudesProcesadas) {
+            const uuid = req.rawData?.uuid || vdidUuids[req.id];
+            if (uuid && !String(uuid).startsWith('local-') && !vdidStatuses[req.id]) {
+              checkVdidStatus(req.id, uuid);
             }
           }
         }
@@ -564,6 +659,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [examStarted, timeRemaining]); // Remover dependencias innecesarias
+
+  // --- VDID: POLLING AUTOMÁTICO PARA SOLICITUDES PENDIENTES ---
+  useEffect(() => {
+    const pendingEntries = Object.entries(vdidStatuses).filter(([, s]) => s === 'pending');
+    if (pendingEntries.length === 0) return;
+    const interval = setInterval(async () => {
+      for (const [solId] of pendingEntries) {
+        const uuid = vdidUuids[solId] || solicitudesCargadas.find(s => s.id === solId)?.rawData?.uuid;
+        if (uuid) await checkVdidStatus(solId, uuid);
+      }
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [vdidStatuses]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- LICENCIAS Y TRÁMITES ---
   // Combinar solicitudes del prop userData.requests con las cargadas del backend
@@ -1020,7 +1128,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const payload = {
       idusuario: idUsuario,
       idtipolicencia,
-      idmetodopago
+      idmetodopago,
+      uuid: (documentsData?.vdidUuid && !String(documentsData.vdidUuid).startsWith('local-'))
+        ? documentsData.vdidUuid
+        : null,
     };
 
     try {
@@ -1090,31 +1201,53 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       // Agregar al estado local
       setSolicitudesCargadas(prev => [...prev, newRequest]);
 
+      // Guardar UUID VDID localmente y disparar primera comprobación
+      if (documentsData?.vdidUuid && !String(documentsData.vdidUuid).startsWith('local-')) {
+        const solIdStr = String(idSolicitudReal);
+        setVdidUuids(prev => ({ ...prev, [solIdStr]: documentsData.vdidUuid }));
+        checkVdidStatus(solIdStr, documentsData.vdidUuid);
+      }
+
       // -------------------------------------------------------------------
       // PASO 4: SUBIR DOCUMENTOS
       // -------------------------------------------------------------------
-      const userDocs = documentsData?.documents || [];
+      const userDocs = (documentsData?.documents || []).filter((d: any) => !!d.archivoBase64);
+
+      console.log(`[Docs] Total a subir: ${userDocs.length}`, userDocs.map((d: any) => ({ id: d.idtipodocumento, formato: d.formato, tamanio: d.tamanio, nombreoriginal: d.nombreoriginal })));
 
       let docsOk = 0;
+      const docErrors: string[] = [];
 
       for (const doc of userDocs) {
-        if (!doc.archivoBase64) continue;
+        // Normalizar formato: 'jpeg' → 'jpg', valores vacíos → 'jpg'
+        const rawFormato = doc.formato || '';
+        const formato = rawFormato === 'jpeg' ? 'jpg' : (rawFormato || 'jpg');
 
         const payloadDoc = {
           idusuario: idUsuario,
           idsolicitud: idSolicitudReal,
           idtipodocumento: doc.idtipodocumento,
-          formato: doc.formato || 'jpg',
-          nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}`,
-          tamanio: doc.tamanio || 0,
+          formato,
+          nombreoriginal: doc.nombreoriginal || `doc_${doc.idtipodocumento}.${formato}`,
+          tamanio: doc.tamanio || 1,
           archivoBase64: doc.archivoBase64
         };
+
+        console.log(`[Docs] Enviando tipo ${doc.idtipodocumento}:`, {
+          idusuario: payloadDoc.idusuario,
+          idsolicitud: payloadDoc.idsolicitud,
+          idtipodocumento: payloadDoc.idtipodocumento,
+          formato: payloadDoc.formato,
+          nombreoriginal: payloadDoc.nombreoriginal,
+          tamanio: payloadDoc.tamanio,
+          base64Length: payloadDoc.archivoBase64?.length
+        });
 
         try {
           await documentService.createDocumento(payloadDoc, token);
           docsOk++;
         } catch (derr: any) {
-          // Error subiendo documento
+          console.error(`[Docs] Error subiendo doc tipo ${doc.idtipodocumento}:`, derr, 'data:', derr?.data);
           if (derr.isAuthError) {
             setAlertMessage('Sesión expirada durante la carga de documentos.');
             setAlertType('error');
@@ -1122,15 +1255,27 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             setTimeout(() => handleLogout(), 2000);
             return;
           }
+          const serverDetail = JSON.stringify(derr?.data || '');
+          const msg = derr?.message || derr?.error || 'Error desconocido';
+          docErrors.push(`Tipo ${doc.idtipodocumento}: ${msg}${serverDetail !== '""' ? ` | ${serverDetail}` : ''}`);
         }
       }
 
-      if (docsOk > 0) {
-        setAlertMessage(`Solicitud creada exitosamente. Se subieron ${docsOk} documentos.`);
+      if (userDocs.length === 0) {
+        // No había documentos que subir (solo INE que maneja VDID)
+        setAlertMessage('Solicitud creada exitosamente.');
         setAlertType('success');
         setShowAlertModal(true);
+      } else if (docsOk === userDocs.length) {
+        setAlertMessage(`Solicitud creada exitosamente. Se subieron ${docsOk} documento${docsOk !== 1 ? 's' : ''}.`);
+        setAlertType('success');
+        setShowAlertModal(true);
+      } else if (docsOk > 0) {
+        setAlertMessage(`Solicitud creada. Se subieron ${docsOk} de ${userDocs.length} documentos.\n\nErrores:\n${docErrors.join('\n')}`);
+        setAlertType('warning');
+        setShowAlertModal(true);
       } else {
-        setAlertMessage("Solicitud creada. Hubo un problema subiendo los documentos, por favor intenta cargarlos nuevamente desde el detalle.");
+        setAlertMessage(`Solicitud creada pero no se pudieron subir los documentos.\n\nError: ${docErrors[0] || 'Error desconocido'}`);
         setAlertType('warning');
         setShowAlertModal(true);
       }
@@ -1175,7 +1320,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     try {
       setIsSubmittingCorrections(true);
       // Convertir archivos a base64 y enviar updateDocumento para cada documento rechazado
-      for (const docData of fixingRequest.rejectedDocuments || []) {
+      for (const _docData of fixingRequest.rejectedDocuments || []) {
+        const docData = _docData as { iddocumento: number; tipodocumento: string; comentarios?: string };
         const file = fixedDocs[docData.iddocumento];
         if (!file) continue;
 
@@ -1305,7 +1451,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                 // Determinar el texto del estado
                 const statusDisplay = req.status === 'pending_payment' ? 'EN ESPERA DE REVISION' :
-                  (idestatus === 20 ? 'EN ESPERA QUE REALICES TU EXAMEN' :
+                  (idestatus === 20 ? 'EN ESPERA DE VALIDACIÓN DE DOCUMENTOS' :
                     idestatus === 24 ? 'APROBADO - FALTA EXAMEN' :
                       idestatus === 26 ? 'EXAMEN APROBADO' : (estatus || 'EN REVISIÓN'));
 
@@ -1327,12 +1473,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           <span className="material-symbols-outlined text-sm">warning</span> Documentos con Observaciones:
                         </div>
                         <ul className="list-disc list-inside font-bold space-y-1">
-                          {req.rejectedDocuments.map(docData => (
-                            <li key={docData.iddocumento}>
+                          {req.rejectedDocuments.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                            <li key={docData.iddocumento ?? i}>
                               {docData.tipodocumento}
                               {docData.comentarios && <span className="font-normal text-orange-600 ml-1">({docData.comentarios})</span>}
                             </li>
-                          ))}
+                          ); })}
                         </ul>
                       </div>
                     )}
@@ -1350,58 +1496,87 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </div>
                     )}
 
-                    {/* Botón examen teórico - Mostrar cuando idestatus es 20 (Nueva) o 24 (Documentos Aprobados) */}
-                    {(idestatus === 20 || idestatus === 24) && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
-                        {/* Botón Subir Foto - Solo mostrar si NO tiene foto subida */}
-                        {!solicitudesConFoto.has(Number(req.id)) && (
-                          <button
-                            onClick={() => handleOpenPhotoModal(Number(req.id))}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
-                          >
-                            <span className="material-symbols-outlined text-sm">photo_camera</span>
-                            Subir Foto para Licencia
-                          </button>
-                        )}
+                    {/* Foto + Examen solo cuando idestatus 20 (nueva) */}
+                    {idestatus === 20 && (() => {
+                      const solicUuid  = rawData?.uuid || vdidUuids[req.id];
+                      const vdidSt     = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
+                      // Bloquear foto/examen SOLO si la verificación fue explícitamente rechazada
+                      const vdidFailed = vdidSt === 'failed';
+                      return (
+                        <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-2">
 
-                        {/* Indicador de foto subida */}
-                        {solicitudesConFoto.has(Number(req.id)) && (
-                          <div className="w-full bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2">
-                            <span className="material-symbols-outlined text-sm">check_circle</span>
-                            Foto Subida Correctamente
-                          </div>
-                        )}
+                          {/* Estado VDID: rechazado — reemplaza botón de foto */}
+                          {vdidFailed ? (
+                            <div className="space-y-1.5">
+                              <div className="w-full bg-red-50 border border-red-300 text-red-700 text-[11px] px-4 py-2 rounded-xl text-center space-y-1">
+                                <span className="font-bold block">Verificación de identidad rechazada</span>
+                                <span className="font-normal block">{vdidFailReasons[req.id] || 'Tu identificación no fue aprobada.'}</span>
+                                <p className="font-mono text-[10px] text-red-500 break-all select-all">{solicUuid}</p>
+                              </div>
+                              <button
+                                onClick={() => handleOpenRescan(Number(req.id))}
+                                disabled={rescanLoading && rescanSolicitudId === Number(req.id)}
+                                className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60"
+                              >
+                                {(rescanLoading && rescanSolicitudId === Number(req.id))
+                                  ? <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                                  : <span className="material-symbols-outlined text-sm">refresh</span>}
+                                Volver a Escanear Identificación
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Botón Escanear Rostro / Subir Foto para Licencia */}
+                              {!solicitudesConFoto.has(Number(req.id)) && (
+                                <button
+                                  onClick={() => handleOpenPhotoModal(Number(req.id))}
+                                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2"
+                                >
+                                  <span className="material-symbols-outlined text-sm">face_retouching_natural</span>
+                                  Escanear Rostro para Licencia
+                                </button>
+                              )}
 
-                        {/* Botón Examen - Deshabilitado si no ha subido foto */}
-                        <button
-                          onClick={() => {
-                            if (!solicitudesConFoto.has(Number(req.id))) {
-                              setAlertMessage('Debes subir tu foto antes de realizar el examen teórico.');
-                              setAlertType('warning');
-                              setShowAlertModal(true);
-                              return;
-                            }
-                            setSelectedSolicitudId(Number(req.id));
-                            setShowExamModal(true);
-                            setExamStarted(false);
-                            setTimeRemaining(900);
-                            setRespuestas({});
-                            setTiemposRespuesta({});
-                            setEnviandoExamen(false);
-                          }}
-                          disabled={!solicitudesConFoto.has(Number(req.id))}
-                          className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${solicitudesConFoto.has(Number(req.id))
-                            ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
-                            : 'bg-gray-300 cursor-not-allowed opacity-60'
-                            }`}
-                        >
-                          <span className="material-symbols-outlined text-sm">quiz</span>
-                          {solicitudesConFoto.has(Number(req.id))
-                            ? 'Realizar Examen Teórico'
-                            : 'Sube tu foto primero'}
-                        </button>
-                      </div>
-                    )}
+                              {/* Indicador de foto subida */}
+                              {solicitudesConFoto.has(Number(req.id)) && (
+                                <div className="w-full bg-green-50 border border-green-200 text-green-700 text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2">
+                                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                                  Foto Subida Correctamente
+                                </div>
+                              )}
+
+                              {/* Botón Examen */}
+                              <button
+                                onClick={() => {
+                                  if (!solicitudesConFoto.has(Number(req.id))) {
+                                    setAlertMessage('Debes subir tu foto antes de realizar el examen teórico.');
+                                    setAlertType('warning');
+                                    setShowAlertModal(true);
+                                    return;
+                                  }
+                                  setSelectedSolicitudId(Number(req.id));
+                                  setShowExamModal(true);
+                                  setExamStarted(false);
+                                  setTimeRemaining(900);
+                                  setRespuestas({});
+                                  setTiemposRespuesta({});
+                                  setEnviandoExamen(false);
+                                }}
+                                disabled={!solicitudesConFoto.has(Number(req.id))}
+                                className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                                  solicitudesConFoto.has(Number(req.id))
+                                    ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                                    : 'bg-gray-300 cursor-not-allowed opacity-60'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-sm">quiz</span>
+                                Realizar Examen Teórico
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -1421,70 +1596,85 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 const fecha = rawData?.creacion ? new Date(rawData.creacion).toLocaleDateString('es-MX') : req.date;
                 const descripcion = rawData?.descripcion || `Licencia ${req.type}`;
                 const idestatus = rawData?.idestatus;
-
+                const isExpanded = expandedRejected.has(req.id);
                 const statusDisplay = idestatus === 27 ? 'EXAMEN REPROBADO' : 'RECHAZADA';
 
                 return (
-                  <div key={req.id} className="p-5 rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark relative overflow-hidden">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
-                          <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                  <div key={req.id} className="rounded-2xl border-l-4 border-red-500 shadow-sm bg-white dark:bg-surface-dark overflow-hidden">
+                    {/* Cabecera siempre visible — clic para expandir/colapsar */}
+                    <button
+                      onClick={() => setExpandedRejected(prev => {
+                        const next = new Set(prev);
+                        next.has(req.id) ? next.delete(req.id) : next.add(req.id);
+                        return next;
+                      })}
+                      className="w-full px-5 py-4 flex items-center justify-between text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-1.5 rounded-full bg-red-50 text-red-500 shrink-0">
+                          <span className="material-symbols-outlined text-base">block</span>
                         </div>
-                        <h3 className="text-base font-bold text-gray-900 dark:text-white">{descripcion}</h3>
-                        <p className="text-xs text-gray-500 mt-1">Creado: {fecha}</p>
-                      </div>
-                      <div className="p-2 rounded-full bg-red-50 text-red-500">
-                        <span className="material-symbols-outlined">block</span>
-                      </div>
-                    </div>
-
-                    {/* Mostrar documentos rechazados si los hay */}
-                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
-                      <div className="mt-3 bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
-                        <div className="font-bold flex items-center gap-1 mb-1">
-                          <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-red-100 text-red-700">{statusDisplay}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">{req.folio}</span>
+                          </div>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate mt-0.5">{descripcion}</p>
                         </div>
-                        <ul className="list-disc list-inside font-bold space-y-1">
-                          {req.rejectedDocuments.map(docData => (
-                            <li key={docData.iddocumento}>
-                              {docData.tipodocumento}
-                              {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
-                            </li>
-                          ))}
-                        </ul>
                       </div>
-                    )}
+                      <span className={`material-symbols-outlined text-gray-400 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+                        expand_more
+                      </span>
+                    </button>
 
-                    {/* Botón de corrección solo si hay documentos rechazados Y NO es rechazo por dictamen (estatus 25) */}
-                    {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenFixModal(req)}
-                          className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-sm">upload_file</span>
-                          Corregir Documentos
-                        </button>
-                      </div>
-                    )}
+                    {/* Detalle colapsable */}
+                    {isExpanded && (
+                      <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-700 pt-3 space-y-3">
+                        <p className="text-xs text-gray-500">Creado: {fecha}</p>
 
-                    {/* Mensaje informativo cuando fue rechazada por dictamen final (idestatus 25) */}
-                    {idestatus === 25 && (
-                      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                          <div className="flex items-start gap-3">
-                            <span className="material-symbols-outlined text-gray-400">info</span>
-                            <div>
-                              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
-                              <p className="text-xs text-gray-600 dark:text-gray-400">
-                                Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
-                                Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
-                              </p>
+                        {/* Documentos rechazados */}
+                        {req.rejectedDocuments && req.rejectedDocuments.length > 0 && (
+                          <div className="bg-red-50 p-3 rounded-xl text-xs text-red-800 border border-red-100">
+                            <div className="font-bold flex items-center gap-1 mb-1">
+                              <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
+                            </div>
+                            <ul className="list-disc list-inside font-bold space-y-1">
+                              {req.rejectedDocuments.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                                <li key={docData.iddocumento ?? i}>
+                                  {docData.tipodocumento}
+                                  {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                                </li>
+                              ); })}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Botón de corrección */}
+                        {req.rejectedDocuments && req.rejectedDocuments.length > 0 && idestatus !== 25 && (
+                          <button
+                            onClick={() => handleOpenFixModal(req)}
+                            className="w-full bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-sm">upload_file</span>
+                            Corregir Documentos
+                          </button>
+                        )}
+
+                        {/* Rechazo por dictamen */}
+                        {idestatus === 25 && (
+                          <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                            <div className="flex items-start gap-3">
+                              <span className="material-symbols-outlined text-gray-400">info</span>
+                              <div>
+                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Solicitud Rechazada por Dictamen</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                  Esta solicitud fue rechazada mediante dictamen oficial. No es posible realizar correcciones.
+                                  Puedes crear una nueva solicitud presionando el botón <span className="font-bold">+</span> en la esquina inferior derecha.
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1504,7 +1694,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div className="flex justify-between items-center border-b border-gray-100 pb-3"><h2 className="text-lg font-black">Nueva Solicitud</h2><button onClick={() => setShowNewReqModal(false)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => handleTypeSelect('Automovilista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Automovilista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                   <span className="material-symbols-outlined text-2xl">directions_car</span>
                   <span className="text-[10px] font-bold">Auto</span>
@@ -1512,10 +1702,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <button onClick={() => handleTypeSelect('Motociclista')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Motociclista' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
                   <span className="material-symbols-outlined text-2xl">two_wheeler</span>
                   <span className="text-[10px] font-bold">Moto</span>
-                </button>
-                <button onClick={() => handleTypeSelect('Transporte Público')} className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all h-20 ${selectedType === 'Transporte Público' ? 'border-primary bg-blue-50 text-primary' : 'border-gray-100 text-gray-400'}`}>
-                  <span className="material-symbols-outlined text-2xl">directions_bus</span>
-                  <span className="text-[10px] font-bold text-center leading-tight">Transporte<br />Público</span>
                 </button>
               </div>
             </div>
@@ -1618,17 +1804,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in fade-in flex flex-col max-h-[80vh]">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4"><div><h2 className="text-lg font-black text-red-600">Corregir Documentos</h2><p className="text-xs text-gray-500">Sube nuevamente los archivos</p></div><button onClick={() => setFixingRequest(null)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-              {fixingRequest.rejectedDocuments?.map(docData => (
-                <div key={docData.iddocumento} className="space-y-1">
+              {fixingRequest.rejectedDocuments?.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                <div key={docData.iddocumento ?? i} className="space-y-1">
                   <label className="text-xs font-bold uppercase text-gray-500">{docData.tipodocumento || 'Documento'}</label>
                   {docData.comentarios && (
                     <p className="text-[10px] text-red-600 mb-1 italic">Motivo: {docData.comentarios}</p>
                   )}
-                  <div onClick={() => triggerFileUpload(docData.iddocumento)} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[docData.iddocumento] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
-                    {fixedDocs[docData.iddocumento] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
+                  <div onClick={() => triggerFileUpload(String(docData.iddocumento))} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[String(docData.iddocumento)] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+                    {fixedDocs[String(docData.iddocumento)] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
                   </div>
                 </div>
-              ))}
+              ); })}
             </div>
             <button
               disabled={Object.keys(fixedDocs).length < (fixingRequest.rejectedDocuments?.length || 0) || isSubmittingCorrections}
@@ -1784,7 +1970,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                     <div className="bg-white p-3 rounded-lg">
                       <p className="text-gray-500 text-xs mb-1">Tipo de Licencia</p>
-                      <p className="font-bold text-gray-900">{userData.requests?.find((r: any) => r.id === selectedSolicitudId?.toString())?.licenseType || 'Automovilista'}</p>
+                      <p className="font-bold text-gray-900">{userData.requests?.find((r: any) => r.id === selectedSolicitudId?.toString())?.type || 'Automovilista'}</p>
                     </div>
                   </div>
                 </div>
@@ -2065,13 +2251,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         setResultType(aprobado ? 'success' : 'error');
                         setShowVerResultButton(false);
 
-                        // Si aprobó el examen, actualizar solicitud a estado 22
-                        if (aprobado && selectedSolicitudId) {
+                        // Solo si aprobó el examen, marcar como Completa (idestatus 22) para que el operador la vea
+                        if (aprobado) {
                           try {
-                            await solicitudService.updateSolicitud(selectedSolicitudId, 22, token || '');
-                          } catch (updateErr) {
-                            // Error al actualizar solicitud, pero continuar
-                          }
+                            await solicitudService.updateSolicitud(selectedSolicitudId!, 22, token || '');
+                          } catch { /* no fatal */ }
                         }
 
                         // Recargar solicitudes para actualizar el estado (aprobado o reprobado)
@@ -2464,24 +2648,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
 
             <div className="p-6">
-              {photoMode === 'select' && !photoPreview && (
-                <div className="space-y-4">
-                  <p className="text-gray-600 dark:text-gray-400 text-center mb-6">Elige cómo deseas capturar tu foto para la licencia</p>
-
-                  <button
-                    onClick={() => setPhotoMode('scan')}
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-3"
-                  >
-                    <span className="material-symbols-outlined text-3xl">face_retouching_natural</span>
-                    <span>Escanear Rostro</span>
-                  </button>
-                </div>
-              )}
-
-              {photoMode === 'scan' && !photoPreview && (
+              {(photoMode === 'select' || photoMode === 'scan') && !photoPreview && (
                 <div className="space-y-4">
                   <BiometricScreen
-                    onBack={() => setPhotoMode('select')}
+                    onBack={() => setShowPhotoModal(false)}
                     onComplete={handleBiometricComplete}
                   />
                 </div>
@@ -2529,6 +2699,26 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
               )}
             </div>
           </div>
+        </div>
+      )}
+      {/* MODAL RE-SCAN VDID — nueva verificación desde el Dashboard */}
+      <VdidCaptureModal
+        isOpen={showRescanModal}
+        onClose={() => { setShowRescanModal(false); setRescanUuid(null); setRescanSolicitudId(null); }}
+        onCompleted={handleRescanCompleted}
+        url={rescanUrl}
+        title="Verificar Identidad"
+        description="Escanea tu identificación oficial y realiza la prueba de vida."
+      />
+
+      {/* Overlay de espera post-rescan */}
+      {rescanPolling && (
+        <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+          <span className="animate-spin h-12 w-12 border-4 border-amber-400 border-t-transparent rounded-full" />
+          <p className="text-white font-bold text-lg">Validando identidad…</p>
+          <p className="text-gray-300 text-sm text-center max-w-xs">
+            Suma México está revisando tu identificación. Esto puede tardar unos minutos.
+          </p>
         </div>
       )}
     </div>

@@ -84,15 +84,9 @@ const OperatorDashboardScreen: React.FC<OperatorDashboardScreenProps> = ({ onLog
         revisorId = decodedPayload.aData || decodedPayload.idUsuario || null;
         setIdRevisor(revisorId);
       }
-      // Obtener solicitudes con idestatus 22 (sin asignar)
+      // Obtener solicitudes con idestatus 22 (Completas, listas para revisar)
       const respSolicitudes22 = await solicitudService.getByEstatus(22, token);
-      const solicitudesSinAsignar22 = respSolicitudes22?.data?.solicitudesData || [];
-
-      // Obtener solicitudes con idestatus 20 (Nuevas) - TAMBIÉN MOSTRARLAS
-      // IMPORTANTE: El backend separa 20 y 22, pero para el operador ambas son "nuevas sin revisar"
-    
-      // Combinar 20 y 22
-      const solicitudesSinAsignar = [ ...solicitudesSinAsignar22];
+      const solicitudesSinAsignar = respSolicitudes22?.data?.solicitudesData || [];
 
       // Obtener revisiones asignadas al operador actual
       let revisionesDelOperador: any[] = [];

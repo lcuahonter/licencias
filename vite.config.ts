@@ -30,14 +30,21 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   server: {
     port: 3000,
-    host: '0.0.0.0', // Permite que puedas probar desde tu celular en la misma red Wi-Fi
+    host: '0.0.0.0',
+    proxy: {
+      // Proxy para evitar CORS en desarrollo web con VeriDocID
+      '/vdid-api': {
+        target: 'https://veridocid.azure-api.net',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/vdid-api/, '/api'),
+        secure: true,
+      },
+    },
   },
   plugins: [react()],
   resolve: {
     alias: {
-      // Esto permite usar '@' como atajo para la carpeta 'src'
-      // Ejemplo: import { UserData } from '@/types';
-      '@': path.resolve(__dirname, './src'), 
+      '@': path.resolve(__dirname, './src'),
     }
   }
 });
