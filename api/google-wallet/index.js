@@ -51,22 +51,24 @@ module.exports = async function (context, req) {
 
     const issuerId = GOOGLE_WALLET_CONFIG.issuerId;
     
-    // AQUÍ ESTÁ EL ID DE TU CLASE GENÉRICA
+    // AQUÍ ESTÁ EL ID DE TU CLASE GENÉRICA CONFIRMADA
     const classId = `${issuerId}.Licencias`;
 
+    // VERSIÓN MINIMALISTA PARA PRUEBAS (Evita bloqueos de validación de Google)
     const genericObject = {
-      id: `${issuerId}.${licenseData.folio.replace(/[^a-zA-Z0-9_.-]/g, '_')}`,
+      // Agregamos Date.now() para asegurar que el ID sea único y evitar error de duplicados
+      id: `${issuerId}.${licenseData.folio.replace(/[^a-zA-Z0-9_.-]/g, '_')}_${Date.now()}`,
       classId: classId,
-      genericType: 'GENERIC_TYPE_UNSPECIFIED',
       hexBackgroundColor: '#005c35',
+      
+      // LOGO COMENTADO: A menudo causa errores si el servidor rechaza la conexión de Google
+      /*
       logo: {
-        sourceUri: {
-          uri: 'https://www.durango.gob.mx/wp-content/uploads/2021/03/escudo-durango.png'
-        },
-        contentDescription: {
-          defaultValue: { language: 'es-MX', value: 'Gobierno de Durango' }
-        }
+        sourceUri: { uri: 'https://www.durango.gob.mx/wp-content/uploads/2021/03/escudo-durango.png' },
+        contentDescription: { defaultValue: { language: 'es-MX', value: 'Gobierno de Durango' } }
       },
+      */
+
       cardTitle: {
         defaultValue: { language: 'es-MX', value: 'Licencia de Conducir' }
       },
@@ -74,26 +76,23 @@ module.exports = async function (context, req) {
         defaultValue: { language: 'es-MX', value: 'Gobierno del Estado de Durango' }
       },
       header: {
-        defaultValue: { language: 'es-MX', value: licenseData.tipo_licencia }
+        defaultValue: { language: 'es-MX', value: licenseData.tipo_licencia || 'Licencia' }
       },
+      
+      // QR SIMPLIFICADO
       barcode: {
         type: 'QR_CODE',
-        value: JSON.stringify({
-          folio: licenseData.folio,
-          nombre: licenseData.nombre,
-          tipo_licencia: licenseData.tipo_licencia,
-          vigencia: licenseData.vigencia,
-          rfc: licenseData.rfc,
-          expedicion: licenseData.expedicion
-        }),
-        alternateText: licenseData.folio
+        value: licenseData.folio || '123456789',
+        alternateText: licenseData.folio || 'Folio'
       },
+      
       textModulesData: [
         { id: 'nombre', header: 'NOMBRE', body: licenseData.nombre },
         { id: 'folio', header: 'NO. LICENCIA', body: licenseData.folio },
         { id: 'vigencia', header: 'VIGENCIA', body: licenseData.vigencia },
         { id: 'expedicion', header: 'EXPEDICIÓN', body: licenseData.expedicion }
       ],
+      
       hexForegroundColor: '#ffffff'
     };
 
