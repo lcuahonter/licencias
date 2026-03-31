@@ -66,23 +66,20 @@ const ValidacionLicenciaScreen: React.FC = () => {
 
   // 2. Fetch Foto
   useEffect(() => {
-    let currentBlobUrl: string | null = null;
+    let currentBlobUrl: string | null = null; 
 
-    if (licenseData && licenseData.solicitudId) {
+    if (licenseData && licenseData.solicitudId && licenseData.token) {
       const obtenerFoto = async () => {
         try {
           setFotoStatus('loading');
-          // Intentar descargar la foto sin token primero; si falla, reintentar con token si existe
-          let url = await fotoService.descargarFotoRostro(Number(licenseData.solicitudId));
-
-          if (!url && licenseData.token) {
-            url = await fotoService.descargarFotoRostro(Number(licenseData.solicitudId), licenseData.token);
-          }
+          const url = await fotoService.descargarFotoRostro(
+            Number(licenseData.solicitudId), 
+            licenseData.token!
+          );
 
           if (url) {
             currentBlobUrl = url;
             setFotoUrl(url);
-            setFotoStatus('success');
           } else {
             setFotoStatus('error');
           }
@@ -93,6 +90,8 @@ const ValidacionLicenciaScreen: React.FC = () => {
       };
 
       obtenerFoto();
+    } else if (licenseData) {
+      setFotoStatus('error');
     }
 
     return () => {

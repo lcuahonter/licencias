@@ -119,8 +119,9 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
     };
     const encodedData = btoa(JSON.stringify(validationData));
     const validationUrl = `${window.location.origin}/#data=${encodedData}`;
-    // QR pointing to the frontend validation view (opens ValidacionLicenciaScreen)
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(validationUrl)}`;
+    // QR pointing to the transito photo endpoint for this solicitud
+    const photoEndpoint = buildApiUrl(`${API_ENDPOINTS.FOTOS_ROSTRO.TRANSITO}/${license.id}`);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(photoEndpoint)}`;
 
 
     // Nota: usamos la función `addToWallet` importada para Google/Apple según plataforma.
