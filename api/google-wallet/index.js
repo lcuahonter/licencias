@@ -51,6 +51,24 @@ module.exports = async function (context, req) {
 
     const issuerId = GOOGLE_WALLET_CONFIG.issuerId;
     
+<<<<<<< HEAD
+    // AQUÍ ESTÁ EL ID DE TU CLASE GENÉRICA
+    const classId = `${issuerId}.Licencias`;
+
+    // VERSIÓN MINIMALISTA PARA PRUEBAS (Evita bloqueos de validación de Google)
+    const genericObject = {
+      // Agregamos Date.now() para asegurar que el ID sea único y evitar error de duplicados
+      id: `${issuerId}.${licenseData.folio.replace(/[^a-zA-Z0-9_.-]/g, '_')}_${Date.now()}`,
+      classId: classId,
+      hexBackgroundColor: '#005c35',
+      
+      // LOGO COMENTADO: A menudo causa errores si el servidor rechaza la conexión de Google
+      /*
+      logo: {
+        sourceUri: { uri: 'https://www.durango.gob.mx/wp-content/uploads/2021/03/escudo-durango.png' },
+        contentDescription: { defaultValue: { language: 'es-MX', value: 'Gobierno de Durango' } }
+      },
+=======
     // AQUÍ ESTÁ EL ID DE TU CLASE GENÉRICA CONFIRMADA
     const classId = `${issuerId}.Licencias`;
 
@@ -69,6 +87,7 @@ module.exports = async function (context, req) {
       },
       */
 
+>>>>>>> bed688e889c949dadae0f550240dac2c6e6a796c
       cardTitle: {
         defaultValue: { language: 'es-MX', value: 'Licencia de Conducir' }
       },
@@ -76,6 +95,17 @@ module.exports = async function (context, req) {
         defaultValue: { language: 'es-MX', value: 'Gobierno del Estado de Durango' }
       },
       header: {
+<<<<<<< HEAD
+        defaultValue: { language: 'es-MX', value: licenseData.tipo_licencia }
+      },
+      
+      // QR SIMPLIFICADO
+      barcode: {
+        type: 'QR_CODE',
+        value: licenseData.folio || '123456789',
+        alternateText: licenseData.folio || 'Folio'
+      },
+=======
         defaultValue: { language: 'es-MX', value: licenseData.tipo_licencia || 'Licencia' }
       },
       
@@ -86,13 +116,17 @@ module.exports = async function (context, req) {
         alternateText: licenseData.folio || 'Folio'
       },
       
+>>>>>>> bed688e889c949dadae0f550240dac2c6e6a796c
       textModulesData: [
         { id: 'nombre', header: 'NOMBRE', body: licenseData.nombre },
         { id: 'folio', header: 'NO. LICENCIA', body: licenseData.folio },
         { id: 'vigencia', header: 'VIGENCIA', body: licenseData.vigencia },
         { id: 'expedicion', header: 'EXPEDICIÓN', body: licenseData.expedicion }
       ],
+<<<<<<< HEAD
+=======
       
+>>>>>>> bed688e889c949dadae0f550240dac2c6e6a796c
       hexForegroundColor: '#ffffff'
     };
 
