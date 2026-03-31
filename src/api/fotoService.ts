@@ -31,7 +31,7 @@ export const fotoService = {
     try {
       if (showLoadingFn) showLoadingFn('Descargando foto...');
       
-      const url = buildApiUrl(`${API_ENDPOINTS.FOTOS_ROSTRO.DESCARGAR}/${idsolicitud}`);
+      const url = buildApiUrl(`${API_ENDPOINTS.FOTOS_ROSTRO.TRANSITO}/${idsolicitud}`);
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
