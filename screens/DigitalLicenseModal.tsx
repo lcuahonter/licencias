@@ -330,6 +330,7 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                             ? new Date(license!.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
                                             : 'N/A',
                                         rfc: rfc !== 'N/A' ? rfc : undefined,
+                                        solicitudId: Number(license!.id),
                                     };
                                     await addToWallet(Number(license!.id), token, passData);
                                 } catch (err: any) {
