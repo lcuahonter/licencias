@@ -30,18 +30,41 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
     const [walletError, setWalletError] = useState<string | null>(null);
 
 
-    // Detectar plataforma
+    // Detectar plataforma (Capacitor devuelve 'web' en navegadores móviles)
     const platform = getPlatform();
-    const showGoogleWallet = platform === 'android' || platform === 'web';
-    const showAppleWallet = platform === 'ios' || platform === 'web';
+    const ua = typeof navigator !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera || '') : '';
+    
+    // Mejoramos la detección considerando navegadores web en dispositivos móviles
+    const isIOS = platform === 'ios' || /iPad|iPhone|iPod/i.test(ua) || (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = platform === 'android' || /android/i.test(ua);
+    const isWindows = typeof navigator !== 'undefined' && /(Win|Windows)/i.test(ua || navigator.platform || '');
 
-    // Detectar Windows en navegadores de escritorio para mapear al botón de Google Wallet
-    const isWindows = typeof navigator !== 'undefined' && /(Win|Windows)/i.test(navigator.userAgent || navigator.platform || '');
-    const walletButtonLabel = platform === 'ios'
-        ? 'Agregar a Apple Wallet'
-        : (platform === 'android' || isWindows)
-            ? 'Agregar a Google Wallet'
-            : 'Descargar Pase (.pkpass)';
+    const isGoogle = isAndroid || isWindows;
+    const isPass = !isIOS && !isGoogle;
+
+    const actionText = isPass ? 'Descargar' : 'Agregar a';
+    const mainText = isIOS ? 'Apple Wallet' : isGoogle ? 'Google Wallet' : 'Pase (.pkpass)';
+
+    // Iconos SVG Custom para emular los diseños oficiales
+    const AppleWalletIcon = () => (
+        <svg width="34" height="24" viewBox="0 0 40 28" fill="none" className="shrink-0 mr-3">
+            <rect x="2" y="2" width="36" height="24" rx="3" fill="#D3D3D3" />
+            <path d="M2 8C2 6.34315 3.34315 5 5 5H35C36.6569 5 38 6.34315 38 8V12H2V8Z" fill="#3AA4E7" />
+            <path d="M2 11C2 9.34315 3.34315 8 5 8H35C36.6569 8 38 9.34315 38 11V15H2V11Z" fill="#58B854" />
+            <path d="M2 14C2 12.3431 3.34315 11 5 11H35C36.6569 11 38 12.3431 38 14V18H2V14Z" fill="#F4B830" />
+            <path d="M2 17C2 15.3431 3.34315 14 5 14H35C36.6569 14 38 15.3431 38 17V21H2V17Z" fill="#E64F42" />
+            <path d="M2 17C2 17 8 17 12 21C16 25 24 25 28 21C32 17 38 17 38 17V23C38 24.6569 36.6569 26 35 26H5C3.34315 26 2 24.6569 2 23V17Z" fill="#E8E8E6" stroke="#CFCFCF" strokeWidth="0.5"/>
+        </svg>
+    );
+
+    const GoogleWalletIcon = () => (
+        <svg width="34" height="24" viewBox="0 0 40 28" fill="none" className="shrink-0 mr-3">
+            <path d="M9 5C9 3.34315 10.3431 2 12 2H28C29.6569 2 31 3.34315 31 5V10H9V5Z" fill="#34A853" />
+            <path d="M9 8C9 6.34315 10.3431 5 12 5H28C29.6569 5 31 6.34315 31 8V13H9V8Z" fill="#FBBC04" />
+            <path d="M9 11C9 9.34315 10.3431 8 12 8H28C29.6569 8 31 9.34315 31 11V16H9V11Z" fill="#EA4335" />
+            <path d="M9 14C9 12.3431 10.3431 11 12 11H28C29.6569 11 31 12.3431 31 14V23C31 24.6569 29.6569 26 28 26H12C10.3431 26 9 24.6569 9 23V14Z" fill="#4285F4" />
+        </svg>
+    );
 
 
     // Cargar foto de rostro cuando se abre el modal
@@ -340,18 +363,28 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 }
                             }}
                             disabled={isAddingToWallet}
-                            className="flex items-center gap-2 px-6 py-3 rounded-full shadow-lg font-bold tracking-wider uppercase text-sm transition-all disabled:opacity-50"
-                            style={platform === 'ios'
-                                ? { background: '#000', color: '#fff' }
-                                : { background: '#1a73e8', color: '#fff' }
-                            }
+                            className={`flex items-center px-5 py-2 shadow-lg transition-all disabled:opacity-50 ${isIOS ? 'rounded-[10px] bg-black border border-gray-800' : isGoogle ? 'rounded-full bg-[#1b1b1b]' : 'rounded-full bg-[#1a73e8]'}`}
+                            style={{ color: '#fff' }}
                         >
                             {isAddingToWallet ? (
-                                <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                                <div className="shrink-0 mr-3 w-10 h-7 flex items-center justify-center">
+                                    <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
+                                </div>
+                            ) : isIOS ? (
+                                <AppleWalletIcon />
+                            ) : isGoogle ? (
+                                <GoogleWalletIcon />
                             ) : (
-                                <span className="material-symbols-outlined text-base">wallet</span>
+                                <div className="shrink-0 mr-3 w-10 h-7 flex items-center justify-center">
+                                    <span className="material-symbols-outlined text-2xl">wallet</span>
+                                </div>
                             )}
-                            {walletButtonLabel}
+                            <div className="flex flex-col items-start leading-none gap-0.5">
+                                <span className={`text-[10px] ${isIOS ? 'text-gray-300 font-medium' : 'text-gray-200 mt-0.5'}`}>{actionText}</span>
+                                <span className={`text-lg tracking-tight ${isIOS ? 'font-medium' : 'font-bold'} ${isGoogle ? 'mb-0.5' : ''}`}>
+                                    {mainText}
+                                </span>
+                            </div>
                         </button>
                         {walletError && (
                             <p className="text-red-400 text-xs text-center mt-1">{walletError}</p>
