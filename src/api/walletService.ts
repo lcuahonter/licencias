@@ -9,6 +9,7 @@ export interface GoogleWalletPassData {
     vigencia: string;
     expedicion: string;
     rfc?: string;
+    solicitudId: number;
 }
 
 /**
