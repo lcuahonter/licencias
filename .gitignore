@@ -34,3 +34,4 @@ api/local.settings.json
 *.njsproj
 *.sln
 *.sw?
+coverage/

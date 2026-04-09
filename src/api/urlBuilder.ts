@@ -1,7 +1,7 @@
 // Helper para construir URLs del API
 // Maneja tanto acceso directo como a través del proxy de Azure Static Web Apps
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://172.174.80.112';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const IS_PROXY = API_BASE_URL.startsWith('/api/proxy');
 
 /**
