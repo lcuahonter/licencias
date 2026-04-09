@@ -127,9 +127,6 @@ const AppContent: React.FC = () => {
                 setAuthToken((loginData as any).token as string);
               }
 
-              // 2.c Pre-cargar el JWT de Suma México en segundo plano
-              vdidService.warmupToken();
-
               // 3. Decidir navegación basada en el token (Prioridad Alta)
               if (nextScreen === 'Dashboard') {
                 // Usuario con rol 2 va directo a Dashboard
