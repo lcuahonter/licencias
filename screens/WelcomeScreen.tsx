@@ -59,58 +59,58 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
       }
 
       // 4. Decodificar Token para obtener ID y Perfil
+      let decoded: DecodedToken;
       try {
-        const decoded = jwtDecode<DecodedToken>(tokenString);
-
-        // Priorizar rol cuando venga en el token (ahora es ID: 3=Operador, 2=Usuario, 1=Admin)
-        let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard' | 'AdminDashboard' = 'Dashboard';
-        const rolId = decoded.rol;
-
-        if (rolId === 3) {
-          // Operador
-          destino = 'OperatorDashboard';
-        } else if (rolId === 1) {
-          // Admin
-          destino = 'AdminDashboard';
-        } else if (rolId === 2) {
-          // Usuario normal: consultar estado de perfil y documentos
-          let userFresh: any = null;
-          try {
-            const u = await userService.getUsuarioById(decoded.aData, tokenString);
-            userFresh = u?.data?.usuario ?? u?.data ?? null;
-          } catch (e) {
-            // Error al recuperar usuario
-          }
-
-          // Usuario normal siempre va al Dashboard
-          // El Dashboard ya tiene validaciones para perfil incompleto
-          destino = 'Dashboard';
-
-          // Inyectamos información real del usuario al payload
-          onStart({
-            email: email,
-            idUsuario: decoded.aData,
-            token: tokenString,
-            perfil: userFresh?.perfil,
-            firstName: userFresh?.nombres,
-            lastName: userFresh?.apellidopaterno ? `${userFresh.apellidopaterno} ${userFresh.apellidomaterno || ''}`.trim() : undefined,
-            idNumber: userFresh?.curp || undefined,
-            phone: userFresh?.telefono || undefined,
-          }, destino);
-
-          return;
-        }
-
-        // Para roles no mapeados (por defecto ir a Dashboard)
-        onStart({
-          email: email,
-          idUsuario: decoded.aData,
-          token: tokenString
-        }, destino);
-
+        decoded = jwtDecode<DecodedToken>(tokenString);
       } catch (decodeError) {
         throw new Error("Error al procesar la sesión del usuario.");
       }
+
+      // Priorizar rol cuando venga en el token (ahora es ID: 3=Operador, 2=Usuario, 1=Admin)
+      let destino: 'DocumentUploadScreen' | 'Dashboard' | 'OperatorDashboard' | 'AdminDashboard' = 'Dashboard';
+      const rolId = decoded.rol;
+
+      if (rolId === 3) {
+        // Operador
+        destino = 'OperatorDashboard';
+      } else if (rolId === 1) {
+        // Admin
+        destino = 'AdminDashboard';
+      } else if (rolId === 2) {
+        // Usuario normal: consultar estado de perfil y documentos
+        let userFresh: any = null;
+        try {
+          const u = await userService.getUsuarioById(decoded.aData, tokenString);
+          userFresh = u?.data?.usuario ?? u?.data ?? null;
+        } catch (e) {
+          // Error al recuperar usuario — continuar sin datos extra
+        }
+
+        // Usuario normal siempre va al Dashboard
+        // El Dashboard ya tiene validaciones para perfil incompleto
+        destino = 'Dashboard';
+
+        // Inyectamos información real del usuario al payload
+        onStart({
+          email: email,
+          idUsuario: decoded.aData,
+          token: tokenString,
+          perfil: userFresh?.perfil,
+          firstName: userFresh?.nombres,
+          lastName: userFresh?.apellidopaterno ? `${userFresh.apellidopaterno} ${userFresh.apellidomaterno || ''}`.trim() : undefined,
+          idNumber: userFresh?.curp || undefined,
+          phone: userFresh?.telefono || undefined,
+        }, destino);
+
+        return;
+      }
+
+      // Para roles no mapeados (por defecto ir a Dashboard)
+      onStart({
+        email: email,
+        idUsuario: decoded.aData,
+        token: tokenString
+      }, destino);
 
     } catch (err: any) {
       // El mensaje de error ya viene procesado por el apiClient

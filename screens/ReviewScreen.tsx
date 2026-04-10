@@ -66,7 +66,7 @@ const ReviewScreen: React.FC<ReviewScreenProps> = ({ userData, onBack, onSend, o
   useEffect(() => {
     async function runAiValidation() {
       try {
-        if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'PLACEHOLDER_API_KEY') {
+        if (!import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY === 'PLACEHOLDER_API_KEY') {
              setTimeout(() => {
                  setAiNote('Validación de identidad y datos de contacto completada.');
                  setIsVerifying(false);
@@ -74,7 +74,7 @@ const ReviewScreen: React.FC<ReviewScreenProps> = ({ userData, onBack, onSend, o
              return;
         }
 
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
         const prompt = `Act as a government digital identification inspector...`; // (Prompt abreviado por brevedad)
         
         const response = await ai.models.generateContent({

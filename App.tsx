@@ -20,6 +20,7 @@ import AppointmentScreen from './screens/AppointmentScreen';
 import PaymentScreen from './screens/PaymentScreen';
 import SuccessScreen from './screens/SuccessScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
+import ValidacionLicenciaScreen from './screens/ValidacionLicenciaScreen';
 
 const AppContent: React.FC = () => {
   const { setLoading, setLoadingMessage } = useLoading();
@@ -29,6 +30,18 @@ const AppContent: React.FC = () => {
     setLoadingFunctions({ setLoading, setLoadingMessage });
     setFotoLoadingFunctions(setLoadingMessage, () => setLoading(false));
   }, [setLoading, setLoadingMessage]);
+
+  // Detectar si estamos en modo validación de licencia (QR scaneado)
+  const [isValidationMode, setIsValidationMode] = useState<boolean>(false);
+  
+  useEffect(() => {
+    // Verificar si hay datos de validación en el hash
+    const hash = window.location.hash;
+    if (hash.includes('#data=')) {
+      setIsValidationMode(true);
+    }
+  }, []);
+
 
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.WELCOME);
 
@@ -178,12 +191,17 @@ const AppContent: React.FC = () => {
       case AppStep.ADMIN_DASHBOARD: return <AdminDashboardScreen token={authToken || undefined} onLogout={handleFullLogout} />;
       case AppStep.APPOINTMENT: return <AppointmentScreen userData={userData} onBack={() => setCurrentStep(AppStep.DASHBOARD)} onConfirm={(apptData) => { updateUserData({ appointment: apptData }); setCurrentStep(AppStep.PAYMENT); }} />;
       case AppStep.PAYMENT: return <PaymentScreen userData={userData} onBack={() => setCurrentStep(AppStep.APPOINTMENT)} onPaymentSuccess={(paymentData) => { updateUserData({ payment: paymentData }); setCurrentStep(AppStep.DASHBOARD); }} />;
-      case AppStep.SUCCESS: return <SuccessScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} />;
+      case AppStep.SUCCESS: return <SuccessScreen userData={userData} onBack={() => setCurrentStep(AppStep.WELCOME)} token={authToken || undefined} idSolicitud={userId ?? undefined} />;
       default: return <WelcomeScreen onStart={() => setCurrentStep(AppStep.REGISTRATION)} />;
     }
   };
 
   const isDashboard = [AppStep.DASHBOARD, AppStep.ADMIN_DASHBOARD, AppStep.OPERATOR_DASHBOARD].includes(currentStep);
+
+  // Si estamos en modo validación, mostrar solo esa pantalla
+  if (isValidationMode) {
+    return <ValidacionLicenciaScreen />;
+  }
 
   return (
     <div className="min-h-screen w-full bg-white dark:bg-background-dark">

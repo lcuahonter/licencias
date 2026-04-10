@@ -119,7 +119,8 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
           // si el endpoint no está habilitado en el plan, cae automáticamente
           // a captura sin UUID (uuid === null).
           const { uuid, url } = await vdidService.startTrackedVerification(
-              `licencias-dgo-${idUsuario ?? 'u0'}-${idSolicitud ?? Date.now()}`
+              idSolicitud ?? 0,
+              token
           );
           setVdidUuid(uuid ?? `local-${idUsuario ?? 'u0'}-${idSolicitud ?? Date.now()}`);
           setVdidUrl(url);
@@ -232,7 +233,7 @@ const DocumentUploadScreen: React.FC<DocumentUploadScreenProps> = ({ onBack, onC
                 {isMandatory && <span className="text-red-500 ml-1">*</span>}
               </h4>
             </div>
-            {/* Icono de ayuda con tooltip para descripción */}
+            {/* Icono de ayuda con tooltip para descripciónn */}
             {descripcion && (
               <div className="group relative flex-shrink-0">
                 <span className="material-symbols-outlined text-sm text-gray-400 cursor-help">help</span>
