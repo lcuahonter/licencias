@@ -3,7 +3,7 @@ import { UserData, LicenseRequest } from '../types';
 import durangoLogo from '../src/recursos/durangogob.svg';
 import marcaWatermark from '../src/recursos/marca.jpg';
 import { fotoService } from '../src/api/fotoService';
-import { addToWallet, getPlatform, GoogleWalletPassData } from '../src/api/walletService';
+import { addToWallet, addToAppleWallet, getPlatform, GoogleWalletPassData, AppleWalletPassData } from '../src/api/walletService';
 import { API_ENDPOINTS } from '../src/api/endpoints';
 import { buildApiUrl } from '../src/api/urlBuilder';
 
@@ -321,18 +321,33 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 setWalletError(null);
                                 setIsAddingToWallet(true);
                                 try {
-                                    const passData: GoogleWalletPassData = {
-                                        folio: licenseNo,
-                                        nombre: fullName,
-                                        tipo_licencia: license!.rawData?.licencia || license!.type,
-                                        vigencia: validity,
-                                        expedicion: license!.rawData?.expedicion
-                                            ? new Date(license!.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                            : 'N/A',
-                                        rfc: rfc !== 'N/A' ? rfc : undefined,
-                                        solicitudId: Number(license!.id),
-                                    };
-                                    await addToWallet(Number(license!.id), token, passData);
+                                    const expedicion = license!.rawData?.expedicion
+                                        ? new Date(license!.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                        : 'N/A';
+
+                                    if (platform === 'ios') {
+                                        const passData: AppleWalletPassData = {
+                                            folio: licenseNo,
+                                            nombre: fullName,
+                                            tipo_licencia: license!.rawData?.licencia || license!.type,
+                                            vigencia: validity,
+                                            expedicion,
+                                            rfc: rfc !== 'N/A' ? rfc : undefined,
+                                            solicitudId: Number(license!.id),
+                                        };
+                                        await addToAppleWallet(token, passData);
+                                    } else {
+                                        const passData: GoogleWalletPassData = {
+                                            folio: licenseNo,
+                                            nombre: fullName,
+                                            tipo_licencia: license!.rawData?.licencia || license!.type,
+                                            vigencia: validity,
+                                            expedicion,
+                                            rfc: rfc !== 'N/A' ? rfc : undefined,
+                                            solicitudId: Number(license!.id),
+                                        };
+                                        await addToWallet(Number(license!.id), token, passData);
+                                    }
                                 } catch (err: any) {
                                     setWalletError(err?.message || 'No se pudo agregar al wallet');
                                 } finally {
@@ -340,18 +355,55 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 }
                             }}
                             disabled={isAddingToWallet}
-                            className="flex items-center gap-2 px-6 py-3 rounded-full shadow-lg font-bold tracking-wider uppercase text-sm transition-all disabled:opacity-50"
-                            style={platform === 'ios'
-                                ? { background: '#000', color: '#fff' }
-                                : { background: '#1a73e8', color: '#fff' }
-                            }
+                            className="disabled:opacity-50 active:scale-95 transition-transform"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: platform === 'ios' ? '10px' : '12px',
+                                background: '#000',
+                                color: '#fff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: platform === 'ios' ? '10px 20px' : '10px 24px',
+                                borderRadius: platform === 'ios' ? '10px' : '50px',
+                                minWidth: '220px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                            }}
                         >
                             {isAddingToWallet ? (
-                                <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                                <span className="material-symbols-outlined animate-spin" style={{ fontSize: 28 }}>progress_activity</span>
+                            ) : platform === 'ios' ? (
+                                /* Apple Wallet icon */
+                                <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="36" height="28" rx="4" fill="none"/>
+                                    <rect x="4" y="13" width="28" height="12" rx="2" fill="#c8b89a"/>
+                                    <rect x="4" y="10" width="28" height="4" rx="1" fill="#e5d4b3"/>
+                                    <rect x="4" y="7"  width="28" height="4" rx="1" fill="#f3e8d0"/>
+                                    <rect x="10" y="17" width="8"  height="4" rx="1" fill="#f87171"/>
+                                    <rect x="20" y="17" width="5"  height="4" rx="1" fill="#4ade80"/>
+                                    <rect x="27" y="17" width="3"  height="4" rx="1" fill="#60a5fa"/>
+                                </svg>
                             ) : (
-                                <span className="material-symbols-outlined text-base">wallet</span>
+                                /* Google Wallet icon */
+                                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="32" height="32" rx="6" fill="none"/>
+                                    <path d="M16 6 L26 11 L26 21 L16 26 L6 21 L6 11 Z" fill="none"/>
+                                    <rect x="5"  y="10" width="22" height="14" rx="3" fill="#4285F4"/>
+                                    <rect x="5"  y="10" width="22" height="5"  rx="3" fill="#34A853"/>
+                                    <rect x="5"  y="13" width="22" height="2"  fill="#FBBC05"/>
+                                    <rect x="5"  y="18" width="22" height="6"  rx="3" fill="#EA4335"/>
+                                    <rect x="5"  y="18" width="22" height="3"  fill="#4285F4"/>
+                                    <circle cx="10" cy="21" r="2" fill="#fff" opacity="0.9"/>
+                                </svg>
                             )}
-                            {walletButtonLabel}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+                                <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.85 }}>
+                                    {platform === 'ios' ? 'Agregar a' : 'Agregar a'}
+                                </span>
+                                <span style={{ fontSize: '19px', fontWeight: 700, letterSpacing: '-0.3px' }}>
+                                    {platform === 'ios' ? 'Apple Wallet' : 'Google Wallet'}
+                                </span>
+                            </div>
                         </button>
                         {walletError && (
                             <p className="text-red-400 text-xs text-center mt-1">{walletError}</p>
