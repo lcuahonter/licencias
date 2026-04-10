@@ -57,6 +57,11 @@ export const API_ENDPOINTS = {
   WALLET: {
     PKPASS: import.meta.env.VITE_WALLET_PKPASS || '/api/wallet/pkpass',
     GOOGLE_JWT: import.meta.env.VITE_WALLET_GOOGLE_JWT || '/wallet/google/create'
+  },
+  VDID: {
+    CREATE_VERIFICATION: import.meta.env.VITE_VDID_CREATE_VERIFICATION || '/api/vdid/createVerification',
+    STATUS: import.meta.env.VITE_VDID_STATUS || '/api/vdid/status',
+    RESULTS: import.meta.env.VITE_VDID_RESULTS || '/api/vdid/results'
   }
 };
 

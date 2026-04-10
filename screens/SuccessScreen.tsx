@@ -1,13 +1,48 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { UserData } from '../types';
+import { addToAppleWallet } from '../src/api/walletService';
 
 interface SuccessScreenProps {
   userData: UserData;
   onBack: () => void;
+  token?: string;
+  idSolicitud?: number;
 }
 
-const SuccessScreen: React.FC<SuccessScreenProps> = ({ userData, onBack }) => {
+const SuccessScreen: React.FC<SuccessScreenProps> = ({ userData, onBack, token, idSolicitud }) => {
+  const [isLoadingWallet, setIsLoadingWallet] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+
+  const handleAppleWallet = async () => {
+    if (!token) {
+      setWalletError('No hay sesión activa. Vuelve a iniciar sesión.');
+      return;
+    }
+    setIsLoadingWallet(true);
+    setWalletError(null);
+    try {
+      const today = new Date();
+      const expiry = new Date(today);
+      expiry.setFullYear(expiry.getFullYear() + 3);
+      const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+
+      await addToAppleWallet(token, {
+        folio: `LIC-MX-${userData.idNumber?.substring(0, 8) ?? 'XXXXX'}`,
+        nombre: `${userData.firstName ?? ''} ${userData.lastName ?? ''}`.trim(),
+        tipo_licencia: userData.licenseType ?? 'Automovilista',
+        vigencia: fmt(expiry),
+        expedicion: fmt(today),
+        rfc: userData.idNumber,
+        solicitudId: idSolicitud,
+      });
+    } catch (err: any) {
+      setWalletError(err?.message || 'No se pudo generar el pase de Apple Wallet.');
+    } finally {
+      setIsLoadingWallet(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-background-light dark:bg-background-dark overflow-hidden">
       <div className="flex-1 overflow-y-auto px-6 pt-12 pb-32">
@@ -119,11 +154,25 @@ const SuccessScreen: React.FC<SuccessScreenProps> = ({ userData, onBack }) => {
       </div>
 
       <div className="p-6 absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background-light dark:from-background-dark via-background-light dark:via-background-dark to-transparent pt-10">
-        <button 
-          className="w-full h-16 bg-black text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl hover:bg-gray-900 transition-all active:scale-95"
+        {walletError && (
+          <p className="text-red-500 text-xs text-center mb-2">{walletError}</p>
+        )}
+        <button
+          onClick={handleAppleWallet}
+          disabled={isLoadingWallet}
+          className="w-full h-16 bg-black text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl hover:bg-gray-900 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <span className="material-symbols-outlined">add_circle</span>
-          Agregar a Apple Wallet
+          {isLoadingWallet ? (
+            <>
+              <span className="animate-spin material-symbols-outlined">progress_activity</span>
+              Generando pase...
+            </>
+          ) : (
+            <>
+              <span className="material-symbols-outlined">add_circle</span>
+              Agregar a Apple Wallet
+            </>
+          )}
         </button>
         <button 
           onClick={onBack}
