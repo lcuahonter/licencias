@@ -330,7 +330,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
       setRescanUrl(url);
       setShowRescanModal(true);
     } catch (err: any) {
-      setAlertMessage(err?.message || 'No se pudo iniciar la verificación de identidad. ');
+      setAlertMessage(err?.message || 'No se pudo iniciar la verificación de identidad.');
       setAlertType('error');
       setShowAlertModal(true);
     } finally {
