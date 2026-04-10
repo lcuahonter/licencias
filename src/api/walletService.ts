@@ -90,16 +90,15 @@ export const addToAppleWallet = async (
     const platform = getPlatform();
 
     if (platform === 'ios') {
-        // Opción B: formulario HTML oculto con POST
-        // Safari navega a la respuesta del servidor (URL real, no blob)
-        // El servidor debe responder con Content-Type: application/vnd.apple.pkpass
-        // iOS intercepta ese MIME type y abre Apple Wallet directamente.
+        // Formulario HTML oculto con POST — Safari navega a la respuesta del servidor.
+        // El token se pasa como query param en la URL porque los formularios
+        // HTML no pueden enviar headers Authorization personalizados.
+        const urlWithToken = `${url}?token=${encodeURIComponent(token)}`;
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = url;
+        form.action = urlWithToken;
         form.style.display = 'none';
 
-        // Pasar el token como campo oculto (el backend debe leerlo del body)
         const addField = (name: string, value: string) => {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -108,7 +107,6 @@ export const addToAppleWallet = async (
             form.appendChild(input);
         };
 
-        addField('token', token);
         addField('folio', passData.folio);
         addField('nombre', passData.nombre);
         addField('tipo_licencia', passData.tipo_licencia);
