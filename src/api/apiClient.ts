@@ -23,7 +23,7 @@ export const apiBlobRequest = async (endpoint: string, options: RequestOptions =
     const response = await fetch(buildApiUrl(endpoint), {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
     });
 
     if (!response.ok) {
@@ -68,14 +68,30 @@ export const apiRequest = async <T>(endpoint: string, options: RequestOptions = 
     const response = await fetch(buildApiUrl(endpoint), {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
     });
 
     if (response.status === 204) {
       return {} as T;
     }
 
-    const data = await response.json();
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+      if (!response.ok) {
+        throw new Error(`Error en el servidor (${response.status})`);
+      }
+      return {} as T;
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (!response.ok) {
+        throw new Error(`Error en el servidor (${response.status}): ${text}`);
+      }
+      return text as unknown as T;
+    }
 
     if (!response.ok || (data.code && data.code !== "200" && data.code !== "204")) {
       const message = data.message || data.data?.status || 'Error en el servidor';
