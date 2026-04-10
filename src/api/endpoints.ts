@@ -55,7 +55,7 @@ export const API_ENDPOINTS = {
     URL: import.meta.env.VITE_FOTOS_ROSTRO_URL || '/api/fotos-rostro/url'
   },
   WALLET: {
-    PKPASS: import.meta.env.VITE_WALLET_PKPASS || '/api/wallet/pkpass',
+    PKPASS: import.meta.env.VITE_WALLET_PKPASS || '/wallet/apple/create',
     GOOGLE_JWT: import.meta.env.VITE_WALLET_GOOGLE_JWT || '/wallet/google/create'
   },
   VDID: {
