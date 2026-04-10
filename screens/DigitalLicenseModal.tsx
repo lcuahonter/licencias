@@ -3,7 +3,7 @@ import { UserData, LicenseRequest } from '../types';
 import durangoLogo from '../src/recursos/durangogob.svg';
 import marcaWatermark from '../src/recursos/marca.jpg';
 import { fotoService } from '../src/api/fotoService';
-import { addToWallet, getPlatform, GoogleWalletPassData } from '../src/api/walletService';
+import { addToWallet, addToAppleWallet, getPlatform, GoogleWalletPassData, AppleWalletPassData } from '../src/api/walletService';
 import { API_ENDPOINTS } from '../src/api/endpoints';
 import { buildApiUrl } from '../src/api/urlBuilder';
 
@@ -30,41 +30,18 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
     const [walletError, setWalletError] = useState<string | null>(null);
 
 
-    // Detectar plataforma (Capacitor devuelve 'web' en navegadores móviles)
+    // Detectar plataforma
     const platform = getPlatform();
-    const ua = typeof navigator !== 'undefined' ? (navigator.userAgent || navigator.vendor || (window as any).opera || '') : '';
-    
-    // Mejoramos la detección considerando navegadores web en dispositivos móviles
-    const isIOS = platform === 'ios' || /iPad|iPhone|iPod/i.test(ua) || (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isAndroid = platform === 'android' || /android/i.test(ua);
-    const isWindows = typeof navigator !== 'undefined' && /(Win|Windows)/i.test(ua || navigator.platform || '');
+    const showGoogleWallet = platform === 'android' || platform === 'web';
+    const showAppleWallet = platform === 'ios' || platform === 'web';
 
-    const isGoogle = isAndroid || isWindows;
-    const isPass = !isIOS && !isGoogle;
-
-    const actionText = isPass ? 'Descargar' : 'Agregar a';
-    const mainText = isIOS ? 'Apple Wallet' : isGoogle ? 'Google Wallet' : 'Pase (.pkpass)';
-
-    // Iconos SVG Custom para emular los diseños oficiales
-    const AppleWalletIcon = () => (
-        <svg width="34" height="24" viewBox="0 0 40 28" fill="none" className="shrink-0 mr-3">
-            <rect x="2" y="2" width="36" height="24" rx="3" fill="#D3D3D3" />
-            <path d="M2 8C2 6.34315 3.34315 5 5 5H35C36.6569 5 38 6.34315 38 8V12H2V8Z" fill="#3AA4E7" />
-            <path d="M2 11C2 9.34315 3.34315 8 5 8H35C36.6569 8 38 9.34315 38 11V15H2V11Z" fill="#58B854" />
-            <path d="M2 14C2 12.3431 3.34315 11 5 11H35C36.6569 11 38 12.3431 38 14V18H2V14Z" fill="#F4B830" />
-            <path d="M2 17C2 15.3431 3.34315 14 5 14H35C36.6569 14 38 15.3431 38 17V21H2V17Z" fill="#E64F42" />
-            <path d="M2 17C2 17 8 17 12 21C16 25 24 25 28 21C32 17 38 17 38 17V23C38 24.6569 36.6569 26 35 26H5C3.34315 26 2 24.6569 2 23V17Z" fill="#E8E8E6" stroke="#CFCFCF" strokeWidth="0.5"/>
-        </svg>
-    );
-
-    const GoogleWalletIcon = () => (
-        <svg width="34" height="24" viewBox="0 0 40 28" fill="none" className="shrink-0 mr-3">
-            <path d="M9 5C9 3.34315 10.3431 2 12 2H28C29.6569 2 31 3.34315 31 5V10H9V5Z" fill="#34A853" />
-            <path d="M9 8C9 6.34315 10.3431 5 12 5H28C29.6569 5 31 6.34315 31 8V13H9V8Z" fill="#FBBC04" />
-            <path d="M9 11C9 9.34315 10.3431 8 12 8H28C29.6569 8 31 9.34315 31 11V16H9V11Z" fill="#EA4335" />
-            <path d="M9 14C9 12.3431 10.3431 11 12 11H28C29.6569 11 31 12.3431 31 14V23C31 24.6569 29.6569 26 28 26H12C10.3431 26 9 24.6569 9 23V14Z" fill="#4285F4" />
-        </svg>
-    );
+    // Detectar Windows en navegadores de escritorio para mapear al botón de Google Wallet
+    const isWindows = typeof navigator !== 'undefined' && /(Win|Windows)/i.test(navigator.userAgent || navigator.platform || '');
+    const walletButtonLabel = platform === 'ios'
+        ? 'Agregar a Apple Wallet'
+        : (platform === 'android' || isWindows)
+            ? 'Agregar a Google Wallet'
+            : 'Descargar Pase (.pkpass)';
 
 
     // Cargar foto de rostro cuando se abre el modal
@@ -344,18 +321,33 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 setWalletError(null);
                                 setIsAddingToWallet(true);
                                 try {
-                                    const passData: GoogleWalletPassData = {
-                                        folio: licenseNo,
-                                        nombre: fullName,
-                                        tipo_licencia: license!.rawData?.licencia || license!.type,
-                                        vigencia: validity,
-                                        expedicion: license!.rawData?.expedicion
-                                            ? new Date(license!.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                                            : 'N/A',
-                                        rfc: rfc !== 'N/A' ? rfc : undefined,
-                                        solicitudId: Number(license!.id),
-                                    };
-                                    await addToWallet(Number(license!.id), token, passData);
+                                    const expedicion = license!.rawData?.expedicion
+                                        ? new Date(license!.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                        : 'N/A';
+
+                                    if (platform === 'ios') {
+                                        const passData: AppleWalletPassData = {
+                                            folio: licenseNo,
+                                            nombre: fullName,
+                                            tipo_licencia: license!.rawData?.licencia || license!.type,
+                                            vigencia: validity,
+                                            expedicion,
+                                            rfc: rfc !== 'N/A' ? rfc : undefined,
+                                            solicitudId: Number(license!.id),
+                                        };
+                                        await addToAppleWallet(token, passData);
+                                    } else {
+                                        const passData: GoogleWalletPassData = {
+                                            folio: licenseNo,
+                                            nombre: fullName,
+                                            tipo_licencia: license!.rawData?.licencia || license!.type,
+                                            vigencia: validity,
+                                            expedicion,
+                                            rfc: rfc !== 'N/A' ? rfc : undefined,
+                                            solicitudId: Number(license!.id),
+                                        };
+                                        await addToWallet(Number(license!.id), token, passData);
+                                    }
                                 } catch (err: any) {
                                     setWalletError(err?.message || 'No se pudo agregar al wallet');
                                 } finally {
@@ -363,26 +355,53 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                 }
                             }}
                             disabled={isAddingToWallet}
-                            className={`flex items-center px-5 py-2 shadow-lg transition-all disabled:opacity-50 ${isIOS ? 'rounded-[10px] bg-black border border-gray-800' : isGoogle ? 'rounded-full bg-[#1b1b1b]' : 'rounded-full bg-[#1a73e8]'}`}
-                            style={{ color: '#fff' }}
+                            className="disabled:opacity-50 active:scale-95 transition-transform"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: platform === 'ios' ? '10px' : '12px',
+                                background: '#000',
+                                color: '#fff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: platform === 'ios' ? '10px 20px' : '10px 24px',
+                                borderRadius: platform === 'ios' ? '10px' : '50px',
+                                minWidth: '220px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                            }}
                         >
                             {isAddingToWallet ? (
-                                <div className="shrink-0 mr-3 w-10 h-7 flex items-center justify-center">
-                                    <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
-                                </div>
-                            ) : isIOS ? (
-                                <AppleWalletIcon />
-                            ) : isGoogle ? (
-                                <GoogleWalletIcon />
+                                <span className="material-symbols-outlined animate-spin" style={{ fontSize: 28 }}>progress_activity</span>
+                            ) : platform === 'ios' ? (
+                                /* Apple Wallet icon */
+                                <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="36" height="28" rx="4" fill="none"/>
+                                    <rect x="4" y="13" width="28" height="12" rx="2" fill="#c8b89a"/>
+                                    <rect x="4" y="10" width="28" height="4" rx="1" fill="#e5d4b3"/>
+                                    <rect x="4" y="7"  width="28" height="4" rx="1" fill="#f3e8d0"/>
+                                    <rect x="10" y="17" width="8"  height="4" rx="1" fill="#f87171"/>
+                                    <rect x="20" y="17" width="5"  height="4" rx="1" fill="#4ade80"/>
+                                    <rect x="27" y="17" width="3"  height="4" rx="1" fill="#60a5fa"/>
+                                </svg>
                             ) : (
-                                <div className="shrink-0 mr-3 w-10 h-7 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-2xl">wallet</span>
-                                </div>
+                                /* Google Wallet icon */
+                                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="32" height="32" rx="6" fill="none"/>
+                                    <path d="M16 6 L26 11 L26 21 L16 26 L6 21 L6 11 Z" fill="none"/>
+                                    <rect x="5"  y="10" width="22" height="14" rx="3" fill="#4285F4"/>
+                                    <rect x="5"  y="10" width="22" height="5"  rx="3" fill="#34A853"/>
+                                    <rect x="5"  y="13" width="22" height="2"  fill="#FBBC05"/>
+                                    <rect x="5"  y="18" width="22" height="6"  rx="3" fill="#EA4335"/>
+                                    <rect x="5"  y="18" width="22" height="3"  fill="#4285F4"/>
+                                    <circle cx="10" cy="21" r="2" fill="#fff" opacity="0.9"/>
+                                </svg>
                             )}
-                            <div className="flex flex-col items-start leading-none gap-0.5">
-                                <span className={`text-[10px] ${isIOS ? 'text-gray-300 font-medium' : 'text-gray-200 mt-0.5'}`}>{actionText}</span>
-                                <span className={`text-lg tracking-tight ${isIOS ? 'font-medium' : 'font-bold'} ${isGoogle ? 'mb-0.5' : ''}`}>
-                                    {mainText}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+                                <span style={{ fontSize: '11px', fontWeight: 400, opacity: 0.85 }}>
+                                    {platform === 'ios' ? 'Agregar a' : 'Agregar a'}
+                                </span>
+                                <span style={{ fontSize: '19px', fontWeight: 700, letterSpacing: '-0.3px' }}>
+                                    {platform === 'ios' ? 'Apple Wallet' : 'Google Wallet'}
                                 </span>
                             </div>
                         </button>
