@@ -102,25 +102,20 @@ export const addToAppleWallet = async (
     const blob = await response.blob();
     const filename = `licencia_${passData.folio.replace(/[^a-zA-Z0-9]/g, '_')}.pkpass`;
 
-    // En iOS: crear blob con el MIME tipo correcto y navegar a él.
-    // Safari/iOS intercepta application/vnd.apple.pkpass y abre Apple Wallet directamente.
-    const platform = getPlatform();
     const pkpassBlob = new Blob([blob], { type: 'application/vnd.apple.pkpass' });
     const objectUrl = URL.createObjectURL(pkpassBlob);
 
-    if (platform === 'ios') {
-        // Navegar directamente — iOS abre Apple Wallet automáticamente
-        window.location.href = objectUrl;
-    } else {
-        // En otros dispositivos: descargar el archivo
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(objectUrl);
-        }, 2000);
-    }
+    // En iOS Safari, intentar asignar window.location.href = blobUrl arroja 
+    // el error "Safari no puede descargar este archivo". 
+    // Funciona con simulador de clic en una etiqueta <a>.
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    
+    setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+    }, 250);
 };

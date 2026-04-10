@@ -375,25 +375,25 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                             ) : platform === 'ios' ? (
                                 /* Apple Wallet icon */
                                 <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect width="36" height="28" rx="4" fill="none"/>
-                                    <rect x="4" y="13" width="28" height="12" rx="2" fill="#c8b89a"/>
-                                    <rect x="4" y="10" width="28" height="4" rx="1" fill="#e5d4b3"/>
-                                    <rect x="4" y="7"  width="28" height="4" rx="1" fill="#f3e8d0"/>
-                                    <rect x="10" y="17" width="8"  height="4" rx="1" fill="#f87171"/>
-                                    <rect x="20" y="17" width="5"  height="4" rx="1" fill="#4ade80"/>
-                                    <rect x="27" y="17" width="3"  height="4" rx="1" fill="#60a5fa"/>
+                                    <rect width="36" height="28" rx="4" fill="none" />
+                                    <rect x="4" y="13" width="28" height="12" rx="2" fill="#c8b89a" />
+                                    <rect x="4" y="10" width="28" height="4" rx="1" fill="#e5d4b3" />
+                                    <rect x="4" y="7" width="28" height="4" rx="1" fill="#f3e8d0" />
+                                    <rect x="10" y="17" width="8" height="4" rx="1" fill="#f87171" />
+                                    <rect x="20" y="17" width="5" height="4" rx="1" fill="#4ade80" />
+                                    <rect x="27" y="17" width="3" height="4" rx="1" fill="#60a5fa" />
                                 </svg>
                             ) : (
                                 /* Google Wallet icon */
                                 <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect width="32" height="32" rx="6" fill="none"/>
-                                    <path d="M16 6 L26 11 L26 21 L16 26 L6 21 L6 11 Z" fill="none"/>
-                                    <rect x="5"  y="10" width="22" height="14" rx="3" fill="#4285F4"/>
-                                    <rect x="5"  y="10" width="22" height="5"  rx="3" fill="#34A853"/>
-                                    <rect x="5"  y="13" width="22" height="2"  fill="#FBBC05"/>
-                                    <rect x="5"  y="18" width="22" height="6"  rx="3" fill="#EA4335"/>
-                                    <rect x="5"  y="18" width="22" height="3"  fill="#4285F4"/>
-                                    <circle cx="10" cy="21" r="2" fill="#fff" opacity="0.9"/>
+                                    <rect width="32" height="32" rx="6" fill="none" />
+                                    <path d="M16 6 L26 11 L26 21 L16 26 L6 21 L6 11 Z" fill="none" />
+                                    <rect x="5" y="10" width="22" height="14" rx="3" fill="#4285F4" />
+                                    <rect x="5" y="10" width="22" height="5" rx="3" fill="#34A853" />
+                                    <rect x="5" y="13" width="22" height="2" fill="#FBBC05" />
+                                    <rect x="5" y="18" width="22" height="6" rx="3" fill="#EA4335" />
+                                    <rect x="5" y="18" width="22" height="3" fill="#4285F4" />
+                                    <circle cx="10" cy="21" r="2" fill="#fff" opacity="0.9" />
                                 </svg>
                             )}
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
