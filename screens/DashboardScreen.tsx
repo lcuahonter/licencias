@@ -324,7 +324,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     setRescanLoading(true);
     try {
       const { uuid, url } = await vdidService.startTrackedVerification(
-        `licencias-dgo-${idUsuario ?? 'u0'}-${solicitudId}`
+        solicitudId
       );
       setRescanUuid(uuid ?? null);
       setRescanUrl(url);
@@ -351,7 +351,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
     try { await solicitudService.updateUuid(solId, uuid, token); } catch { /* no fatal */ }
     setRescanPolling(true);
     try {
-      const ready = await vdidService.waitForResults(uuid, 120_000, 5_000);
+      const ready = await vdidService.waitForResults(uuid, token, 120_000, 5_000);
       if (ready) {
         const results = await vdidService.getResults(uuid);
         const gr = results.globalResult?.toLowerCase() ?? '';
