@@ -74,16 +74,56 @@ export const addToWallet = async (
 };
 
 /**
- * Llama al backend para generar el .pkpass y lo descarga/abre en Wallet.
- * En iOS nativo lo abre directamente en Apple Wallet.
- * En web descarga el archivo .pkpass.
+ * Llama al backend para generar el .pkpass y lo abre en Apple Wallet.
+ *
+ * En iOS Safari: usa un formulario HTML oculto que hace POST directo al backend.
+ * El navegador navega a la respuesta, Safari detecta el MIME type
+ * application/vnd.apple.pkpass y abre Apple Wallet automáticamente.
+ *
+ * En otros dispositivos: usa fetch normal y descarga el archivo.
  */
 export const addToAppleWallet = async (
     token: string,
     passData: AppleWalletPassData,
 ): Promise<void> => {
     const url = buildApiUrl(API_ENDPOINTS.WALLET.PKPASS);
+    const platform = getPlatform();
 
+    if (platform === 'ios') {
+        // Opción B: formulario HTML oculto con POST
+        // Safari navega a la respuesta del servidor (URL real, no blob)
+        // El servidor debe responder con Content-Type: application/vnd.apple.pkpass
+        // iOS intercepta ese MIME type y abre Apple Wallet directamente.
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = url;
+        form.style.display = 'none';
+
+        // Pasar el token como campo oculto (el backend debe leerlo del body)
+        const addField = (name: string, value: string) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        };
+
+        addField('token', token);
+        addField('folio', passData.folio);
+        addField('nombre', passData.nombre);
+        addField('tipo_licencia', passData.tipo_licencia);
+        addField('vigencia', passData.vigencia);
+        addField('expedicion', passData.expedicion);
+        if (passData.rfc) addField('rfc', passData.rfc);
+        if (passData.solicitudId !== undefined) addField('solicitudId', String(passData.solicitudId));
+
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(() => document.body.removeChild(form), 3000);
+        return;
+    }
+
+    // Otros dispositivos: fetch normal + descarga del .pkpass
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -98,29 +138,19 @@ export const addToAppleWallet = async (
         throw new Error(err.message || `Error al generar el pase Apple Wallet: ${response.status}`);
     }
 
-    // Recibir el buffer binario del .pkpass
-    const blob = await response.blob();
+    const arrayBuffer = await response.arrayBuffer();
     const filename = `licencia_${passData.folio.replace(/[^a-zA-Z0-9]/g, '_')}.pkpass`;
-
-    // En iOS: crear blob con el MIME tipo correcto y navegar a él.
-    // Safari/iOS intercepta application/vnd.apple.pkpass y abre Apple Wallet directamente.
-    const platform = getPlatform();
-    const pkpassBlob = new Blob([blob], { type: 'application/vnd.apple.pkpass' });
+    const pkpassBlob = new Blob([arrayBuffer], { type: 'application/vnd.apple.pkpass' });
     const objectUrl = URL.createObjectURL(pkpassBlob);
 
-    if (platform === 'ios') {
-        // Navegar directamente — iOS abre Apple Wallet automáticamente
-        window.location.href = objectUrl;
-    } else {
-        // En otros dispositivos: descargar el archivo
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(objectUrl);
-        }, 2000);
-    }
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+    }, 2000);
 };
