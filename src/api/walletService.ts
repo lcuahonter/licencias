@@ -24,11 +24,19 @@ export interface GoogleWalletPassData {
 
 /**
  * Detecta la plataforma actual.
+ * Usa Capacitor para apps nativas; cae en userAgent para navegadores móviles.
  */
 export const getPlatform = (): 'ios' | 'android' | 'web' => {
-    const platform = Capacitor.getPlatform();
-    if (platform === 'ios') return 'ios';
-    if (platform === 'android') return 'android';
+    const nativePlatform = Capacitor.getPlatform();
+    if (nativePlatform === 'ios') return 'ios';
+    if (nativePlatform === 'android') return 'android';
+
+    // Fallback para navegadores web en dispositivos móviles
+    if (typeof navigator !== 'undefined') {
+        const ua = navigator.userAgent || '';
+        if (/iPad|iPhone|iPod/.test(ua)) return 'ios';
+        if (/Android/.test(ua)) return 'android';
+    }
     return 'web';
 };
 
@@ -94,15 +102,25 @@ export const addToAppleWallet = async (
     const blob = await response.blob();
     const filename = `licencia_${passData.folio.replace(/[^a-zA-Z0-9]/g, '_')}.pkpass`;
 
-    // Crear enlace temporal y disparar descarga / apertura
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
-    }, 2000);
+    // En iOS: crear blob con el MIME tipo correcto y navegar a él.
+    // Safari/iOS intercepta application/vnd.apple.pkpass y abre Apple Wallet directamente.
+    const platform = getPlatform();
+    const pkpassBlob = new Blob([blob], { type: 'application/vnd.apple.pkpass' });
+    const objectUrl = URL.createObjectURL(pkpassBlob);
+
+    if (platform === 'ios') {
+        // Navegar directamente — iOS abre Apple Wallet automáticamente
+        window.location.href = objectUrl;
+    } else {
+        // En otros dispositivos: descargar el archivo
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(objectUrl);
+        }, 2000);
+    }
 };

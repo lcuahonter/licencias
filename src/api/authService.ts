@@ -7,7 +7,7 @@ export const authService = {
     // Usamos la variable en lugar del string
     return await apiRequestWithLoading<any>(API_ENDPOINTS.AUTH.LOGIN, {
       method: 'POST',
-      body: payload,
+      body: JSON.stringify(payload),
       loadingMessage: 'Iniciando sesión...'
     });
   },
