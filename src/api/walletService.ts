@@ -83,8 +83,39 @@ export const addToAppleWallet = async (
 ): Promise<void> => {
     const url = buildApiUrl(API_ENDPOINTS.WALLET.PKPASS);
 
-    // fetch normal + descarga del .pkpass (único método viable
-    // dado que la API requiere envío de token y body en JSON)
+    if (platform === 'ios') {
+        // Formulario HTML oculto con POST — Safari navega a la respuesta del servidor.
+        // El token se pasa como query param en la URL porque los formularios
+        // HTML no pueden enviar headers Authorization personalizados.
+        const urlWithToken = `${url}?token=${encodeURIComponent(token)}`;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = urlWithToken;
+        form.style.display = 'none';
+
+        const addField = (name: string, value: string) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        };
+
+        addField('folio', passData.folio);
+        addField('nombre', passData.nombre);
+        addField('tipo_licencia', passData.tipo_licencia);
+        addField('vigencia', passData.vigencia);
+        addField('expedicion', passData.expedicion);
+        if (passData.rfc) addField('rfc', passData.rfc);
+        if (passData.solicitudId !== undefined) addField('solicitudId', String(passData.solicitudId));
+
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(() => document.body.removeChild(form), 3000);
+        return;
+    }
+
+    // Otros dispositivos: fetch normal + descarga del .pkpass
     const response = await fetch(url, {
         method: 'POST',
         headers: {

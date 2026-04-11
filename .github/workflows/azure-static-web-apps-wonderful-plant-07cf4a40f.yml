@@ -67,7 +67,7 @@ jobs:
           VITE_FOTOS_ROSTRO_DESCARGAR: "/api/fotos-rostro/descargar"
           VITE_FOTOS_ROSTRO_TRANSITO: "/api/fotos-rostro/transitoFoto"
           VITE_FOTOS_ROSTRO_URL: "/api/fotos-rostro/url"
-          VITE_WALLET_PKPASS: "/api/wallet/pkpass"
+          VITE_WALLET_PKPASS: "/wallet/apple/create"
           VITE_WALLET_GOOGLE_JWT: "/wallet/google/create"
           VITE_VDID_PUBLIC_KEY: ${{ secrets.VITE_VDID_PUBLIC_KEY }}
           VITE_VDID_CREATE_VERIFICATION: "/api/vdid/createVerification"
