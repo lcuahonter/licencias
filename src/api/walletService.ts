@@ -74,56 +74,17 @@ export const addToWallet = async (
 };
 
 /**
- * Llama al backend para generar el .pkpass y lo abre en Apple Wallet.
- *
- * En iOS Safari: usa un formulario HTML oculto que hace POST directo al backend.
- * El navegador navega a la respuesta, Safari detecta el MIME type
- * application/vnd.apple.pkpass y abre Apple Wallet automáticamente.
- *
- * En otros dispositivos: usa fetch normal y descarga el archivo.
+ * Llama al backend para generar el .pkpass y lo descarga.
+ * Asegura no sacar al usuario de la aplicación.
  */
 export const addToAppleWallet = async (
     token: string,
     passData: AppleWalletPassData,
 ): Promise<void> => {
     const url = buildApiUrl(API_ENDPOINTS.WALLET.PKPASS);
-    const platform = getPlatform();
 
-    if (platform === 'ios') {
-        // Opción B: formulario HTML oculto con POST
-        // Safari navega a la respuesta del servidor (URL real, no blob)
-        // El servidor debe responder con Content-Type: application/vnd.apple.pkpass
-        // iOS intercepta ese MIME type y abre Apple Wallet directamente.
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = url;
-        form.style.display = 'none';
-
-        // Pasar el token como campo oculto (el backend debe leerlo del body)
-        const addField = (name: string, value: string) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            input.value = value;
-            form.appendChild(input);
-        };
-
-        addField('token', token);
-        addField('folio', passData.folio);
-        addField('nombre', passData.nombre);
-        addField('tipo_licencia', passData.tipo_licencia);
-        addField('vigencia', passData.vigencia);
-        addField('expedicion', passData.expedicion);
-        if (passData.rfc) addField('rfc', passData.rfc);
-        if (passData.solicitudId !== undefined) addField('solicitudId', String(passData.solicitudId));
-
-        document.body.appendChild(form);
-        form.submit();
-        setTimeout(() => document.body.removeChild(form), 3000);
-        return;
-    }
-
-    // Otros dispositivos: fetch normal + descarga del .pkpass
+    // fetch normal + descarga del .pkpass (único método viable
+    // dado que la API requiere envío de token y body en JSON)
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -149,6 +110,7 @@ export const addToAppleWallet = async (
     link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
+    
     setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(objectUrl);
