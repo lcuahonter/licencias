@@ -28,6 +28,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Resetear campos al montar el componente (logout o inicio)
+  React.useEffect(() => {
+    setEmail('');
+    setPassword('');
+    setError('');
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');

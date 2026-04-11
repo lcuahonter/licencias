@@ -74,20 +74,14 @@ export const addToWallet = async (
 };
 
 /**
- * Llama al backend para generar el .pkpass y lo abre en Apple Wallet.
- *
- * En iOS Safari: usa un formulario HTML oculto que hace POST directo al backend.
- * El navegador navega a la respuesta, Safari detecta el MIME type
- * application/vnd.apple.pkpass y abre Apple Wallet automáticamente.
- *
- * En otros dispositivos: usa fetch normal y descarga el archivo.
+ * Llama al backend para generar el .pkpass y lo descarga.
+ * Asegura no sacar al usuario de la aplicación.
  */
 export const addToAppleWallet = async (
     token: string,
     passData: AppleWalletPassData,
 ): Promise<void> => {
     const url = buildApiUrl(API_ENDPOINTS.WALLET.PKPASS);
-    const platform = getPlatform();
 
     if (platform === 'ios') {
         // Formulario HTML oculto con POST — Safari navega a la respuesta del servidor.
@@ -147,6 +141,7 @@ export const addToAppleWallet = async (
     link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
+    
     setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(objectUrl);

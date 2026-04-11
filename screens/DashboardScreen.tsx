@@ -1473,12 +1473,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           <span className="material-symbols-outlined text-sm">warning</span> Documentos con Observaciones:
                         </div>
                         <ul className="list-disc list-inside font-bold space-y-1">
-                          {req.rejectedDocuments.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
-                            <li key={docData.iddocumento ?? i}>
-                              {docData.tipodocumento}
-                              {docData.comentarios && <span className="font-normal text-orange-600 ml-1">({docData.comentarios})</span>}
-                            </li>
-                          ); })}
+                          {req.rejectedDocuments.map((_d, i) => {
+                            const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                              <li key={docData.iddocumento ?? i}>
+                                {docData.tipodocumento}
+                                {docData.comentarios && <span className="font-normal text-orange-600 ml-1">({docData.comentarios})</span>}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
@@ -1498,8 +1500,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                     {/* Foto + Examen solo cuando idestatus 20 (nueva) */}
                     {idestatus === 20 && (() => {
-                      const solicUuid  = rawData?.uuid || vdidUuids[req.id];
-                      const vdidSt     = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
+                      const solicUuid = rawData?.uuid || vdidUuids[req.id];
+                      const vdidSt = solicUuid ? (vdidStatuses[req.id] ?? null) : null;
                       // Bloquear foto/examen SOLO si la verificación fue explícitamente rechazada
                       const vdidFailed = vdidSt === 'failed';
                       return (
@@ -1563,11 +1565,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                   setEnviandoExamen(false);
                                 }}
                                 disabled={!solicitudesConFoto.has(Number(req.id))}
-                                className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                                  solicitudesConFoto.has(Number(req.id))
+                                className={`w-full text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 transition-all ${solicitudesConFoto.has(Number(req.id))
                                     ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
                                     : 'bg-gray-300 cursor-not-allowed opacity-60'
-                                }`}
+                                  }`}
                               >
                                 <span className="material-symbols-outlined text-sm">quiz</span>
                                 Realizar Examen Teórico
@@ -1639,12 +1640,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               <span className="material-symbols-outlined text-sm">error</span> Documentos con Observaciones:
                             </div>
                             <ul className="list-disc list-inside font-bold space-y-1">
-                              {req.rejectedDocuments.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
-                                <li key={docData.iddocumento ?? i}>
-                                  {docData.tipodocumento}
-                                  {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
-                                </li>
-                              ); })}
+                              {req.rejectedDocuments.map((_d, i) => {
+                                const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                                  <li key={docData.iddocumento ?? i}>
+                                    {docData.tipodocumento}
+                                    {docData.comentarios && <span className="font-normal text-red-600 ml-1">({docData.comentarios})</span>}
+                                  </li>
+                                );
+                              })}
                             </ul>
                           </div>
                         )}
@@ -1804,17 +1807,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl shadow-2xl p-6 animate-in fade-in flex flex-col max-h-[80vh]">
             <div className="flex justify-between items-center border-b border-gray-100 pb-3 mb-4"><div><h2 className="text-lg font-black text-red-600">Corregir Documentos</h2><p className="text-xs text-gray-500">Sube nuevamente los archivos</p></div><button onClick={() => setFixingRequest(null)} className="bg-gray-100 p-1 rounded-full"><span className="material-symbols-outlined text-sm">close</span></button></div>
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-              {fixingRequest.rejectedDocuments?.map((_d, i) => { const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
-                <div key={docData.iddocumento ?? i} className="space-y-1">
-                  <label className="text-xs font-bold uppercase text-gray-500">{docData.tipodocumento || 'Documento'}</label>
-                  {docData.comentarios && (
-                    <p className="text-[10px] text-red-600 mb-1 italic">Motivo: {docData.comentarios}</p>
-                  )}
-                  <div onClick={() => triggerFileUpload(String(docData.iddocumento))} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[String(docData.iddocumento)] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
-                    {fixedDocs[String(docData.iddocumento)] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
+              {fixingRequest.rejectedDocuments?.map((_d, i) => {
+                const docData = _d as { iddocumento: number; tipodocumento: string; comentarios?: string }; return (
+                  <div key={docData.iddocumento ?? i} className="space-y-1">
+                    <label className="text-xs font-bold uppercase text-gray-500">{docData.tipodocumento || 'Documento'}</label>
+                    {docData.comentarios && (
+                      <p className="text-[10px] text-red-600 mb-1 italic">Motivo: {docData.comentarios}</p>
+                    )}
+                    <div onClick={() => triggerFileUpload(String(docData.iddocumento))} className={`h-16 border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer transition-all gap-2 relative overflow-hidden ${fixedDocs[String(docData.iddocumento)] ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+                      {fixedDocs[String(docData.iddocumento)] ? (<div className="animate-in zoom-in flex items-center gap-2"><span className="material-symbols-outlined text-green-600">check_circle</span><span className="text-xs font-bold text-green-700">Archivo Cargado</span></div>) : (<><span className="material-symbols-outlined text-gray-400">cloud_upload</span><span className="text-xs font-medium text-gray-400">Toca para subir</span></>)}
+                    </div>
                   </div>
-                </div>
-              ); })}
+                );
+              })}
             </div>
             <button
               disabled={Object.keys(fixedDocs).length < (fixingRequest.rejectedDocuments?.length || 0) || isSubmittingCorrections}
@@ -2584,7 +2589,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({
                               const validationData = {
                                 nombre: `${userDataFresh.nombres || ''} ${userDataFresh.apellidopaterno || ''} ${userDataFresh.apellidomaterno || ''}`.trim(),
                                 folio: selectedLicense.folio,
-                                expedicion: selectedLicense.rawData?.expedicion 
+                                expedicion: selectedLicense.rawData?.expedicion
                                   ? new Date(selectedLicense.rawData.expedicion).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })
                                   : 'N/A',
                                 modulo: selectedLicense.rawData?.modulo || 'N/A',

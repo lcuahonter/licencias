@@ -28,6 +28,9 @@ jobs:
       - name: Build Application
         run: npm run build
         env:
+<<<<<<< HEAD
+          VITE_API_URL: "https://licenciasdurango.com"
+=======
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_AUTH_LOGIN: "/auth/login"
           VITE_USUARIOS_CREATE: "/api/usuarios/createUsuario"
@@ -70,6 +73,7 @@ jobs:
           VITE_VDID_CREATE_VERIFICATION: "/api/vdid/createVerification"
           VITE_VDID_STATUS: "/api/vdid/status"
           VITE_VDID_RESULTS: "/api/vdid/results"
+>>>>>>> a1914a7145486886b978be1c0f9cddf2bf318d39
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1

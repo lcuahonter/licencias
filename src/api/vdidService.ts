@@ -204,4 +204,3 @@ export const vdidService = {
         return sdk.getUrlToOnlyCaptureImages({ typeId: 'first' });
     },
 };
-

@@ -17,10 +17,13 @@ dist-ssr
 .env.local
 .env.*.local
 
+<<<<<<< HEAD
+=======
 # Credenciales de Google Wallet (SENSIBLE - NO SUBIR)
 src/api/walletConfig.ts
 api/wallet-google/index.js
 
+>>>>>>> a1914a7145486886b978be1c0f9cddf2bf318d39
 # Azure Functions local secrets
 api/local.settings.json
 
