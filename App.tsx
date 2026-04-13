@@ -4,6 +4,7 @@ import { AppStep, UserData, LicenseRequest } from './types';
 import './index.css';
 import { LoadingProvider, useLoading } from './src/contexts/LoadingContext';
 import { setLoadingFunctions } from './src/api/apiClientWithLoading';
+import { apiRequest } from './src/api/apiClient';
 import { setFotoLoadingFunctions } from './src/api/fotoService';
 import { vdidService } from './src/api/vdidService';
 
@@ -85,12 +86,19 @@ const AppContent: React.FC = () => {
   const updateUserData = (data: Partial<UserData>) => setUserData(prev => ({ ...prev, ...data }));
 
   // Limpieza completa de sesión (app + VDID)
-  const handleFullLogout = () => {
+  const handleFullLogout = async () => {
+    if (authToken) {
+      try {
+        await apiRequest('/auth/logout', { method: 'POST', token: authToken });
+      } catch (err) {
+        console.warn('Error en logout:', err);
+      }
+    }
     setUserData({ firstName: '', lastName: '', idNumber: '', email: '', birthDate: '', licenseType: 'Automovilista Particular', validityDuration: '3 Años', bloodGroup: 'O+', organDonor: true, requests: [] });
     setUserId(0);
     setAuthToken(null);
     setVdidUuid(null);
-    vdidService.clearToken();
+    // vdidService.clearToken(); ya no existe
     setCurrentStep(AppStep.WELCOME);
   };
 
