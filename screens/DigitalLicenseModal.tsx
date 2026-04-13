@@ -129,26 +129,28 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
 
 
     return (
-        <div className="fixed inset-0 z-[130] overflow-y-auto bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer" onClick={onClose} onTouchStart={onClose}>
-            <div className="min-h-full flex items-center justify-center p-4 py-12">
-                <button
-                    onClick={(e) => { e.stopPropagation(); onClose(); }}
-                    className="fixed top-4 right-4 text-white/60 hover:text-white transition-colors p-1 z-50 rounded-full"
-                    aria-label="Cerrar"
-                >
-                    <span className="material-symbols-outlined text-2xl">close</span>
-                </button>
-                <div className="relative w-full flex flex-col items-center justify-center p-2" onClick={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto cursor-pointer" onClick={onClose} onTouchStart={onClose}>
+            {/* Botón de cerrar fijo en la esquina del viewport */}
+            <button
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                className="fixed top-4 md:top-6 right-4 md:right-6 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white/80 hover:text-white transition-all p-2 z-[140] rounded-full flex items-center justify-center shadow-2xl"
+                aria-label="Cerrar"
+            >
+                <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+
+            <div className="min-h-full flex items-center justify-center p-4">
+                <div className="relative w-full max-w-[400px] flex flex-col items-center py-8" onClick={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
 
 
                     {/* Card Container with Perspective */}
-                    <div className="h-[60vh] max-h-[550px] min-h-[400px] aspect-[9/16] perspective-1000 mb-4 shrink-0 mx-auto w-auto">
+                    <div className="w-full aspect-[9/16] perspective-1000 [-webkit-perspective:1000px] mb-4">
                         {/* Card Inner Container - Handles the Flip */}
                         <div
-                            className={`w-full h-full relative transition-all duration-700 [transform-style:preserve-3d] [-webkit-transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)] [-webkit-transform:rotateY(180deg)]' : ''}`}
+                            className={`w-full h-full relative transition-all duration-700 [-webkit-transform-style:preserve-3d] [transform-style:preserve-3d] ${isFlipped ? '[-webkit-transform:rotateY(180deg)] [transform:rotateY(180deg)]' : ''}`}
                         >
                             {/* FRONT FACE */}
-                            <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [-webkit-backface-visibility:hidden] [transform:rotateY(0deg)] [-webkit-transform:rotateY(0deg)] bg-gray-100 rounded-3xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
+                            <div className="absolute inset-0 w-full h-full [-webkit-backface-visibility:hidden] [backface-visibility:hidden] [-webkit-transform:translateZ(0)] [transform:translateZ(0)] bg-gray-100 rounded-3xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
                                 {/* Background Pattern */}
                                 <div className="absolute inset-0 opacity-5 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
 
@@ -171,11 +173,10 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
                                     {/* Photo & Name */}
                                     <div className="flex flex-col items-center mb-4">
                                         <div className="w-32 h-40 rounded-xl bg-gray-200 overflow-hidden border-2 border-gray-300 shadow-lg relative mb-3">
-                                            {/* Usando object-cover para asegurar que la imagen de perfil y sus contenedores no sobresalgan en 3D */}
                                             {fotoRostroUrl ? (
-                                                <img src={fotoRostroUrl} alt="Conductor" className="w-full h-full object-cover" style={{ WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' }} />
+                                                <img src={fotoRostroUrl} alt="Conductor" className="w-full h-full object-cover" />
                                             ) : user.photo ? (
-                                                <img src={user.photo} alt="Conductor" className="w-full h-full object-cover" style={{ WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' }} />
+                                                <img src={user.photo} alt="Conductor" className="w-full h-full object-cover" />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">
                                                     <span className="material-symbols-outlined text-6xl">person</span>
@@ -237,7 +238,7 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
 
 
                             {/* BACK FACE */}
-                            <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [-webkit-backface-visibility:hidden] [transform:rotateY(180deg)] [-webkit-transform:rotateY(180deg)] bg-gray-100 rounded-3xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
+                            <div className="absolute inset-0 w-full h-full [-webkit-backface-visibility:hidden] [backface-visibility:hidden] [-webkit-transform:rotateY(180deg)] [transform:rotateY(180deg)] bg-gray-100 rounded-3xl shadow-2xl overflow-hidden border border-gray-300 flex flex-col">
                                 {/* Background Pattern */}
                                 <div className="absolute inset-0 opacity-5 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
 
@@ -420,7 +421,8 @@ const DigitalLicenseModal: React.FC<DigitalLicenseModalProps> = ({
 
                 </div>
             </div>
-            );
+        </div>
+    );
 };
 
 

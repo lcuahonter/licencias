@@ -33,6 +33,17 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     proxy: {
+      // Proxy al backend real para evitar CORS en desarrollo local
+      '/auth': {
+        target: 'http://172.174.80.112',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api': {
+        target: 'http://172.174.80.112',
+        changeOrigin: true,
+        secure: false,
+      },
       // Proxy para evitar CORS en desarrollo web con VeriDocID
       '/vdid-api': {
         target: 'https://veridocid.azure-api.net',
