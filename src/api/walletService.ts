@@ -82,6 +82,7 @@ export const addToAppleWallet = async (
     passData: AppleWalletPassData,
 ): Promise<void> => {
     const url = buildApiUrl(API_ENDPOINTS.WALLET.PKPASS);
+    const platform = getPlatform();
 
     if (platform === 'ios') {
         // Formulario HTML oculto con POST — Safari navega a la respuesta del servidor.
@@ -141,7 +142,7 @@ export const addToAppleWallet = async (
     link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
-    
+
     setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(objectUrl);
