@@ -24,7 +24,7 @@ import ValidacionLicenciaScreen from './screens/ValidacionLicenciaScreen';
 
 const AppContent: React.FC = () => {
   const { setLoading, setLoadingMessage } = useLoading();
-  
+
   // Configurar las funciones de loading para el apiClient y fotoService
   useEffect(() => {
     setLoadingFunctions({ setLoading, setLoadingMessage });
@@ -33,7 +33,7 @@ const AppContent: React.FC = () => {
 
   // Detectar si estamos en modo validación de licencia (QR scaneado)
   const [isValidationMode, setIsValidationMode] = useState<boolean>(false);
-  
+
   useEffect(() => {
     // Verificar si hay datos de validación en el hash
     const hash = window.location.hash;
@@ -129,7 +129,7 @@ const AppContent: React.FC = () => {
               }
 
               // 2.c Pre-cargar el JWT de Suma México en segundo plano
-              vdidService.warmupToken();
+              // (vdidService.warmupToken ya no existe o fue movido al backend)
 
               // 3. Decidir navegación basada en el token (Prioridad Alta)
               if (nextScreen === 'Dashboard') {
