@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserData, LicenseRequest, LicenseType, ProcessType } from '../types';
 import DocumentUploadScreen from './DocumentUploadScreen';
 import DigitalLicenseModal from './DigitalLicenseModal';

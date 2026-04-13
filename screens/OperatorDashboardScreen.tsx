@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { solicitudService } from '../src/api/solicitudService';
 import { documentService } from '../src/api/documentService';
 import { revisionService } from '../src/api/revisionService';
